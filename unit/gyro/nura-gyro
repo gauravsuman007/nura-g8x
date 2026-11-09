@@ -1,0 +1,71 @@
+#!/usr/bin/python3
+# Expose the SLPI gyroscope (read with libssc's ssccli) as a Linux input
+# "motion sensor": ABS_RX/RY/RZ in millidegrees per second (resolution 1000
+# per deg/s), INPUT_PROP_ACCELEROMETER, the convention SDL and game
+# controller gyros use. libinput ignores such devices, so desktop input is
+# unaffected. Axes are the sensor's (Android device) frame.
+import fcntl, math, os, pty, re, select, struct, sys, time
+
+UI_SET_EVBIT, UI_SET_ABSBIT, UI_SET_PROPBIT = 0x40045564, 0x40045567, 0x4004556e
+UI_DEV_SETUP, UI_ABS_SETUP, UI_DEV_CREATE, UI_DEV_DESTROY = 0x405c5503, 0x401c5504, 0x5501, 0x5502
+EV_SYN, EV_ABS, ABS_RX, ABS_RY, ABS_RZ, PROP_ACCEL = 0, 3, 3, 4, 5, 6
+RANGE = 2000 * 1000          # +/- 2000 deg/s in mdeg/s
+NUM = re.compile(r'X=(-?[\d.]+) Y=(-?[\d.]+) Z=(-?[\d.]+)')
+
+def make_device():
+    fd = os.open('/dev/uinput', os.O_WRONLY | os.O_NONBLOCK)
+    fcntl.ioctl(fd, UI_SET_EVBIT, EV_ABS)
+    fcntl.ioctl(fd, UI_SET_PROPBIT, PROP_ACCEL)
+    for a in (ABS_RX, ABS_RY, ABS_RZ):
+        fcntl.ioctl(fd, UI_SET_ABSBIT, a)
+        # code, pad, value, min, max, fuzz, flat, resolution
+        fcntl.ioctl(fd, UI_ABS_SETUP, struct.pack('<HHiiiiii', a, 0, 0, -RANGE, RANGE, 0, 0, 1000))
+    name = b'Nura SLPI gyroscope'
+    # bustype BUS_VIRTUAL(6), vendor, product, version, name[80], ff_effects_max
+    fcntl.ioctl(fd, UI_DEV_SETUP, struct.pack('<HHHH80sI', 6, 0x1004, 0x6772, 1, name, 0))
+    fcntl.ioctl(fd, UI_DEV_CREATE)
+    return fd
+
+def emit(fd, vals):
+    ev = b''
+    for a, v in zip((ABS_RX, ABS_RY, ABS_RZ), vals):
+        ev += struct.pack('<qqHHi', 0, 0, EV_ABS, a, v)
+    ev += struct.pack('<qqHHi', 0, 0, EV_SYN, 0, 0)
+    try:
+        os.write(fd, ev)
+    except BlockingIOError:
+        pass
+
+def run(fd):
+    pid, m = pty.fork()          # a pty keeps ssccli's output line-buffered
+    if pid == 0:
+        os.execvp('ssccli', ['ssccli', '--sensor', 'gyroscope', '--timeout', '0'])
+    buf = b''
+    skip = 5                     # first samples after start are saturated/settling
+    while True:
+        r, _, _ = select.select([m], [], [], 30)
+        if not r:
+            break                # no samples for 30 s: restart ssccli
+        try:
+            d = os.read(m, 4096)
+        except OSError:
+            break
+        if not d:
+            break
+        buf += d
+        *lines, buf = buf.split(b'\n')
+        for l in lines:
+            g = NUM.search(l.decode(errors='replace'))
+            if g and skip:
+                skip -= 1
+            elif g:              # rad/s -> mdeg/s
+                emit(fd, [int(float(x) * 180000 / math.pi) for x in g.groups()])
+    try:
+        os.kill(pid, 15); os.waitpid(pid, 0)
+    except OSError:
+        pass
+
+fd = make_device()
+while True:
+    run(fd)
+    time.sleep(2)

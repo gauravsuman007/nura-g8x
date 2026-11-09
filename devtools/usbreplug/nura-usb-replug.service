@@ -1,0 +1,10 @@
+[Unit]
+Description=Software USB replug when the host does not bring up the link
+After=usb-gadget.target
+
+[Service]
+ExecStart=/usr/bin/nura-usb-replug
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

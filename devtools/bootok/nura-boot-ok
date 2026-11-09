@@ -1,0 +1,16 @@
+#!/bin/sh
+# Mark the active A/B boot slot successful once boot completes, so the
+# Qualcomm bootloader stops counting down its retries (bit 54 successful,
+# bit 55 unbootable, bit 50 active).
+for d in /dev/sd?; do
+  sfdisk --dump "$d" 2>/dev/null | while IFS= read -r l; do
+    case "$l" in *'name="boot_a"'*|*'name="boot_b"'*) ;; *) continue ;; esac
+    a=$(echo "$l" | sed -n 's/.*attrs="GUID:\([0-9,]*\)".*/\1/p')
+    echo ",$a," | grep -q ',50,' || continue
+    echo ",$a," | grep -q ',54,' && ! echo ",$a," | grep -q ',55,' && exit 0
+    n=$(echo "$l" | sed 's/ :.*//; s/.*[^0-9]//')
+    new=$(echo "$a,54" | tr ',' '\n' | grep -vx 55 | sort -nu | paste -sd, -)
+    sfdisk -q --no-reread --part-attrs "$d" "$n" "GUID:$new" && echo "nura-boot-ok: marked $d$n successful" > /dev/kmsg
+    exit 0
+  done
+done

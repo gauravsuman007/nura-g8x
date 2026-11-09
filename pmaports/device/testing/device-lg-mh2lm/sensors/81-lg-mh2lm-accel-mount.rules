@@ -1,0 +1,7 @@
+# Accelerometer mount matrix for iio-sensor-proxy's SSC driver.
+# The proxy attaches all SSC sensors to the fastrpc-adsp misc device (its
+# debug log: "Found SSC accelerometer at .../misc/fastrpc-adsp"), so the
+# property must be on that device; earlier rules on fastrpc-sdsp were never
+# applied. Without a matrix, upright read "bottom-up" and landscape was
+# reversed (everything 180 degrees off): rotate 180 degrees about z.
+SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp", ENV{ACCEL_MOUNT_MATRIX}="-1, 0, 0; 0, -1, 0; 0, 0, 1"

@@ -1,0 +1,384 @@
+/* Camera bring-up, stage 1: camera I2C (CCI) and sensor power, for scanning.
+ * From LG's stock DT (sm8150 base + mh2lm dtbo):
+ *   rear main: CCI0 master 0, CSIPHY0, MCLK0 (gpio13), reset gpio28,
+ *              AVDD PM8150L gpio1, AFVDD gpio2, DVDD gpio3, MVDD gpio4, VIO L1C
+ *   rear wide: CCI0 master 1, CSIPHY1, MCLK1 (gpio14), reset gpio30,
+ *              AVDD gpio6, DVDD gpio8, VIO L1C
+ *   front:     CCI1 master 0, CSIPHY2, MCLK2 (gpio15), reset gpio9,
+ *              AVDD gpio10, DVDD gpio11, IOVDD gpio12
+ * All MCLKs are 19.2 MHz. For the scan the MCLKs are listed as CCI clocks
+ * (the CCI driver enables every clock in its node) and the rails are
+ * always-on; a real sensor driver will own these later. */
+#include <dt-bindings/clock/qcom,sm8150-camcc.h>
+
+/ {
+	cam_rn_avdd: regulator-cam-rn-avdd {
+		compatible = "regulator-fixed";
+		regulator-name = "cam_rear_n_avdd";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+		gpio = <&pm8150l_gpios 1 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+	};
+	cam_rn_afvdd: regulator-cam-rn-afvdd {
+		compatible = "regulator-fixed";
+		regulator-name = "cam_rear_n_afvdd";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+		gpio = <&pm8150l_gpios 2 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+	};
+	cam_rn_dvdd: regulator-cam-rn-dvdd {
+		compatible = "regulator-fixed";
+		regulator-name = "cam_rear_n_dvdd";
+		regulator-min-microvolt = <1050000>;
+		regulator-max-microvolt = <1050000>;
+		gpio = <&pm8150l_gpios 3 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+	};
+	cam_rn_mvdd: regulator-cam-rn-mvdd {
+		compatible = "regulator-fixed";
+		regulator-name = "cam_rear_n_mvdd";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+		gpio = <&pm8150l_gpios 4 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+	};
+	cam_rw_avdd: regulator-cam-rw-avdd {
+		compatible = "regulator-fixed";
+		regulator-name = "cam_rear_w_avdd";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+		gpio = <&pm8150l_gpios 6 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+	};
+	cam_rw_dvdd: regulator-cam-rw-dvdd {
+		compatible = "regulator-fixed";
+		regulator-name = "cam_rear_w_dvdd";
+		regulator-min-microvolt = <1000000>;
+		regulator-max-microvolt = <1000000>;
+		gpio = <&pm8150l_gpios 8 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+	};
+	cam_f_avdd: regulator-cam-f-avdd {
+		compatible = "regulator-fixed";
+		regulator-name = "cam_front_avdd";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+		gpio = <&pm8150l_gpios 10 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+	};
+	cam_f_dvdd: regulator-cam-f-dvdd {
+		compatible = "regulator-fixed";
+		regulator-name = "cam_front_dvdd";
+		regulator-min-microvolt = <1050000>;
+		regulator-max-microvolt = <1050000>;
+		gpio = <&pm8150l_gpios 11 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+	};
+	cam_f_iovdd: regulator-cam-f-iovdd {
+		compatible = "regulator-fixed";
+		regulator-name = "cam_front_iovdd";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		gpio = <&pm8150l_gpios 12 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+	};
+};
+
+&soc {
+	cci0: cci@ac4a000 {
+		compatible = "qcom,sm8250-cci", "qcom,msm8996-cci";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0 0x0ac4a000 0 0x1000>;
+		interrupts = <GIC_SPI 460 IRQ_TYPE_EDGE_RISING>;
+		power-domains = <&camcc TITAN_TOP_GDSC>;
+		clocks = <&camcc CAM_CC_CAMNOC_AXI_CLK>,
+			 <&camcc CAM_CC_SLOW_AHB_CLK_SRC>,
+			 <&camcc CAM_CC_CPAS_AHB_CLK>,
+			 <&camcc CAM_CC_CCI_0_CLK>,
+			 <&camcc CAM_CC_CCI_0_CLK_SRC>,
+			 <&camcc CAM_CC_MCLK0_CLK>,
+			 <&camcc CAM_CC_MCLK1_CLK>;
+		clock-names = "camnoc_axi", "slow_ahb_src", "cpas_ahb", "cci", "cci_src",
+			      "mclk0", "mclk1";
+		assigned-clocks = <&camcc CAM_CC_CCI_0_CLK_SRC>,
+				  <&camcc CAM_CC_MCLK0_CLK_SRC>,
+				  <&camcc CAM_CC_MCLK1_CLK_SRC>;
+		assigned-clock-rates = <37500000>, <24000000>, <19200000>;	/* MCLK1: S5K3M3 tables use 19.2 MHz */
+		pinctrl-0 = <&cci0_default &cam_mclk01_default>;
+		pinctrl-names = "default";
+
+		cci0_i2c0: i2c-bus@0 {
+			reg = <0>;
+			clock-frequency = <400000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+		};
+
+		cci0_i2c1: i2c-bus@1 {
+			reg = <1>;
+			clock-frequency = <400000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+		};
+	};
+
+	cci1: cci@ac4b000 {
+		compatible = "qcom,sm8250-cci", "qcom,msm8996-cci";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0 0x0ac4b000 0 0x1000>;
+		interrupts = <GIC_SPI 271 IRQ_TYPE_EDGE_RISING>;
+		power-domains = <&camcc TITAN_TOP_GDSC>;
+		clocks = <&camcc CAM_CC_CAMNOC_AXI_CLK>,
+			 <&camcc CAM_CC_SLOW_AHB_CLK_SRC>,
+			 <&camcc CAM_CC_CPAS_AHB_CLK>,
+			 <&camcc CAM_CC_CCI_1_CLK>,
+			 <&camcc CAM_CC_CCI_1_CLK_SRC>,
+			 <&camcc CAM_CC_MCLK2_CLK>;
+		clock-names = "camnoc_axi", "slow_ahb_src", "cpas_ahb", "cci", "cci_src",
+			      "mclk2";
+		assigned-clocks = <&camcc CAM_CC_CCI_1_CLK_SRC>,
+				  <&camcc CAM_CC_MCLK2_CLK_SRC>;
+		assigned-clock-rates = <37500000>, <19200000>;
+		pinctrl-0 = <&cci1_default &cam_mclk2_default>;
+		pinctrl-names = "default";
+
+		cci1_i2c0: i2c-bus@0 {
+			reg = <0>;
+			clock-frequency = <400000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+		};
+
+		cci1_i2c1: i2c-bus@1 {
+			reg = <1>;
+			clock-frequency = <400000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+		};
+	};
+};
+
+&tlmm {
+	cci0_default: cci0-default-state {
+		pins = "gpio17", "gpio18", "gpio19", "gpio20";
+		function = "cci_i2c";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+	cci1_default: cci1-default-state {
+		pins = "gpio31", "gpio32", "gpio33", "gpio34";
+		function = "cci_i2c";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+	cam_mclk01_default: cam-mclk01-default-state {
+		pins = "gpio13", "gpio14";
+		function = "cam_mclk";
+		drive-strength = <2>;
+		bias-disable;
+	};
+	cam_mclk2_default: cam-mclk2-default-state {
+		pins = "gpio15";
+		function = "cam_mclk";
+		drive-strength = <2>;
+		bias-disable;
+	};
+};
+
+
+&vreg_l1c_1p8 {
+	regulator-always-on;	/* rear camera VIO */
+};
+
+/* Stage 2: CAMSS (Titan 175). Addresses and interrupts from LG's stock DT;
+ * the driver reuses the SM6150 (Titan 17x) resource tables. CSIPHY supply is
+ * PM8150L L3 (1.2 V) as in the stock "mipi-csi-vdd". SM8150 camcc has no
+ * SOC_AHB clock; the slow AHB source stands in for "soc_ahb". */
+&soc {
+	camss: camss@acb3000 {
+		compatible = "qcom,sm8150-camss";
+		reg = <0 0x0acb3000 0 0x1000>,
+		      <0 0x0acba000 0 0x1000>,
+		      <0 0x0acc8000 0 0x1000>,
+		      <0 0x0ac65000 0 0x1000>,
+		      <0 0x0ac66000 0 0x1000>,
+		      <0 0x0ac67000 0 0x1000>,
+		      <0 0x0acaf000 0 0x4000>,
+		      <0 0x0acb6000 0 0x4000>,
+		      <0 0x0acc4000 0 0x4000>;
+		reg-names = "csid0", "csid1", "csid_lite",
+			    "csiphy0", "csiphy1", "csiphy2",
+			    "vfe0", "vfe1", "vfe_lite";
+		interrupts = <GIC_SPI 464 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 466 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 468 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 477 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 478 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 479 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 465 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 467 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 469 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "csid0", "csid1", "csid_lite",
+				  "csiphy0", "csiphy1", "csiphy2",
+				  "vfe0", "vfe1", "vfe_lite";
+		clocks = <&gcc GCC_CAMERA_AHB_CLK>,
+			 <&gcc GCC_CAMERA_HF_AXI_CLK>,
+			 <&camcc CAM_CC_CAMNOC_AXI_CLK>,
+			 <&camcc CAM_CC_CPAS_AHB_CLK>,
+			 <&camcc CAM_CC_CSIPHY0_CLK>,
+			 <&camcc CAM_CC_CSI0PHYTIMER_CLK>,
+			 <&camcc CAM_CC_CSIPHY1_CLK>,
+			 <&camcc CAM_CC_CSI1PHYTIMER_CLK>,
+			 <&camcc CAM_CC_CSIPHY2_CLK>,
+			 <&camcc CAM_CC_CSI2PHYTIMER_CLK>,
+			 <&camcc CAM_CC_SLOW_AHB_CLK_SRC>,
+			 <&camcc CAM_CC_IFE_0_CLK>,
+			 <&camcc CAM_CC_IFE_0_AXI_CLK>,
+			 <&camcc CAM_CC_IFE_0_CPHY_RX_CLK>,
+			 <&camcc CAM_CC_IFE_0_CSID_CLK>,
+			 <&camcc CAM_CC_IFE_1_CLK>,
+			 <&camcc CAM_CC_IFE_1_AXI_CLK>,
+			 <&camcc CAM_CC_IFE_1_CPHY_RX_CLK>,
+			 <&camcc CAM_CC_IFE_1_CSID_CLK>,
+			 <&camcc CAM_CC_IFE_LITE_0_CLK>,
+			 <&camcc CAM_CC_IFE_LITE_0_CPHY_RX_CLK>,
+			 <&camcc CAM_CC_IFE_LITE_0_CSID_CLK>;
+		clock-names = "gcc_ahb", "gcc_axi_hf", "camnoc_axi", "cpas_ahb",
+			      "csiphy0", "csiphy0_timer", "csiphy1", "csiphy1_timer",
+			      "csiphy2", "csiphy2_timer", "soc_ahb",
+			      "vfe0", "vfe0_axi", "vfe0_cphy_rx", "vfe0_csid",
+			      "vfe1", "vfe1_axi", "vfe1_cphy_rx", "vfe1_csid",
+			      "vfe_lite", "vfe_lite_cphy_rx", "vfe_lite_csid";
+		interconnects = <&gem_noc MASTER_AMPSS_M0 0 &config_noc SLAVE_CAMERA_CFG 0>,
+				<&mmss_noc MASTER_CAMNOC_HF0 0 &mc_virt SLAVE_EBI_CH0 0>;
+		interconnect-names = "ahb", "hf_0";
+		iommus = <&apps_smmu 0x840 0x620>, <&apps_smmu 0x860 0x620>,
+			 <&apps_smmu 0xa40 0x620>, <&apps_smmu 0xa60 0x620>,
+			 <&apps_smmu 0xc40 0x620>, <&apps_smmu 0xc60 0x620>,
+			 <&apps_smmu 0xe40 0x620>, <&apps_smmu 0xe60 0x620>; /* stock msm_cam_smmu_ife */
+		power-domains = <&camcc IFE_0_GDSC>,
+				<&camcc IFE_1_GDSC>,
+				<&camcc TITAN_TOP_GDSC>;
+		power-domain-names = "ife0", "ife1", "top";
+		/* camss never sets these; at the 19.2 MHz boot rate the IFE never finishes a write */
+		assigned-clocks = <&camcc CAM_CC_CAMNOC_AXI_CLK_SRC>, <&camcc CAM_CC_SLOW_AHB_CLK_SRC>;
+		assigned-clock-rates = <400000000>, <80000000>;
+		vdd-csiphy-1p2-supply = <&vreg_l3c_1p2>;
+		vdd-csiphy-1p8-supply = <&vreg_l1c_1p8>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			port@0 {
+				reg = <0>;
+				csiphy0_ep: endpoint {
+					clock-lanes = <7>;
+					data-lanes = <0 1 2 3>;
+					remote-endpoint = <&imx363_ep>;
+				};
+			};
+			port@1 {
+				reg = <1>;
+				csiphy1_ep: endpoint {
+					clock-lanes = <7>;
+					data-lanes = <0 1 2 3>;
+					remote-endpoint = <&s5k3m3_ep>;
+				};
+			};
+			port@2 {
+				reg = <2>;
+				csiphy2_ep: endpoint {
+					clock-lanes = <7>;
+					data-lanes = <0 1 2 3>;
+					remote-endpoint = <&s5kgd1_ep>;
+				};
+			};
+		};
+	};
+};
+
+/* Stage 3: rear main IMX363 (24 MHz MCLK as in the sdm670 driver; rails are
+ * always-on fixed regulators above, so the driver gets dummy supplies). */
+&cci0_i2c0 {
+	/* OIS/AF controller; AF position in 0xF01A (LG CamX actuator data) */
+	lc898123: lens@3e {
+		compatible = "onnn,lc898123f40";
+		reg = <0x3e>;
+	};
+
+	imx363: camera@10 {
+		compatible = "sony,imx363";
+		reg = <0x10>;
+		clocks = <&camcc CAM_CC_MCLK0_CLK>;
+		clock-frequency = <24000000>;
+		reset-gpios = <&tlmm 28 GPIO_ACTIVE_HIGH>;	/* driver drives 1 = running */
+		lens-focus = <&lc898123>;
+		orientation = <1>;	/* back */
+		rotation = <270>;	/* stock roll 90; libcamera counts the other way */
+		port {
+			imx363_ep: endpoint {
+				data-lanes = <1 2 3 4>;
+				link-frequencies = /bits/ 64 <636000000>;
+				remote-endpoint = <&csiphy0_ep>;
+			};
+		};
+	};
+};
+
+
+/* Stage 4: front S5KGD1 (CCI1 master 0, CSIPHY2, MCLK2 19.2 MHz, reset gpio9). */
+&cci1_i2c0 {
+	s5kgd1: camera@2d {
+		compatible = "samsung,s5kgd1";
+		reg = <0x2d>;
+		clocks = <&camcc CAM_CC_MCLK2_CLK>;
+		reset-gpios = <&tlmm 9 GPIO_ACTIVE_LOW>;
+		vio-supply = <&cam_f_iovdd>;
+		vana-supply = <&cam_f_avdd>;
+		vdig-supply = <&cam_f_dvdd>;
+		orientation = <0>;	/* front */
+		rotation = <90>;
+		port {
+			s5kgd1_ep: endpoint {
+				data-lanes = <1 2 3 4>;
+				link-frequencies = /bits/ 64 <380800000>;
+				remote-endpoint = <&csiphy2_ep>;
+			};
+		};
+	};
+};
+
+/* Stage 5: rear wide S5K3M3 (CCI0 master 1, CSIPHY1, MCLK1 19.2 MHz, reset gpio30). */
+&cci0_i2c1 {
+	s5k3m3: camera@10 {
+		compatible = "samsung,s5k3m3";
+		reg = <0x10>;
+		clocks = <&camcc CAM_CC_MCLK1_CLK>;
+		reset-gpios = <&tlmm 30 GPIO_ACTIVE_LOW>;
+		vio-supply = <&vreg_l1c_1p8>;
+		vana-supply = <&cam_rw_avdd>;
+		vdig-supply = <&cam_rw_dvdd>;
+		orientation = <1>;	/* back */
+		rotation = <270>;
+		port {
+			s5k3m3_ep: endpoint {
+				data-lanes = <1 2 3 4>;
+				link-frequencies = /bits/ 64 <595200000>;
+				remote-endpoint = <&csiphy1_ep>;
+			};
+		};
+	};
+};

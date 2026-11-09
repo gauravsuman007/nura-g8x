@@ -1,0 +1,9 @@
+[Unit]
+Description=Ignore the touchscreen while the display is off
+
+[Service]
+ExecStart=/usr/bin/nura-touch-guard
+Restart=always
+
+[Install]
+WantedBy=graphical.target

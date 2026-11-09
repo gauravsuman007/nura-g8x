@@ -1,0 +1,12 @@
+#!/bin/sh
+# Give the USB network gadget fixed MAC addresses. With a new random host MAC
+# every boot, macOS sometimes never names or activates the interface.
+G=/sys/kernel/config/usb_gadget/g1; F=$G/functions/ncm.usb0
+HOST=02:4e:55:52:41:01; DEV=02:4e:55:52:41:02
+[ -e $F/host_addr ] || exit 0
+[ "$(cat $F/host_addr)" = $HOST ] && [ "$(cat $F/dev_addr)" = $DEV ] && exit 0
+udc=$(cat $G/UDC); link=$(find $G/configs -maxdepth 2 -name ncm.usb0 | head -1)
+echo "" > $G/UDC; rm -f "$link"
+echo $HOST > $F/host_addr; echo $DEV > $F/dev_addr
+ln -s $F "$link"; echo "$udc" > $G/UDC
+echo "nura-usb-mac: fixed USB MACs host $HOST dev $DEV" > /dev/kmsg

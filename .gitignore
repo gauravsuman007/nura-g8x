@@ -1,0 +1,25 @@
+# Build outputs, phone backups, vendor blobs, keys: never commit.
+/out/*
+!/out/probes/
+!/out/camtools/
+/out/probes/*
+!/out/probes/*.sh
+!/out/probes/*.py
+!/out/probes/g8x
+!/out/probes/g8xw
+!/out/probes/rs
+!/out/probes/rsw
+!/out/probes/pkgget
+/out/camtools/__pycache__/
+# secrets
+test-image-password.txt
+.pw
+*.key
+sshkey/
+# local tool state
+/.claude/
+/research_notes/*/
+__pycache__/
+*.pyc
+.DS_Store
+tests/results/

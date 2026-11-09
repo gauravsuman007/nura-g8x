@@ -1,0 +1,18 @@
+#!/bin/sh
+# Test-image watchdog. Reboots when: boot isn't finished after 120 s, no SSH
+# session within 120 s of start, or no SSH session for 120 s afterwards.
+# Runs only when the kernel command line has nura.testwd.
+grep -qw nura.testwd /proc/cmdline || exit 0
+L=120; t=0; last=0; booted=0
+die() { echo "nura-testwd: $1, rebooting" > /dev/kmsg; sync
+        systemctl reboot -f & sleep 15; echo b > /proc/sysrq-trigger; }
+ssh_up() { awk 'NR>1 && $4=="01" && substr($2,index($2,":")+1)=="0016"' /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -q .; }
+while :; do
+  sleep 5; t=$((t+5))
+  if [ $booted = 0 ]; then
+    case $(systemctl is-system-running 2>/dev/null) in running|degraded) booted=1 ;; esac
+    [ $booted = 0 ] && [ $t -ge $L ] && die "boot not finished in ${L}s"
+  fi
+  if ssh_up; then last=$t
+  elif [ $((t-last)) -ge $L ]; then die "no ssh for ${L}s"; fi
+done

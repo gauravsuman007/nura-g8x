@@ -1,0 +1,25 @@
+--- hexagonrpcd/hexagonfs.c.orig	2026-11-07 18:34:01
++++ hexagonrpcd/hexagonfs.c	2026-11-07 18:34:01
+@@ -202,11 +202,20 @@
+ 	if (fd == NULL || fd->ops == NULL)
+ 		return -EBADF;
+ 
++	fds[fileno] = NULL;
++
++	/*
++	 * A lookup that ends on an already-open directory (for example "/",
++	 * the root) registers the same descriptor under a second number.
++	 * Only destroy the descriptor when no other number still uses it.
++	 */
++	for (int i = 0; i < HEXAGONFS_MAX_FD; i++)
++		if (fds[i] == fd)
++			return 0;
++
+ 	fd->is_assigned = false;
+ 	destroy_file_descriptor(fd);
+ 
+-	fds[fileno] = NULL;
+-
+ 	return 0;
+ }
+ 

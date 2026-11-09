@@ -1,0 +1,13 @@
+[Unit]
+Description=Nura optional key helpers (Assistant as power key, restart combo)
+ConditionPathExists=/sys/module/nura_keys/parameters
+After=systemd-modules-load.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/etc/nura/keys.conf
+ExecStart=/bin/sh -c 'P=/sys/module/nura_keys/parameters; echo $${POWER_KEY:-0} > $P/power_key; echo $${RESET_HOLD_MS:-8000} > $P/reset_hold_ms; [ -e $P/power_hold_ms ] && echo $${POWER_HOLD_MS:-300} > $P/power_hold_ms; echo $${RESET_COMBO:-0} > $P/reset_combo'
+
+[Install]
+WantedBy=multi-user.target

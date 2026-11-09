@@ -1,0 +1,2 @@
+#!/bin/zsh
+exec ssh -i /Users/hellonfire/Coding/nura/out/sshkey/g8x -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=6 -o BatchMode=yes nura@172.16.42.1 "$@"

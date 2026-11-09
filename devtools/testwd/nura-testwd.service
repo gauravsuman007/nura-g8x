@@ -1,0 +1,10 @@
+[Unit]
+Description=Nura test-image watchdog
+DefaultDependencies=no
+ConditionKernelCommandLine=nura.testwd
+
+[Service]
+ExecStart=/usr/bin/nura-testwd
+
+[Install]
+WantedBy=sysinit.target

@@ -1,0 +1,5 @@
+# nura-gyro creates a uinput "Nura SLPI gyroscope" with INPUT_PROP_ACCELEROMETER
+# (the SDL motion-sensor convention). udev then tags it ID_INPUT_ACCELEROMETER
+# and iio-sensor-proxy picks it as the accelerometer, so screen rotation never
+# works. Keep it out of the sensor proxy.
+SUBSYSTEM=="input", ATTRS{name}=="Nura SLPI gyroscope", ENV{ID_INPUT_ACCELEROMETER}="", ENV{IIO_SENSOR_PROXY_TYPE}=""

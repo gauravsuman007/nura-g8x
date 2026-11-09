@@ -1,0 +1,103 @@
+diff --git a/src/ipa/libipa/camera_sensor_helper.cpp b/src/ipa/libipa/camera_sensor_helper.cpp
+index 359040e..baa60ca 100644
+--- a/src/ipa/libipa/camera_sensor_helper.cpp
++++ b/src/ipa/libipa/camera_sensor_helper.cpp
+@@ -565,6 +565,38 @@ public:
+ };
+ REGISTER_CAMERA_SENSOR_HELPER("imx258", CameraSensorHelperImx258)
+ 
++/* nura (LG G8x): IMX363 uses the same 512-based Sony gain code as IMX258. */
++class CameraSensorHelperImx363 : public CameraSensorHelper
++{
++public:
++	CameraSensorHelperImx363()
++	{
++		blackLevel_ = 4096;	/* 64 at 10 bits */
++		gain_ = AnalogueGainLinear{ 0, 512, -1, 512 };
++	}
++};
++REGISTER_CAMERA_SENSOR_HELPER("imx363", CameraSensorHelperImx363)
++
++/* nura: Samsung S5K sensors, analogue gain = code / 32 (0x20 = 1x). */
++class CameraSensorHelperS5kLinear32 : public CameraSensorHelper
++{
++public:
++	CameraSensorHelperS5kLinear32()
++	{
++		blackLevel_ = 4096;	/* 64 at 10 bits */
++		gain_ = AnalogueGainLinear{ 1, 0, 0, 32 };
++	}
++};
++class CameraSensorHelperS5k3m3 : public CameraSensorHelperS5kLinear32
++{
++};
++REGISTER_CAMERA_SENSOR_HELPER("s5k3m3", CameraSensorHelperS5k3m3)
++
++class CameraSensorHelperS5kgd1 : public CameraSensorHelperS5kLinear32
++{
++};
++REGISTER_CAMERA_SENSOR_HELPER("s5kgd1", CameraSensorHelperS5kgd1)
++
+ class CameraSensorHelperImx283 : public CameraSensorHelper
+ {
+ public:
+diff --git a/src/libcamera/sensor/camera_sensor_properties.cpp b/src/libcamera/sensor/camera_sensor_properties.cpp
+index 20cfd0b..18ce59e 100644
+--- a/src/libcamera/sensor/camera_sensor_properties.cpp
++++ b/src/libcamera/sensor/camera_sensor_properties.cpp
+@@ -221,6 +221,20 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
+ 			},
+ 			.sensorDelays = { },
+ 		} },
++		{ "imx363", {	/* nura (LG G8x) */
++			.unitCellSize = { 1400, 1400 },
++			.testPatternModes = {
++				{ controls::draft::TestPatternModeOff, 0 },
++				{ controls::draft::TestPatternModeSolidColor, 1 },
++				{ controls::draft::TestPatternModeColorBars, 2 },
++			},
++			.sensorDelays = {
++				.exposureDelay = 2,
++				.gainDelay = 2,
++				.vblankDelay = 2,
++				.hblankDelay = 2
++			},
++		} },
+ 		{ "imx283", {
+ 			.unitCellSize = { 2400, 2400 },
+ 			.testPatternModes = {},
+@@ -482,6 +496,34 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
+ 			},
+ 			.sensorDelays = { },
+ 		} },
++		{ "s5k3m3", {	/* nura (LG G8x) */
++			.unitCellSize = { 1000, 1000 },
++			.testPatternModes = {
++				{ controls::draft::TestPatternModeOff, 0 },
++				{ controls::draft::TestPatternModeSolidColor, 1 },
++				{ controls::draft::TestPatternModeColorBars, 2 },
++			},
++			.sensorDelays = {
++				.exposureDelay = 2,
++				.gainDelay = 2,
++				.vblankDelay = 2,
++				.hblankDelay = 2
++			},
++		} },
++		{ "s5kgd1", {	/* nura (LG G8x) */
++			.unitCellSize = { 1600, 1600 },
++			.testPatternModes = {
++				{ controls::draft::TestPatternModeOff, 0 },
++				{ controls::draft::TestPatternModeSolidColor, 1 },
++				{ controls::draft::TestPatternModeColorBars, 2 },
++			},
++			.sensorDelays = {
++				.exposureDelay = 2,
++				.gainDelay = 2,
++				.vblankDelay = 2,
++				.hblankDelay = 2
++			},
++		} },
+ 		{ "ov5693", {
+ 			.unitCellSize = { 1400, 1400 },
+ 			.testPatternModes = {

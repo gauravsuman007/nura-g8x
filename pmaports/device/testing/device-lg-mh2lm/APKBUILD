@@ -1,0 +1,33 @@
+# Reference: <https://postmarketos.org/devicepkg>
+pkgname=device-lg-mh2lm
+pkgdesc="LG G8X ThinQ"
+pkgver=1
+pkgrel=1
+url="https://postmarketos.org"
+license="MIT"
+arch="aarch64"
+options="!check !archcheck"
+depends="
+	linux-postmarketos-qcom-sm8150
+	mkbootimg
+	postmarketos-base
+"
+makedepends="devicepkg-dev"
+source="deviceinfo kernel-cmdline.conf modules-initfs sm8150-lg-mh2lm.dtb"
+
+build() {
+	devicepkg_build $startdir $pkgname
+}
+
+package() {
+	devicepkg_package $startdir $pkgname
+	# Temporary until the DTB is carried by the kernel package
+	install -Dm644 "$srcdir"/sm8150-lg-mh2lm.dtb \
+		"$pkgdir"/boot/dtbs/qcom/sm8150-lg-mh2lm.dtb
+}
+sha512sums="
+0f88a638151e475fd04242c5a69ec6fa75d7bbd0d61c33ff78d0cf2a8bc2498c6444e0e8b82daf927a778d7013c650c69d812a8dcff1081242c9f7986121326e  deviceinfo
+78c3cc479a4d00a191e47348fe06ec1050fa7c17773091f15ba028241e1663c04c0127dd4eca9bb02de36bd293e70d186f1964750c5a94a91fca1a206a2b8572  kernel-cmdline.conf
+09fb39b4698e3fd433e35f94b4c39787a4ff9af258e8a85b5a197fb2676f993da2666ffb4ae98c41f35446d52b3578e1e6ebd06cc7010287ca140bf207c3a8af  modules-initfs
+de8f153ddca12e9749c8aefda28dcdae66675017cb86d834cbf363ed762f552ca9f5862644b75f3b8f2f9bd06fb2a17f0062c193c54cc3dc1a0e001b61557465  sm8150-lg-mh2lm.dtb
+"

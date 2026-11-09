@@ -1,0 +1,12 @@
+[Unit]
+Description=Nura gyroscope as an input motion device (SLPI via libssc)
+After=hexagonrpcd-sdsp.service iio-sensor-proxy.service
+Wants=iio-sensor-proxy.service
+
+[Service]
+ExecStart=/usr/libexec/nura-gyro
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

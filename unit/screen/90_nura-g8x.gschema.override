@@ -1,0 +1,11 @@
+# LG G8x: the power button is broken, so never auto-suspend (volume keys
+# cannot wake the phone from suspend yet). Blank the screen after 5 minutes.
+[org.gnome.settings-daemon.plugins.power]
+sleep-inactive-ac-type='nothing'
+sleep-inactive-battery-type='nothing'
+idle-dim=true
+# auto-brightness from the APDS9169 light sensor (via SLPI)
+ambient-enabled=true
+
+[org.gnome.desktop.session]
+idle-delay=uint32 300

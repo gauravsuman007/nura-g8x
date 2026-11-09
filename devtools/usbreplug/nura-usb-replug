@@ -1,0 +1,33 @@
+#!/bin/sh
+# Software USB replug. If the host sends nothing on usb0 for 40 s while a cable
+# is attached, first toggle usb0 (re-sends the NCM "connected" notification),
+# and on the next round unbind/rebind the UDC (looks like a cable replug).
+# Does nothing while the USB-C port is in host mode.
+G=/sys/kernel/config/usb_gadget/g1
+R=/sys/class/net/usb0/statistics/rx_packets
+udc=$(cat $G/UDC 2>/dev/null); [ -n "$udc" ] || udc=$(ls /sys/class/udc | head -1)
+last=-1; idle=0; n=0
+T=/sys/class/typec/port0/data_role
+while :; do
+  sleep 10
+  # USB-C host mode (dock, monitor, keyboard): no gadget link to repair.
+  # Back in device mode, make sure the gadget is bound to the UDC again.
+  if grep -q '\[host\]' $T 2>/dev/null; then idle=0; n=0; continue; fi
+  # the UDC only exists in device mode, so look it up every round
+  udc=$(ls /sys/class/udc 2>/dev/null | head -1); [ -n "$udc" ] || continue
+  [ -z "$(cat $G/UDC 2>/dev/null)" ] && echo "$udc" > $G/UDC 2>/dev/null
+  rx=$(cat $R 2>/dev/null || echo 0)
+  if [ "$rx" != "$last" ]; then last=$rx; idle=0; n=0; continue; fi
+  idle=$((idle+10))
+  [ "$(cat /sys/class/udc/$udc/state 2>/dev/null)" = "not attached" ] && { idle=0; continue; }
+  [ $idle -ge 40 ] || continue
+  n=$((n+1))
+  if [ $((n % 2)) = 1 ]; then
+    echo "nura-usb-replug: no host traffic for ${idle}s, toggling usb0" > /dev/kmsg
+    ip link set usb0 down; sleep 2; ip link set usb0 up
+  else
+    echo "nura-usb-replug: no host traffic for ${idle}s, rebinding gadget" > /dev/kmsg
+    echo "" > $G/UDC; sleep 3; echo "$udc" > $G/UDC
+  fi
+  idle=-20
+done

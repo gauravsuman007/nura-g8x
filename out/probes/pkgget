@@ -1,0 +1,21 @@
+#!/bin/zsh
+# pkgget pkg... : download signed aarch64 apks and install them on the phone with signature checks on
+cd /Users/hellonfire/Coding/nura/out
+setopt nullglob; rm -f pkgfetch/*.apk
+docker run --rm -v "$PWD/pkgfetch:/o" alpine:3.22 sh -c "
+cp /o/keys/* /etc/apk/keys/
+cat > /tmp/r <<R
+http://mirror.postmarketos.org/postmarketos/extra-repos/systemd/main
+http://mirror.postmarketos.org/postmarketos/main
+http://dl-cdn.alpinelinux.org/alpine/edge/main
+http://dl-cdn.alpinelinux.org/alpine/edge/community
+http://dl-cdn.alpinelinux.org/alpine/edge/testing
+R
+mkdir -p /tmp/rt/etc/apk/keys; cp /o/keys/* /tmp/rt/etc/apk/keys/; cp /tmp/r /tmp/rt/etc/apk/repositories; echo aarch64 > /tmp/rt/etc/apk/arch
+apk --root /tmp/rt --arch aarch64 --initdb add 2>&1 | tail -2
+apk --root /tmp/rt --arch aarch64 update 2>&1 | tail -2
+cd /o; apk --root /tmp/rt --arch aarch64 fetch $* 2>&1 | tail -5"
+ls pkgfetch/*.apk || exit 1
+ssh -i sshkey/g8x -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR nura@172.16.42.1 'rm -rf /tmp/p; mkdir /tmp/p'
+scp -q -i sshkey/g8x -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR pkgfetch/*.apk nura@172.16.42.1:/tmp/p/
+probes/rs 'apk add --no-network /tmp/p/*.apk 2>&1 | tail -6'

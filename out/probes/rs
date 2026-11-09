@@ -1,0 +1,4 @@
+#!/bin/zsh
+# run a shell script from stdin on the phone as root
+b64=$(print -r -- "$1" | base64)
+exec /Users/hellonfire/Coding/nura/out/probes/g8x "cat /etc/hostname >/dev/null; printf %s '$(< /Users/hellonfire/Coding/nura/out/probes/.pw)' | sudo -S -p '' sh -c \"echo $b64 | base64 -d | sh\""

@@ -1,0 +1,50 @@
+
+&mdss {
+	status = "okay";
+};
+
+&mdss_dsi0 {
+	vdda-supply = <&vreg_l3c_1p2>;
+	status = "okay";
+
+	panel@0 {
+		compatible = "lg,mh2lm-r66456";
+		reg = <0>;
+		vddi-supply = <&vreg_l14a_1p8>;
+		vpnl-supply = <&vreg_l17a_3p0>;
+		reset-gpios = <&tlmm 6 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&panel_te_active>;
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&mdss_dsi0_out>;
+			};
+		};
+	};
+};
+
+&mdss_dsi0_out {
+	data-lanes = <0 1 2 3>;
+	remote-endpoint = <&panel_in>;
+};
+
+&mdss_dsi0_phy {
+	vdds-supply = <&vreg_l5a_0p875>;
+	status = "okay";
+};
+
+&tlmm {
+	panel_te_active: panel-te-active-state {
+		pins = "gpio8";
+		function = "mdp_vsync";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+};
+
+/* LG drives the panel's vpnl at exactly 3.0 V (sm8150_common-panel.dtsi) */
+&vreg_l17a_3p0 {
+	regulator-min-microvolt = <3000000>;
+	regulator-max-microvolt = <3000000>;
+};

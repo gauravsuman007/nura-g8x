@@ -1,0 +1,105 @@
+#!/usr/bin/python3
+"""Pocket guard for the LG G8x (broken power button, volume keys wake it).
+
+Panel off           -> touchscreen ignored.
+Panel off + covered -> volume keys ignored too (proximity "near"), except
+                       gpio-keys while the Assistant key acts as power.
+Panel on            -> everything enabled.
+"""
+import glob
+import time
+
+import gi
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib  # noqa: E402
+
+
+def input_of(name):
+    for p in glob.glob("/sys/class/input/input*/name"):
+        if name in open(p).read():
+            return p[:-len("/name")]
+    return None
+
+
+def write(path, value):
+    if path:
+        try:
+            with open(path + "/inhibited", "w") as f:
+                f.write(value)
+        except OSError:
+            pass
+
+
+def panel_on():
+    for p in glob.glob("/sys/class/drm/card*-DSI-1/dpms"):
+        return open(p).read().strip() == "On"
+    return True
+
+
+touch = input_of("Synaptics S3618")
+
+
+def assistant_is_power():
+    try:
+        return open("/sys/module/nura_keys/parameters/power_key").read().strip() in ("Y", "1")
+    except OSError:
+        return False
+
+
+# With nura-keys' Assistant-as-power on, gpio-keys (Volume Up + Assistant)
+# must never be inhibited: Assistant is the power button then.
+keys = [input_of("pm8941_resin")]
+if not assistant_is_power():
+    keys.append(input_of("gpio-keys"))
+bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+
+
+def proxy_call(method):
+    try:
+        bus.call_sync("net.hadess.SensorProxy", "/net/hadess/SensorProxy",
+                      "net.hadess.SensorProxy", method, None, None,
+                      Gio.DBusCallFlags.NONE, 2000, None)
+        return True
+    except GLib.Error:
+        return False
+
+
+def near():
+    try:
+        v = bus.call_sync("net.hadess.SensorProxy", "/net/hadess/SensorProxy",
+                          "org.freedesktop.DBus.Properties", "Get",
+                          GLib.Variant("(ss)", ("net.hadess.SensorProxy",
+                                                "ProximityNear")),
+                          None, Gio.DBusCallFlags.NONE, 2000, None)
+        return bool(v.unpack()[0])
+    except GLib.Error:
+        return False
+
+
+claimed = False
+claimed_at = 0.0
+last = None
+while True:
+    on = panel_on()
+    if on:
+        if last is not True:
+            write(touch, "0")
+            for k in keys:
+                write(k, "0")
+            if claimed:
+                proxy_call("ReleaseProximity")
+                claimed = False
+        time.sleep(1)
+    else:
+        if last is not False:
+            write(touch, "1")
+        # Re-claim every few seconds: a claim is lost silently when
+        # iio-sensor-proxy restarts, and claiming twice is harmless.
+        if not claimed or time.monotonic() - claimed_at > 5:
+            claimed = proxy_call("ClaimProximity")
+            claimed_at = time.monotonic()
+        covered = near()
+        for k in keys:
+            write(k, "1" if covered else "0")
+        time.sleep(0.5)
+    last = on

@@ -1,0 +1,13 @@
+[Unit]
+Description=Fixed MAC addresses for the USB network gadget
+DefaultDependencies=no
+After=sysinit.target
+Before=network-pre.target unudhcpd@usb0.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/nura-usb-mac
+
+[Install]
+WantedBy=sysinit.target

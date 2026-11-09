@@ -1,0 +1,10 @@
+[Unit]
+Description=Mark the active boot slot successful
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/nura-boot-ok
+
+[Install]
+WantedBy=multi-user.target

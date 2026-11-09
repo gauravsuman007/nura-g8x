@@ -1,0 +1,198 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * nura-keys: optional key helpers for phones whose power button is broken.
+ *
+ *  power_key=1   the Assistant key (KEY_ASSISTANT) acts as the power button:
+ *                its events are swallowed and KEY_POWER is reported instead
+ *                from a separate "nura-keys" input device.
+ *  reset_combo=1 holding Assistant + Volume Down for reset_hold_ms restarts
+ *                the phone from the kernel (emergency_restart), so it still
+ *                works when the desktop or userspace has crashed.
+ *
+ * Both are off by default. Set them on the kernel command line
+ * (nura_keys.power_key=1 nura_keys.reset_combo=1) or at runtime in
+ * /sys/module/nura_keys/parameters/.
+ */
+#include <linux/input.h>
+#include <linux/module.h>
+#include <linux/reboot.h>
+#include <linux/timer.h>
+#include <linux/workqueue.h>
+
+static bool power_key;
+module_param(power_key, bool, 0644);
+MODULE_PARM_DESC(power_key, "Assistant key acts as the power button");
+
+static bool reset_combo;
+module_param(reset_combo, bool, 0644);
+MODULE_PARM_DESC(reset_combo, "Hold Assistant + Volume Down to restart");
+
+static unsigned int reset_hold_ms = 8000;
+module_param(reset_hold_ms, uint, 0644);
+MODULE_PARM_DESC(reset_hold_ms, "How long the restart combo must be held (ms)");
+
+static struct input_dev *nk_input;
+static bool assist_down, voldown_down;
+static struct timer_list reset_timer;
+static struct delayed_work power_press_work;
+static struct work_struct power_release_work;
+static bool power_reported;
+
+static unsigned int power_hold_ms = 300;
+module_param(power_hold_ms, uint, 0644);
+MODULE_PARM_DESC(power_hold_ms, "Assistant key must be held this long (ms) to count as a power press");
+
+static void nk_reset_fn(struct timer_list *t)
+{
+	if (reset_combo && assist_down && voldown_down) {
+		pr_emerg("nura-keys: Assistant + Volume Down held, restarting\n");
+		emergency_restart();
+	}
+}
+
+/* KEY_POWER goes down only after the Assistant key has been held for
+ * power_hold_ms, so brushing the key does nothing. */
+static void nk_power_press(struct work_struct *w)
+{
+	power_reported = true;
+	input_report_key(nk_input, KEY_POWER, 1);
+	input_sync(nk_input);
+}
+
+static void nk_power_release(struct work_struct *w)
+{
+	if (!power_reported)
+		return;
+	power_reported = false;
+	input_report_key(nk_input, KEY_POWER, 0);
+	input_sync(nk_input);
+}
+
+static void nk_update_combo(void)
+{
+	if (reset_combo && assist_down && voldown_down)
+		mod_timer(&reset_timer, jiffies + msecs_to_jiffies(reset_hold_ms));
+	else
+		timer_delete(&reset_timer);
+}
+
+/* Runs for every event of every connected key device; return true to drop it. */
+static bool nk_filter(struct input_handle *handle, unsigned int type,
+		      unsigned int code, int value)
+{
+	if (type != EV_KEY || value == 2)
+		return false;
+
+	if (code == KEY_VOLUMEDOWN) {
+		voldown_down = value;
+		nk_update_combo();
+		return false;
+	}
+	if (code != KEY_ASSISTANT)
+		return false;
+
+	assist_down = value;
+	nk_update_combo();
+
+	if (!power_key)
+		return false;
+	/* report from process context: we are inside another device's event lock */
+	if (value)
+		schedule_delayed_work(&power_press_work, msecs_to_jiffies(power_hold_ms));
+	else if (!cancel_delayed_work(&power_press_work))
+		schedule_work(&power_release_work);	/* press was reported */
+	return true;
+}
+
+static int nk_connect(struct input_handler *handler, struct input_dev *dev,
+		      const struct input_device_id *id)
+{
+	struct input_handle *handle;
+	int ret;
+
+	if (dev == nk_input)
+		return -ENODEV;
+	if (!test_bit(KEY_ASSISTANT, dev->keybit) && !test_bit(KEY_VOLUMEDOWN, dev->keybit))
+		return -ENODEV;
+
+	handle = kzalloc(sizeof(*handle), GFP_KERNEL);
+	if (!handle)
+		return -ENOMEM;
+	handle->dev = dev;
+	handle->handler = handler;
+	handle->name = "nura-keys";
+
+	ret = input_register_handle(handle);
+	if (ret)
+		goto err_free;
+	ret = input_open_device(handle);
+	if (ret)
+		goto err_unregister;
+	return 0;
+
+err_unregister:
+	input_unregister_handle(handle);
+err_free:
+	kfree(handle);
+	return ret;
+}
+
+static void nk_disconnect(struct input_handle *handle)
+{
+	input_close_device(handle);
+	input_unregister_handle(handle);
+	kfree(handle);
+}
+
+static const struct input_device_id nk_ids[] = {
+	{ .flags = INPUT_DEVICE_ID_MATCH_EVBIT, .evbit = { BIT_MASK(EV_KEY) } },
+	{ }
+};
+
+static struct input_handler nk_handler = {
+	.filter = nk_filter,
+	.connect = nk_connect,
+	.disconnect = nk_disconnect,
+	.name = "nura-keys",
+	.id_table = nk_ids,
+};
+
+static int __init nk_init(void)
+{
+	int ret;
+
+	timer_setup(&reset_timer, nk_reset_fn, 0);
+	INIT_DELAYED_WORK(&power_press_work, nk_power_press);
+	INIT_WORK(&power_release_work, nk_power_release);
+
+	nk_input = input_allocate_device();
+	if (!nk_input)
+		return -ENOMEM;
+	nk_input->name = "nura-keys";
+	nk_input->phys = "nura-keys/input0";
+	nk_input->id.bustype = BUS_HOST;
+	input_set_capability(nk_input, EV_KEY, KEY_POWER);
+	ret = input_register_device(nk_input);
+	if (ret) {
+		input_free_device(nk_input);
+		return ret;
+	}
+	ret = input_register_handler(&nk_handler);
+	if (ret)
+		input_unregister_device(nk_input);
+	return ret;
+}
+
+static void __exit nk_exit(void)
+{
+	input_unregister_handler(&nk_handler);
+	timer_delete_sync(&reset_timer);
+	cancel_delayed_work_sync(&power_press_work);
+	cancel_work_sync(&power_release_work);
+	input_unregister_device(nk_input);
+}
+
+module_init(nk_init);
+module_exit(nk_exit);
+MODULE_DESCRIPTION("Optional Assistant-as-power key and restart combo");
+MODULE_LICENSE("GPL");
