@@ -43,8 +43,8 @@ Cameras (2026-11-09): rear main IMX363 4032x3024, front S5KGD1 3264x2448 and
 rear wide S5K3M3 4160x3120 (new drivers from LG's register tables) all stream at 30 fps through libcamera with
 the GPU soft ISP (`cam -l`, GNOME Snapshot through PipeWire). Rear lens focus
 works as a manual V4L2 control (LC898123F40, `focus_absolute`); libcamera's
-simple pipeline has no autofocus algorithm. Flashed to boot_b 2026-11-09 (`out/boot-cameras2-flash.img`, previous in
-`out/boot-flash-prev5.img`): all three cameras with fixed rotation and brighter start exposure, focus lens, mic MCLK fix,
+simple pipeline has no autofocus algorithm. Flashed to boot_b 2026-11-09 (`out/boot-camss-up-flash.img`, previous in
+`out/boot-flash-prev6.img`): upstream-form CAMSS (no DT clock hacks), all three cameras with fixed rotation and brighter start exposure, focus lens, mic MCLK fix,
 Assistant key hold 300 ms; boot, audio and camera suite groups all pass.
 Camera quality work (2026-11-09): names Main/Wide/Front (WirePlumber rule),
 LG colour matrices as libcamera tuning files (`unit/camera/tuning/`), and a
