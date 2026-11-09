@@ -1,4 +1,4 @@
-From 8e76898ad243471cafe7e392f12791a0d848c4e6 Mon Sep 17 00:00:00 2001
+From 04117e5c3cb5dcf76b3f570840fdc99940c73259 Mon Sep 17 00:00:00 2001
 From: Gaurav Suman <gauravsuman007@gmail.com>
 Date: Mon, 9 Nov 2026 12:09:52 +0000
 Subject: [PATCH 5/8] dt-bindings: media: i2c: Add Samsung S5KGD1 image sensor
@@ -8,6 +8,8 @@ sensor, used as the front camera of the LG G8x ThinQ.
 
 This was written and tested with the help of an AI coding assistant
 (Claude Opus 5.5, Anthropic); I reviewed the change and the results.
+
+Signed-off-by: Gaurav Suman <gauravsuman007@gmail.com>
 ---
  .../bindings/media/i2c/samsung,s5kgd1.yaml    | 105 ++++++++++++++++++
  1 file changed, 105 insertions(+)
@@ -124,6 +126,3 @@ index 000000000..4b01f1057
 +          };
 +      };
 +...
--- 
-2.49.1
-

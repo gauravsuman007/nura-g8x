@@ -1,4 +1,4 @@
-From a4e31137d6879e0199b9d2ce1bef88e27bee9d0b Mon Sep 17 00:00:00 2001
+From 19a5207283f1fd113743ce1fc1297d4cbc686e2a Mon Sep 17 00:00:00 2001
 From: Gaurav Suman <gauravsuman007@gmail.com>
 Date: Mon, 9 Nov 2026 12:09:52 +0000
 Subject: [PATCH 3/8] dt-bindings: media: i2c: Add Samsung S5K3M3 image sensor
@@ -8,6 +8,8 @@ as the wide camera of the LG G8x ThinQ.
 
 This was written and tested with the help of an AI coding assistant
 (Claude Opus 5.5, Anthropic); I reviewed the change and the results.
+
+Signed-off-by: Gaurav Suman <gauravsuman007@gmail.com>
 ---
  .../bindings/media/i2c/samsung,s5k3m3.yaml    | 104 ++++++++++++++++++
  1 file changed, 104 insertions(+)
@@ -123,6 +125,3 @@ index 000000000..434f5d432
 +          };
 +      };
 +...
--- 
-2.49.1
-

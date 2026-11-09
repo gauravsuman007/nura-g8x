@@ -1,4 +1,4 @@
-From 4b30264fb011ce43bc4d90dced1e944a6ad31962 Mon Sep 17 00:00:00 2001
+From a9754afbfd6bfdba84cd207fecff0b09c609a2fb Mon Sep 17 00:00:00 2001
 From: Gaurav Suman <gauravsuman007@gmail.com>
 Date: Mon, 9 Nov 2026 12:09:52 +0000
 Subject: [PATCH 4/8] media: i2c: Add Samsung S5K3M3 image sensor driver
@@ -19,21 +19,23 @@ Tested on an LG G8x ThinQ (SM8150, CSIPHY1).
 
 This was written and tested with the help of an AI coding assistant
 (Claude Opus 5.5, Anthropic); I reviewed the change and the results.
+
+Signed-off-by: Gaurav Suman <gauravsuman007@gmail.com>
 ---
- MAINTAINERS                     |   9 +
+ MAINTAINERS                     |   8 +
  drivers/media/i2c/Kconfig       |  10 +
  drivers/media/i2c/Makefile      |   1 +
  drivers/media/i2c/s5k3m3-regs.h |  71 +++++
  drivers/media/i2c/s5k3m3.c      | 451 ++++++++++++++++++++++++++++++++
- 5 files changed, 542 insertions(+)
+ 5 files changed, 541 insertions(+)
  create mode 100644 drivers/media/i2c/s5k3m3-regs.h
  create mode 100644 drivers/media/i2c/s5k3m3.c
 
 diff --git a/MAINTAINERS b/MAINTAINERS
-index aa647f5d3..a6c492efd 100644
+index aa647f5d3..fb12d4c0c 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -22009,6 +22009,15 @@ S:	Maintained
+@@ -22009,6 +22009,14 @@ S:	Maintained
  F:	include/linux/delayacct.h
  F:	kernel/delayacct.c
  
@@ -44,7 +46,6 @@ index aa647f5d3..a6c492efd 100644
 +F:	Documentation/devicetree/bindings/media/i2c/samsung,s5k3m3.yaml
 +F:	drivers/media/i2c/s5k3m3-regs.h
 +F:	drivers/media/i2c/s5k3m3.c
-+F:	drivers/media/i2c/s5k3m3.o
 +
  TASK DELAY MONITORING TOOLS
  M:	Andrew Morton <akpm@linux-foundation.org>
@@ -616,6 +617,3 @@ index 000000000..5436178c5
 +
 +MODULE_DESCRIPTION("Samsung S5K3M3 image sensor driver");
 +MODULE_LICENSE("GPL");
--- 
-2.49.1
-

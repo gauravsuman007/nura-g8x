@@ -1,4 +1,4 @@
-From 81c6b5f30afc3aa9b4240a6f00514a1c9a8be043 Mon Sep 17 00:00:00 2001
+From 83798742877d943190a0b62e488c5ba664e6fbb2 Mon Sep 17 00:00:00 2001
 From: Gaurav Suman <gauravsuman007@gmail.com>
 Date: Mon, 9 Nov 2026 12:09:51 +0000
 Subject: [PATCH 2/8] media: qcom: camss: Add SM8150 support
@@ -21,6 +21,8 @@ and VFE0 RDI0, with libcamera's simple pipeline handler.
 
 This was written and tested with the help of an AI coding assistant
 (Claude Opus 5.5, Anthropic); I reviewed the change and the results.
+
+Signed-off-by: Gaurav Suman <gauravsuman007@gmail.com>
 ---
  .../qcom/camss/camss-csiphy-3ph-1-0.c         |  80 ++++++
  drivers/media/platform/qcom/camss/camss-vfe.c |   2 +
@@ -433,6 +435,3 @@ index 7dc2fd9f0..74d8cc292 100644
  	CAMSS_8250,
  	CAMSS_8280XP,
  	CAMSS_8300,
--- 
-2.49.1
-

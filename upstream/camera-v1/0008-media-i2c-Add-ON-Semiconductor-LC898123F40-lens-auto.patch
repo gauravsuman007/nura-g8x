@@ -1,4 +1,4 @@
-From fe08d311d7025edb4ff8f9a1ab1656c74a1e5d22 Mon Sep 17 00:00:00 2001
+From 6439c95b604f7bc27de303205d2845b7edd2bb5e Mon Sep 17 00:00:00 2001
 From: Gaurav Suman <gauravsuman007@gmail.com>
 Date: Mon, 9 Nov 2026 12:09:53 +0000
 Subject: [PATCH 8/8] media: i2c: Add ON Semiconductor LC898123F40 lens
@@ -16,6 +16,8 @@ on the IMX363 main camera.
 
 This was written and tested with the help of an AI coding assistant
 (Claude Opus 5.5, Anthropic); I reviewed the change and the results.
+
+Signed-off-by: Gaurav Suman <gauravsuman007@gmail.com>
 ---
  MAINTAINERS                  |   7 ++
  drivers/media/i2c/Kconfig    |  10 +++
@@ -25,7 +27,7 @@ This was written and tested with the help of an AI coding assistant
  create mode 100644 drivers/media/i2c/lc898123.c
 
 diff --git a/MAINTAINERS b/MAINTAINERS
-index 62ee2e6c9..708421db8 100644
+index b13cf3ad4..ab3d82598 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
 @@ -20984,6 +20984,13 @@ S:	Maintained
@@ -219,6 +221,3 @@ index 000000000..69516ad96
 +
 +MODULE_DESCRIPTION("LC898123F40 autofocus driver");
 +MODULE_LICENSE("GPL");
--- 
-2.49.1
-

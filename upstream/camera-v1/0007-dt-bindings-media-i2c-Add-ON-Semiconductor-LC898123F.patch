@@ -1,4 +1,4 @@
-From 85ffee23129ccc8ce6131f020b3579de27df62b7 Mon Sep 17 00:00:00 2001
+From 462f75c3e23dab1ba42429233b5fa6af751445c6 Mon Sep 17 00:00:00 2001
 From: Gaurav Suman <gauravsuman007@gmail.com>
 Date: Mon, 9 Nov 2026 12:09:52 +0000
 Subject: [PATCH 7/8] dt-bindings: media: i2c: Add ON Semiconductor LC898123F40
@@ -9,6 +9,8 @@ ThinQ.
 
 This was written and tested with the help of an AI coding assistant
 (Claude Opus 5.5, Anthropic); I reviewed the change and the results.
+
+Signed-off-by: Gaurav Suman <gauravsuman007@gmail.com>
 ---
  .../bindings/media/i2c/onnn,lc898123f40.yaml  | 46 +++++++++++++++++++
  1 file changed, 46 insertions(+)
@@ -66,6 +68,3 @@ index 000000000..ac0ab6a87
 +        };
 +    };
 +...
--- 
-2.49.1
-
