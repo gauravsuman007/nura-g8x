@@ -878,3 +878,13 @@ SoC dtbs; `sdf41-dtbo_b` holds 9 overlays, `dtbo_0` is mh2lm rev 1.0).
 - **Flashed 2026-11-09** (`out/boot-flash.img`: PHY supply l18a, SBU GPIO
   hogs). Full suite on the RAM boot: 46 pass, 0 fail. Previous images:
   `boot-flash-prev.img`, `boot-flash-prev2.img`.
+
+**Auto-brightness stopped (2026-11-09).** One boot the SLPI never published
+its QMI sensor core service (400 on node 9; `qrtr-lookup` showed nodes
+0/1/5/10 only), so iio-sensor-proxy looped "No sensors" and GNOME's
+SensorDaemon logged "Invalid release of sensor ambient-light". Same kernel
+worked the boot before and after: an intermittent SLPI start race. A hot
+`remoteproc0` stop/start brings service 400 back but fastrpc-sdsp fails to
+re-probe (SCM assign -22), so the sensors still don't work: reboot instead.
+The `sensors` test group now checks for service 400 and an `auto_brightness`
+test checks the proxy, `ambient-enabled` and the SensorDaemon errors.

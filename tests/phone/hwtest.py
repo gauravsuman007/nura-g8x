@@ -783,6 +783,11 @@ def sensor_prop(name):
 
 @test("sensors")
 def sensor_services():
+    # The SLPI sometimes boots without publishing its QMI sensor service
+    # (service 400 on node 9); iio-sensor-proxy then loops "No sensors" and
+    # auto-brightness/rotation stop. Seen 2026-11-09; a reboot cleared it.
+    ssc = sh("qrtr-lookup | awk '$1==400'")
+    assert_(ssc, "SLPI sensor core (QMI service 400) not registered; reboot clears it")
     for s in ("hexagonrpcd-sdsp", "iio-sensor-proxy"):
         assert_(svc_active(s), f"{s} not active")
     restarts = sh("systemctl show -p NRestarts --value iio-sensor-proxy")
@@ -827,6 +832,17 @@ def gyroscope():
     dev = [p for p in glob.glob("/sys/class/input/event*/device/name") if "gyroscope" in rd(p, "")]
     assert_(dev, "no 'Nura SLPI gyroscope' input device")
     return f"{len(v)} samples in 3 s, at rest {rate:.3f} rad/s, input device present", {"gyro_samples_3s": len(v)}
+
+
+@test("sensors")
+def auto_brightness():
+    assert_(sensor_prop("HasAmbientLight") == "true", "sensor proxy has no ambient light")
+    amb = as_user("gsettings get org.gnome.settings-daemon.plugins.power ambient-enabled")
+    if amb.strip() != "true":
+        raise Warn(f"auto-brightness setting off ({amb.strip()})")
+    nan = sh("journalctl -b --no-pager | grep -c 'Invalid release of sensor ambient-light'")
+    assert_(nan in ("0", ""), f"SensorDaemon failing to hold the light sensor ({nan} errors)")
+    return "proxy has light, ambient-enabled on, SensorDaemon holds the sensor"
 
 
 @test("nfc")
