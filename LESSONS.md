@@ -899,3 +899,11 @@ core sleep only; there is no cluster idle state. nura-gyro streamed 25 Hz
 with no reader (8% CPU, SLPI awake); it now streams only while its event
 node is open. qcom_smbx has writable `current_max` and `status` but no
 `charge_control_*_threshold`, which UPower/GNOME need for a charge limit.
+
+**Charge limit (RAM-boot tested 2026-11-09).** `extra-fg-charge-limit.py` adds
+`charge_control_start/end_threshold` to the qcom_fg battery. Pausing suspends
+the charger's USB input; USB data stays up, but the charger reports offline
+and its status changes a moment later, so the driver re-reads it for 9 s.
+Input is restored at probe and shutdown. UPower also needs a `CHARGE_LIMIT`
+udev property on the battery or it reports "unsupported"
+(`unit/battery/61-nura-charge-limit.rules`, 75-80%).

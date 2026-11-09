@@ -324,6 +324,35 @@ def charger():
 
 
 @test("power")
+def charge_limit():
+    b, c = "/sys/class/power_supply/qcom-battery", "/sys/class/power_supply/pm8150b-charger"
+    st, en = b + "/charge_control_start_threshold", b + "/charge_control_end_threshold"
+    assert_(os.path.exists(en), "battery has no charge_control thresholds (kernel without the charge limit)")
+    prop = sh("busctl get-property org.freedesktop.UPower /org/freedesktop/UPower/devices/battery_qcom_battery "
+              "org.freedesktop.UPower.Device ChargeThresholdSupported 2>&1")
+    assert_(prop.endswith("true"), f"UPower does not offer the charge limit ({prop}); check the CHARGE_LIMIT udev rule")
+    if rd(c + "/status", "") != "Charging":
+        return "thresholds present, UPower supports them; not charging, pause not tested"
+    old = rd(st), rd(en)
+    cap = int(rd(b + "/capacity"))
+    if cap < 3:
+        return "thresholds present, UPower supports them; battery too low to test pause"
+    try:
+        open(st, "w").write(str(cap - 2))
+        open(en, "w").write(str(cap - 1))
+        time.sleep(8)
+        paused = rd(c + "/status", ""), rd(b + "/status", "")
+    finally:
+        open(st, "w").write(old[0])
+        open(en, "w").write(old[1])
+    time.sleep(8)
+    now = rd(c + "/status", "")
+    assert_(paused == ("Discharging", "Discharging"), f"charging did not pause: {paused}")
+    assert_(now == "Charging", f"charging did not resume: {now}")
+    return "UPower supports the limit; charging paused and resumed"
+
+
+@test("power")
 def idle_power_and_load():
     l1 = float(rd("/proc/loadavg").split()[0])
     # CPU used by gnome-shell over 5 s while idle
