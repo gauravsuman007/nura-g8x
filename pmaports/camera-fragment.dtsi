@@ -203,48 +203,57 @@
 	regulator-always-on;	/* rear camera VIO */
 };
 
-/* Stage 2: CAMSS (Titan 175). Addresses and interrupts from LG's stock DT;
- * the driver reuses the SM6150 (Titan 17x) resource tables. CSIPHY supply is
- * PM8150L L3 (1.2 V) as in the stock "mipi-csi-vdd". SM8150 camcc has no
- * SOC_AHB clock; the slow AHB source stands in for "soc_ahb". */
+/* Stage 2: CAMSS (Titan 175), in the form submitted upstream
+ * (qcom,sm8150-camss): addresses and interrupts from LG's stock DT, all four
+ * CSIPHYs, CSIDs and VFEs. CSIPHY supply is PM8150L L3 (1.2 V) as in the stock
+ * "mipi-csi-vdd". SM8150 camcc has no SOC_AHB clock; downstream runs the slow
+ * AHB source directly, and the driver sets it (80 MHz) and camnoc_axi (400 MHz). */
 &soc {
-	camss: camss@acb3000 {
+	camss: isp@acb3000 {
 		compatible = "qcom,sm8150-camss";
 		reg = <0 0x0acb3000 0 0x1000>,
 		      <0 0x0acba000 0 0x1000>,
 		      <0 0x0acc8000 0 0x1000>,
+		      <0 0x0accf000 0 0x1000>,
 		      <0 0x0ac65000 0 0x1000>,
 		      <0 0x0ac66000 0 0x1000>,
 		      <0 0x0ac67000 0 0x1000>,
+		      <0 0x0ac68000 0 0x1000>,
 		      <0 0x0acaf000 0 0x4000>,
 		      <0 0x0acb6000 0 0x4000>,
-		      <0 0x0acc4000 0 0x4000>;
-		reg-names = "csid0", "csid1", "csid_lite",
-			    "csiphy0", "csiphy1", "csiphy2",
-			    "vfe0", "vfe1", "vfe_lite";
+		      <0 0x0acc4000 0 0x4000>,
+		      <0 0x0accb000 0 0x4000>;
+		reg-names = "csid0", "csid1", "csid_lite0", "csid_lite1",
+			    "csiphy0", "csiphy1", "csiphy2", "csiphy3",
+			    "vfe0", "vfe1", "vfe_lite0", "vfe_lite1";
 		interrupts = <GIC_SPI 464 IRQ_TYPE_EDGE_RISING>,
 			     <GIC_SPI 466 IRQ_TYPE_EDGE_RISING>,
 			     <GIC_SPI 468 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 359 IRQ_TYPE_EDGE_RISING>,
 			     <GIC_SPI 477 IRQ_TYPE_EDGE_RISING>,
 			     <GIC_SPI 478 IRQ_TYPE_EDGE_RISING>,
 			     <GIC_SPI 479 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 448 IRQ_TYPE_EDGE_RISING>,
 			     <GIC_SPI 465 IRQ_TYPE_EDGE_RISING>,
 			     <GIC_SPI 467 IRQ_TYPE_EDGE_RISING>,
-			     <GIC_SPI 469 IRQ_TYPE_EDGE_RISING>;
-		interrupt-names = "csid0", "csid1", "csid_lite",
-				  "csiphy0", "csiphy1", "csiphy2",
-				  "vfe0", "vfe1", "vfe_lite";
+			     <GIC_SPI 469 IRQ_TYPE_EDGE_RISING>,
+			     <GIC_SPI 360 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "csid0", "csid1", "csid_lite0", "csid_lite1",
+				  "csiphy0", "csiphy1", "csiphy2", "csiphy3",
+				  "vfe0", "vfe1", "vfe_lite0", "vfe_lite1";
 		clocks = <&gcc GCC_CAMERA_AHB_CLK>,
 			 <&gcc GCC_CAMERA_HF_AXI_CLK>,
 			 <&camcc CAM_CC_CAMNOC_AXI_CLK>,
 			 <&camcc CAM_CC_CPAS_AHB_CLK>,
+			 <&camcc CAM_CC_SLOW_AHB_CLK_SRC>,
 			 <&camcc CAM_CC_CSIPHY0_CLK>,
 			 <&camcc CAM_CC_CSI0PHYTIMER_CLK>,
 			 <&camcc CAM_CC_CSIPHY1_CLK>,
 			 <&camcc CAM_CC_CSI1PHYTIMER_CLK>,
 			 <&camcc CAM_CC_CSIPHY2_CLK>,
 			 <&camcc CAM_CC_CSI2PHYTIMER_CLK>,
-			 <&camcc CAM_CC_SLOW_AHB_CLK_SRC>,
+			 <&camcc CAM_CC_CSIPHY3_CLK>,
+			 <&camcc CAM_CC_CSI3PHYTIMER_CLK>,
 			 <&camcc CAM_CC_IFE_0_CLK>,
 			 <&camcc CAM_CC_IFE_0_AXI_CLK>,
 			 <&camcc CAM_CC_IFE_0_CPHY_RX_CLK>,
@@ -255,27 +264,29 @@
 			 <&camcc CAM_CC_IFE_1_CSID_CLK>,
 			 <&camcc CAM_CC_IFE_LITE_0_CLK>,
 			 <&camcc CAM_CC_IFE_LITE_0_CPHY_RX_CLK>,
-			 <&camcc CAM_CC_IFE_LITE_0_CSID_CLK>;
+			 <&camcc CAM_CC_IFE_LITE_0_CSID_CLK>,
+			 <&camcc CAM_CC_IFE_LITE_1_CLK>,
+			 <&camcc CAM_CC_IFE_LITE_1_CPHY_RX_CLK>,
+			 <&camcc CAM_CC_IFE_LITE_1_CSID_CLK>;
 		clock-names = "gcc_ahb", "gcc_axi_hf", "camnoc_axi", "cpas_ahb",
+			      "slow_ahb_src",
 			      "csiphy0", "csiphy0_timer", "csiphy1", "csiphy1_timer",
-			      "csiphy2", "csiphy2_timer", "soc_ahb",
+			      "csiphy2", "csiphy2_timer", "csiphy3", "csiphy3_timer",
 			      "vfe0", "vfe0_axi", "vfe0_cphy_rx", "vfe0_csid",
 			      "vfe1", "vfe1_axi", "vfe1_cphy_rx", "vfe1_csid",
-			      "vfe_lite", "vfe_lite_cphy_rx", "vfe_lite_csid";
+			      "vfe_lite0", "vfe_lite0_cphy_rx", "vfe_lite0_csid",
+			      "vfe_lite1", "vfe_lite1_cphy_rx", "vfe_lite1_csid";
 		interconnects = <&gem_noc MASTER_AMPSS_M0 0 &config_noc SLAVE_CAMERA_CFG 0>,
 				<&mmss_noc MASTER_CAMNOC_HF0 0 &mc_virt SLAVE_EBI_CH0 0>;
 		interconnect-names = "ahb", "hf_0";
 		iommus = <&apps_smmu 0x840 0x620>, <&apps_smmu 0x860 0x620>,
 			 <&apps_smmu 0xa40 0x620>, <&apps_smmu 0xa60 0x620>,
 			 <&apps_smmu 0xc40 0x620>, <&apps_smmu 0xc60 0x620>,
-			 <&apps_smmu 0xe40 0x620>, <&apps_smmu 0xe60 0x620>; /* stock msm_cam_smmu_ife */
+			 <&apps_smmu 0xe40 0x620>, <&apps_smmu 0xe60 0x620>;
 		power-domains = <&camcc IFE_0_GDSC>,
 				<&camcc IFE_1_GDSC>,
 				<&camcc TITAN_TOP_GDSC>;
 		power-domain-names = "ife0", "ife1", "top";
-		/* camss never sets these; at the 19.2 MHz boot rate the IFE never finishes a write */
-		assigned-clocks = <&camcc CAM_CC_CAMNOC_AXI_CLK_SRC>, <&camcc CAM_CC_SLOW_AHB_CLK_SRC>;
-		assigned-clock-rates = <400000000>, <80000000>;
 		vdd-csiphy-1p2-supply = <&vreg_l3c_1p2>;
 		vdd-csiphy-1p8-supply = <&vreg_l1c_1p8>;
 
@@ -314,9 +325,10 @@
  * always-on fixed regulators above, so the driver gets dummy supplies). */
 &cci0_i2c0 {
 	/* OIS/AF controller; AF position in 0xF01A (LG CamX actuator data) */
-	lc898123: lens@3e {
+	lc898123: camera-lens@3e {
 		compatible = "onnn,lc898123f40";
 		reg = <0x3e>;
+		vdd-supply = <&cam_rn_afvdd>;
 	};
 
 	imx363: camera@10 {
@@ -346,9 +358,9 @@
 		reg = <0x2d>;
 		clocks = <&camcc CAM_CC_MCLK2_CLK>;
 		reset-gpios = <&tlmm 9 GPIO_ACTIVE_LOW>;
-		vio-supply = <&cam_f_iovdd>;
-		vana-supply = <&cam_f_avdd>;
-		vdig-supply = <&cam_f_dvdd>;
+		vddio-supply = <&cam_f_iovdd>;
+		vdda-supply = <&cam_f_avdd>;
+		vddd-supply = <&cam_f_dvdd>;
 		orientation = <0>;	/* front */
 		rotation = <90>;
 		port {
@@ -368,9 +380,9 @@
 		reg = <0x10>;
 		clocks = <&camcc CAM_CC_MCLK1_CLK>;
 		reset-gpios = <&tlmm 30 GPIO_ACTIVE_LOW>;
-		vio-supply = <&vreg_l1c_1p8>;
-		vana-supply = <&cam_rw_avdd>;
-		vdig-supply = <&cam_rw_dvdd>;
+		vddio-supply = <&vreg_l1c_1p8>;
+		vdda-supply = <&cam_rw_avdd>;
+		vddd-supply = <&cam_rw_dvdd>;
 		orientation = <1>;	/* back */
 		rotation = <270>;
 		port {

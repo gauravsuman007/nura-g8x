@@ -1,0 +1,56 @@
+From 949f2eb2bcabc8b2adf414d812eebe1fe5b37e7e Mon Sep 17 00:00:00 2001
+From: Gaurav Suman <gauravsuman007@gmail.com>
+Date: Mon, 9 Nov 2026 11:26:21 +0100
+Subject: [PATCH RFC] ASoC: codecs: wcd934x: keep MCLK enabled so init writes
+ reach the codec
+
+On an LG G8x (SM8150, WCD9340 over SLIMbus) the microphones record
+digital silence on roughly half of all boots. Register dumps look
+correct because they are served from the regmap cache, but the
+writes never reached the hardware: the WCD934x digital core ignores
+register writes while its MCLK/sysclk is off.
+
+wcd934x_comp_init() runs with MCLK off unless the SoundWire master
+happened to probe first and enabled the clock through
+wcd934x_swrm_clock(); __wcd934x_cdc_mclk_enable(false) then leaves it
+running because the SWR clock bit is set. Probe ordering is not
+deterministic, which matches the random good and bad boots.
+
+Enable MCLK before wcd934x_comp_init() and leave it enabled, which is
+what the good boots already do. With this change 8 of 8 boots had a
+working microphone (before: about 3 in 5 silent).
+
+Enabling MCLK only around wcd934x_comp_init() (and disabling it
+again afterwards, as wcd934x_enable_efuse_sensing() does) was not
+enough: 2 of 4 boots were silent again, so later writes made while
+the clock is off are lost as well. An alternative would be to mark
+the cache dirty and resync whenever MCLK goes from off to on; this
+patch takes the simpler route at the cost of keeping MCLK running.
+
+The fault was found, the change written and the boot tests run with the
+help of an AI coding assistant (Claude Opus 5.5, Anthropic); I reviewed
+the change and the test results.
+---
+ sound/soc/codecs/wcd934x.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/sound/soc/codecs/wcd934x.c b/sound/soc/codecs/wcd934x.c
+index 0ed24cca0..6b6ce5ba5 100644
+--- a/sound/soc/codecs/wcd934x.c
++++ b/sound/soc/codecs/wcd934x.c
+@@ -2995,6 +2995,12 @@ static int wcd934x_comp_probe(struct snd_soc_component *component)
+ 	/* Default HPH Mode to Class-H Low HiFi */
+ 	wcd->hph_mode = CLS_H_LOHIFI;
+ 
++	/*
++	 * The digital core drops register writes while MCLK is off, but the
++	 * regmap cache still records them. Keep MCLK running so the init
++	 * sequence below and later mixer/DAPM writes actually reach the codec.
++	 */
++	__wcd934x_cdc_mclk_enable(wcd, true);
+ 	wcd934x_comp_init(component);
+ 
+ 	for (i = 0; i < NUM_CODEC_DAIS; i++)
+-- 
+2.50.1 (Apple Git-155)
+

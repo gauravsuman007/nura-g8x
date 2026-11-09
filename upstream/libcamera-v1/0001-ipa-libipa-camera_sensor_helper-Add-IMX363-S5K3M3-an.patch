@@ -1,0 +1,70 @@
+From 0c783f3c48bcbe25694fca7d40c89338203e2084 Mon Sep 17 00:00:00 2001
+From: Gaurav Suman <gauravsuman007@gmail.com>
+Date: Mon, 9 Nov 2026 11:35:08 +0100
+Subject: [PATCH 1/2] ipa: libipa: camera_sensor_helper: Add IMX363, S5K3M3 and
+ S5KGD1
+
+Add helpers for the three sensors of the LG G8x ThinQ (SM8150):
+
+- IMX363 uses the same 512-based Sony analogue gain code as the IMX258
+  (gain = 512 / (512 - code)); black level 64 at 10 bits.
+- S5K3M3 and S5KGD1 use a linear code with 0x20 = 1x; black level 64
+  at 10 bits.
+
+Without a helper the simple IPA falls back to a generic gain model and
+the exposure loop converges slowly or overshoots: on the G8x the IMX363
+crept from 63 to 227 (of 255) over two seconds. With the helpers both
+rear cameras settle within about 8 frames.
+
+Written with the help of an AI coding assistant (Claude Opus 5.5,
+Anthropic); tested on the phone with the softisp IPA.
+---
+ src/ipa/libipa/camera_sensor_helper.cpp | 32 +++++++++++++++++++++++++
+ 1 file changed, 32 insertions(+)
+
+diff --git a/src/ipa/libipa/camera_sensor_helper.cpp b/src/ipa/libipa/camera_sensor_helper.cpp
+index 359040e..baa60ca 100644
+--- a/src/ipa/libipa/camera_sensor_helper.cpp
++++ b/src/ipa/libipa/camera_sensor_helper.cpp
+@@ -565,6 +565,38 @@ public:
+ };
+ REGISTER_CAMERA_SENSOR_HELPER("imx258", CameraSensorHelperImx258)
+ 
++/* nura (LG G8x): IMX363 uses the same 512-based Sony gain code as IMX258. */
++class CameraSensorHelperImx363 : public CameraSensorHelper
++{
++public:
++	CameraSensorHelperImx363()
++	{
++		blackLevel_ = 4096;	/* 64 at 10 bits */
++		gain_ = AnalogueGainLinear{ 0, 512, -1, 512 };
++	}
++};
++REGISTER_CAMERA_SENSOR_HELPER("imx363", CameraSensorHelperImx363)
++
++/* nura: Samsung S5K sensors, analogue gain = code / 32 (0x20 = 1x). */
++class CameraSensorHelperS5kLinear32 : public CameraSensorHelper
++{
++public:
++	CameraSensorHelperS5kLinear32()
++	{
++		blackLevel_ = 4096;	/* 64 at 10 bits */
++		gain_ = AnalogueGainLinear{ 1, 0, 0, 32 };
++	}
++};
++class CameraSensorHelperS5k3m3 : public CameraSensorHelperS5kLinear32
++{
++};
++REGISTER_CAMERA_SENSOR_HELPER("s5k3m3", CameraSensorHelperS5k3m3)
++
++class CameraSensorHelperS5kgd1 : public CameraSensorHelperS5kLinear32
++{
++};
++REGISTER_CAMERA_SENSOR_HELPER("s5kgd1", CameraSensorHelperS5kgd1)
++
+ class CameraSensorHelperImx283 : public CameraSensorHelper
+ {
+ public:
+-- 
+2.50.1 (Apple Git-155)
+

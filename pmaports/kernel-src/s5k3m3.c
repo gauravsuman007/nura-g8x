@@ -50,7 +50,7 @@ MODULE_PARM_DESC(bayer, "CFA order: 0 RGGB, 1 GRBG, 2 GBRG, 3 BGGR");
 #define S5K3M3_MBUS_CODE	s5k3m3_codes[bayer & 3]
 
 static const s64 s5k3m3_link_freqs[] = { S5K3M3_LINK_FREQ };
-static const char * const s5k3m3_supplies[] = { "vio", "vana", "vdig" };
+static const char * const s5k3m3_supplies[] = { "vddio", "vdda", "vddd" };
 static const char * const s5k3m3_tp_menu[] = {
 	"Disabled", "Solid Colour", "Colour Bars", "Fade to Grey", "PN9",
 };

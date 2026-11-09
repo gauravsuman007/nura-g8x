@@ -9,6 +9,7 @@
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
+#include <linux/regulator/consumer.h>
 #include <media/v4l2-cci.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
@@ -64,6 +65,12 @@ static int lc898123_probe(struct i2c_client *client)
 	lc = devm_kzalloc(&client->dev, sizeof(*lc), GFP_KERNEL);
 	if (!lc)
 		return -ENOMEM;
+	ret = devm_regulator_get_enable_optional(&client->dev, "vdd");
+	if (ret && ret != -ENODEV)
+		return dev_err_probe(&client->dev, ret, "vdd supply\n");
+	if (!ret)
+		usleep_range(10000, 12000);	/* controller boot from flash */
+
 	lc->regmap = devm_cci_regmap_init_i2c(client, 16);
 	if (IS_ERR(lc->regmap))
 		return PTR_ERR(lc->regmap);

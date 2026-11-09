@@ -723,6 +723,30 @@ GNOME Snapshot can use it via PipeWire. Four separate faults, each silent:
 - **Flashed 2026-11-08** (`out/boot-flash.img`; previous `boot-flash-prev.img`, older `boot-flash-prev2.img`). nogmem drop-in removed from the phone; full suite on the flashed kernel: 0 GPU faults, 0 hangs, glmark2 534; only the microphone race failed.
 - **Debug patch** moved out of the build to `out/probes/extra-msm-vmdbg.py.disabled`; the three msm files were restored from `/work/k.tgz` in the build volume.
 
+## Upstream-form camera code, 2026-11-09
+- CAMSS now uses its own `CAMSS_8150` version and resources
+  (`kernel-src/camss-sm8150-up.py`, also the linux-media patch): all four
+  CSIPHYs/CSIDs/VFEs from the stock DT, SM8150 camcc rates (cphy_rx 400 MHz,
+  CSIPHY timer 300 MHz, CSID 400-600, IFE 400-950, IFE lite 320-600) and
+  camnoc_axi at 400 MHz set by the driver. The DT no longer needs any
+  assigned-clocks for CAMSS: tested both ways, the slow AHB rate (left at
+  19.2 MHz by camss) does not matter.
+- The old shortcut also switched **SM6150** to the SM8150 CSIPHY table; the
+  upstream version keeps SM6150 untouched.
+- Trap: the 7.0 tree's `csiphy_is_gen2()` list differs from linux-next (no
+  CAMSS_6350), so a text match on the case list silently missed and the
+  PHY was programmed as gen1: streams start, CSID gets 1 IRQ, no frames.
+  The patch script now inserts after `case CAMSS_6150:` inside that function
+  and asserts both CSIPHY cases exist.
+- Sensor supplies renamed to the upstream names `vdda`/`vddd`/`vddio`;
+  lens node is `camera-lens@3e` with an optional `vdd-supply`.
+- linux-next changed `set_fmt`/`get_selection` to take a
+  `const struct v4l2_subdev_client_info *`; the upstream copies have it,
+  the 7.0 tree copies do not.
+- Kernel AI policy (`Documentation/process/coding-assistants.rst`): no
+  Signed-off-by from the assistant, the human sends; AI help stated in the
+  changelog. Series and status: `upstream/`, `UPSTREAM.md`.
+
 ## NFC, 2026-11-08
 - I2C9 (`a84000`) needs `&gpi_dma1` enabled, or geni_i2c defers forever ("Failed to get tx DMA ch"). With it enabled, `nxp-nci-i2c` probes and `nfc0` appears (RAM-boot tested).
 

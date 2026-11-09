@@ -1,0 +1,30 @@
+From 8ec7e0bf40ef2e32e46cc77dc72baf5de9f241e9 Mon Sep 17 00:00:00 2001
+From: Gaurav Suman <gauravsuman007@gmail.com>
+Date: Mon, 9 Nov 2026 11:35:08 +0100
+Subject: [PATCH 0/2] Sensor support for the LG G8x ThinQ cameras
+
+This adds camera sensor helpers and sensor properties for the three
+sensors of the LG G8x ThinQ (Qualcomm SM8150): Sony IMX363 (main),
+Samsung S5K3M3 (wide) and Samsung S5KGD1 (front). The kernel drivers for
+the Samsung sensors and the SM8150 CAMSS support are being prepared for
+linux-media; the work and test notes are at
+https://github.com/gauravsuman007/nura-g8x.
+
+With the helpers the simple pipeline's exposure loop settles within
+about 8 frames on both rear cameras, instead of creeping for two
+seconds (IMX363) or starting nearly black (S5K3M3).
+
+These patches were written with the help of an AI coding assistant
+(Claude Opus 5.5, Anthropic); I have reviewed and tested them.
+
+Gaurav Suman (2):
+  ipa: libipa: camera_sensor_helper: Add IMX363, S5K3M3 and S5KGD1
+  libcamera: camera_sensor_properties: Add IMX363, S5K3M3 and S5KGD1
+
+ src/ipa/libipa/camera_sensor_helper.cpp       | 32 ++++++++++++++
+ .../sensor/camera_sensor_properties.cpp       | 42 +++++++++++++++++++
+ 2 files changed, 74 insertions(+)
+
+-- 
+2.50.1 (Apple Git-155)
+
