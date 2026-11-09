@@ -1,0 +1,1576 @@
+From d8d54f158873ba7fa572cee0a4729817c08bc5c2 Mon Sep 17 00:00:00 2001
+From: Gaurav Suman <gauravsuman007@gmail.com>
+Date: Mon, 9 Nov 2026 10:30:10 +0000
+Subject: [PATCH 12/12] arm64: dts: qcom: sm8150-lg-mh2lm: LG G8x ThinQ board
+ support
+
+Part of the LG G8x ThinQ (lg-mh2lm) bring-up: https://github.com/gauravsuman007/nura-g8x
+Written with the help of an AI coding assistant (Claude Opus 5.5).
+---
+ arch/arm64/boot/dts/qcom/sm8150-lg-mh2lm.dts | 1554 ++++++++++++++++++
+ 1 file changed, 1554 insertions(+)
+ create mode 100644 arch/arm64/boot/dts/qcom/sm8150-lg-mh2lm.dts
+
+diff --git a/arch/arm64/boot/dts/qcom/sm8150-lg-mh2lm.dts b/arch/arm64/boot/dts/qcom/sm8150-lg-mh2lm.dts
+new file mode 100644
+index 0000000..e91d486
+--- /dev/null
++++ b/arch/arm64/boot/dts/qcom/sm8150-lg-mh2lm.dts
+@@ -0,0 +1,1554 @@
++// SPDX-License-Identifier: BSD-3-Clause
++/*
++ * LG G8X ThinQ (mh2lm), first-boot device tree.
++ *
++ * Reserved memory and regulator limits come from LG's downstream kernel
++ * (LineageOS android_kernel_lge_sm8150, lineage-22.2). Regulator structure is
++ * based on sm8150-xiaomi-cepheus.dts by Alexey Minnekhanov.
++ * Scope: simple framebuffer, buttons, USB gadget, UFS, pstore.
++ */
++
++/dts-v1/;
++
++#include <dt-bindings/arm/qcom,ids.h>
++#include <dt-bindings/firmware/qcom,scm.h>
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++#include <dt-bindings/input/gpio-keys.h>
++#include <dt-bindings/leds/common.h>
++#include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
++#include <dt-bindings/regulator/qcom,rpmh-regulator.h>
++#include <dt-bindings/usb/pd.h>
++#include "sm8150.dtsi"
++#include "pm8150.dtsi"
++#include "pm8150b.dtsi"
++#include "pm8150l.dtsi"
++
++/delete-node/ &tz_mem;      /* LG reserves more; the upstream size leaves secure memory mapped */
++/delete-node/ &rmtfs_mem;   /* falls inside LG tz_mem; revisit for modem */
++/delete-node/ &adsp_mem;
++/delete-node/ &mpss_mem;
++/delete-node/ &venus_mem;
++/delete-node/ &slpi_mem;
++/delete-node/ &ipa_fw_mem;
++/delete-node/ &ipa_gsi_mem;
++/delete-node/ &gpu_mem;
++/delete-node/ &spss_mem;
++/delete-node/ &cdsp_mem;
++/delete-node/ &qseecom_mem;
++
++/ {
++	model = "LG G8X ThinQ";
++	compatible = "lg,mh2lm", "qcom,sm8150";
++	chassis-type = "handset";
++
++	/* Generic board-id, as in the Renegade image LG ABL accepts */
++	qcom,msm-id = <QCOM_ID_SM8150 0x20000>;
++	qcom,board-id = <0 0>;
++
++	aliases {
++		hsuart0 = &uart13;
++		display0 = &framebuffer;
++	};
++
++	ts_vdd: ts-vdd-regulator {
++		compatible = "regulator-fixed";
++		regulator-name = "ts_vdd";
++		gpio = <&tlmm 152 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		regulator-boot-on;
++		regulator-always-on;
++	};
++
++	ts_vcl: ts-vcl-regulator {
++		compatible = "regulator-fixed";
++		regulator-name = "ts_vcl";
++		gpio = <&tlmm 59 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		regulator-boot-on;
++		regulator-always-on;
++	};
++
++	battery: battery {
++		compatible = "simple-battery";
++		charge-full-design-microamp-hours = <4000000>;
++		voltage-min-design-microvolt = <3400000>;
++		voltage-max-design-microvolt = <4400000>;
++	};
++
++	chosen {
++		#address-cells = <2>;
++		#size-cells = <2>;
++		ranges;
++
++		framebuffer: framebuffer@9d200000 {
++			compatible = "simple-framebuffer";
++			reg = <0 0x9d200000 0 0x1200000>;
++			width = <1080>;
++			height = <2340>;
++			stride = <(1080 * 4)>;
++			format = "a8r8g8b8";
++			clocks = <&gcc GCC_DISP_HF_AXI_CLK>,
++				 <&gcc GCC_DISP_SF_AXI_CLK>;
++		};
++	};
++
++	/*
++	 * USB-C SBU <-> DP AUX switch. LG drives it with two GPIOs (stock DT
++	 * sde_dp qcom,aux-en-gpio 42, enable when low; qcom,aux-sel-gpio 148,
++	 * set for the flipped orientation), which is what gpio-sbu-mux does.
++	 */
++	sbu-mux {
++		compatible = "gpio-sbu-mux";
++		enable-gpios = <&tlmm 42 GPIO_ACTIVE_LOW>;
++		select-gpios = <&tlmm 148 GPIO_ACTIVE_HIGH>;
++		pinctrl-0 = <&dp_aux_sw_default>;
++		pinctrl-names = "default";
++		mode-switch;
++		orientation-switch;
++
++		port {
++			sbu_mux_in: endpoint {
++				remote-endpoint = <&pm8150b_typec_sbu_out>;
++			};
++		};
++	};
++
++	gpio-keys {
++		compatible = "gpio-keys";
++		pinctrl-names = "default";
++		pinctrl-0 = <&vol_up_default &hot_key_default>;
++
++		key-volume-up {
++			label = "Volume Up";
++			gpios = <&pm8150_gpios 6 GPIO_ACTIVE_LOW>;
++			linux,code = <KEY_VOLUMEUP>;
++			debounce-interval = <15>;
++			wakeup-source;
++		};
++
++		key-assistant {
++			label = "Google Assistant";
++			gpios = <&pm8150_gpios 1 GPIO_ACTIVE_LOW>;
++			linux,code = <KEY_ASSISTANT>;
++			debounce-interval = <15>;
++		};
++	};
++
++	reserved-memory {
++		fastrpc_mem: fastrpc {
++			compatible = "shared-dma-pool";
++			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
++			alignment = <0x0 0x400000>;
++			size = <0x0 0x1000000>;
++			reusable;
++		};
++
++		/* Tail of LG xbl_aop_mem not covered by the upstream xbl/aop regions */
++		memory@85e40000 {
++			reg = <0x0 0x85e40000 0x0 0xc0000>;
++			no-map;
++		};
++
++		tz_mem: memory@86200000 {
++			reg = <0x0 0x86200000 0x0 0x5500000>;
++			no-map;
++		};
++
++		adsp_mem: memory@8be00000 {
++			reg = <0x0 0x8be00000 0x0 0x2200000>;
++			no-map;
++		};
++
++		mpss_mem: memory@8e000000 {
++			reg = <0x0 0x8e000000 0x0 0xa000000>;
++			no-map;
++		};
++
++		venus_mem: memory@98000000 {
++			reg = <0x0 0x98000000 0x0 0x500000>;
++			no-map;
++		};
++
++		slpi_mem: memory@98500000 {
++			reg = <0x0 0x98500000 0x0 0x1400000>;
++			no-map;
++		};
++
++		ipa_fw_mem: memory@99900000 {
++			reg = <0x0 0x99900000 0x0 0x10000>;
++			no-map;
++		};
++
++		ipa_gsi_mem: memory@99910000 {
++			reg = <0x0 0x99910000 0x0 0x5000>;
++			no-map;
++		};
++
++		gpu_mem: memory@99915000 {
++			reg = <0x0 0x99915000 0x0 0x2000>;
++			no-map;
++		};
++
++		spss_mem: memory@99a00000 {
++			reg = <0x0 0x99a00000 0x0 0x100000>;
++			no-map;
++		};
++
++		cdsp_mem: memory@99b00000 {
++			reg = <0x0 0x99b00000 0x0 0x1400000>;
++			no-map;
++		};
++
++		cont_splash_mem: memory@9c000000 {
++			reg = <0x0 0x9c000000 0x0 0x2400000>;
++			no-map;
++		};
++
++		qseecom_mem: memory@9e400000 {
++			reg = <0x0 0x9e400000 0x0 0x1c00000>;
++			no-map;
++		};
++
++		cdsp_sec_mem: memory@a4c00000 {
++			reg = <0x0 0xa4c00000 0x0 0x3c00000>;
++			no-map;
++		};
++
++		rmtfs_mem: memory@a8800000 {
++			compatible = "qcom,rmtfs-mem";
++			reg = <0x0 0xa8800000 0x0 0x200000>;
++			no-map;
++
++			qcom,client-id = <1>;
++			qcom,vmid = <15>;
++		};
++
++		ramoops@b0000000 {
++			compatible = "ramoops";
++			reg = <0x0 0xb0000000 0x0 0x300000>;
++			record-size = <0x1000>;
++			console-size = <0x40000>;
++			ftrace-size = <0x40000>;
++			pmsg-size = <0x200000>;
++			ecc-size = <0>;
++		};
++	};
++
++	vph_pwr: vph-pwr-regulator {
++		compatible = "regulator-fixed";
++		regulator-name = "vph_pwr";
++		regulator-min-microvolt = <3700000>;
++		regulator-max-microvolt = <3700000>;
++	};
++
++	/* S4 is modeled as a fixed regulator in vendor sources */
++	vreg_s4a_1p8: pm8150-s4-regulator {
++		compatible = "regulator-fixed";
++		regulator-name = "vreg_s4a_1p8";
++		regulator-min-microvolt = <1800000>;
++		regulator-max-microvolt = <1800000>;
++		regulator-always-on;
++		regulator-boot-on;
++		vin-supply = <&vph_pwr>;
++	};
++};
++
++&apps_rsc {
++	pm8150-rpmh-regulators {
++		compatible = "qcom,pm8150-rpmh-regulators";
++		qcom,pmic-id = "a";
++
++		vdd-s1-supply = <&vph_pwr>;
++		vdd-s2-supply = <&vph_pwr>;
++		vdd-s3-supply = <&vph_pwr>;
++		vdd-s4-supply = <&vph_pwr>;
++		vdd-s5-supply = <&vph_pwr>;
++		vdd-s6-supply = <&vph_pwr>;
++		vdd-s7-supply = <&vph_pwr>;
++		vdd-s8-supply = <&vph_pwr>;
++		vdd-s9-supply = <&vph_pwr>;
++		vdd-s10-supply = <&vph_pwr>;
++
++		vdd-l1-l8-l11-supply = <&vreg_s6a_0p9>;
++		vdd-l2-l10-supply = <&vreg_bob>;
++		vdd-l3-l4-l5-l18-supply = <&vreg_s6a_0p9>;
++		vdd-l6-l9-supply = <&vreg_s8c_1p3>;
++		vdd-l7-l12-l14-l15-supply = <&vreg_s5a_1p9>;
++		vdd-l13-l16-l17-supply = <&vreg_bob>;
++
++		vreg_s2a_0p6: smps2 {
++			regulator-min-microvolt = <600000>;
++			regulator-max-microvolt = <600000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_s2a_0p6";
++		};
++
++		vreg_s5a_1p9: smps5 {
++			regulator-min-microvolt = <1904000>;
++			regulator-max-microvolt = <2040000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_s5a_0p6";
++		};
++
++		vreg_s6a_0p9: smps6 {
++			regulator-min-microvolt = <920000>;
++			regulator-max-microvolt = <1128000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_s6a_0p9";
++		};
++
++		vreg_l1a_0p75: ldo1 {
++			regulator-min-microvolt = <752000>;
++			regulator-max-microvolt = <752000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_l1a_0p75";
++		};
++
++		vreg_l2a_3p1: ldo2 {
++			regulator-min-microvolt = <3072000>;
++			regulator-max-microvolt = <3072000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_l2a_3p1";
++		};
++
++		vreg_l3a_0p8: ldo3 {
++			regulator-min-microvolt = <480000>;
++			regulator-max-microvolt = <932000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_l3a_0p8";
++		};
++
++		vreg_l5a_0p875: ldo5 {
++			regulator-min-microvolt = <880000>;
++			regulator-max-microvolt = <880000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_l5a_0p875";
++		};
++
++		vreg_l6a_1p2: ldo6 {
++			regulator-min-microvolt = <1200000>;
++			regulator-max-microvolt = <1200000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_l6a_1p2";
++		};
++
++		vreg_l7a_1p8: ldo7 {
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <1800000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_l7a_1p8";
++		};
++
++		vreg_l9a_1p2: ldo9 {
++			regulator-min-microvolt = <1200000>;
++			regulator-max-microvolt = <1200000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_l9a_1p2";
++		};
++
++		vreg_l10a_2p5: ldo10 {
++			regulator-min-microvolt = <2950000>;
++			regulator-max-microvolt = <2960000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_l10a_2p5";
++		};
++
++		vreg_l11a_0p8: ldo11 {
++			regulator-min-microvolt = <800000>;
++			regulator-max-microvolt = <800000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_l11a_0p8";
++		};
++
++		vreg_l12a_1p8: ldo12 {
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <1800000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_l12a_1p8";
++		};
++
++		/* L13 is unused, but min/max are 3000000 for it. */
++
++		vreg_l14a_1p8: ldo14 {
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <1880000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_l14a_1p8";
++			regulator-always-on;
++		};
++
++		vreg_l15a_1p7: ldo15 {
++			regulator-min-microvolt = <1704000>;
++			regulator-max-microvolt = <1704000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_l15a_1p7";
++		};
++
++		vreg_l16a_2p7: ldo16 {
++			regulator-min-microvolt = <2704000>;
++			regulator-max-microvolt = <2960000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_l16a_2p7";
++		};
++
++		vreg_l17a_3p0: ldo17 {
++			regulator-min-microvolt = <2856000>;
++			regulator-max-microvolt = <3008000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_l17a_3p0";
++			regulator-always-on;
++		};
++
++		vreg_l18a_0p8: ldo18 {
++			regulator-min-microvolt = <880000>;
++			regulator-max-microvolt = <912000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150_l18a_0p8";
++		};
++	};
++
++	pm8150l-rpmh-regulators {
++		compatible = "qcom,pm8150l-rpmh-regulators";
++		qcom,pmic-id = "c";
++
++		vdd-s1-supply = <&vph_pwr>;
++		vdd-s2-supply = <&vph_pwr>;
++		vdd-s3-supply = <&vph_pwr>;
++		vdd-s4-supply = <&vph_pwr>;
++		vdd-s5-supply = <&vph_pwr>;
++		vdd-s6-supply = <&vph_pwr>;
++		vdd-s7-supply = <&vph_pwr>;
++		vdd-s8-supply = <&vph_pwr>;
++
++		vdd-l1-l8-supply = <&vreg_s4a_1p8>;
++		vdd-l2-l3-supply = <&vreg_s8c_1p3>;
++		vdd-l4-l5-l6-supply = <&vreg_bob>;
++		vdd-l7-l11-supply = <&vreg_bob>;
++		vdd-l9-l10-supply = <&vreg_bob>;
++
++		vdd-bob-supply = <&vph_pwr>;
++		vdd-flash-supply = <&vreg_bob>;
++		vdd-rgb-supply = <&vreg_bob>;
++
++		vreg_bob: bob {
++			regulator-min-microvolt = <3008000>;
++			regulator-max-microvolt = <4000000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_AUTO>;
++			regulator-allow-bypass;
++			regulator-name = "pm8150l_bob";
++		};
++
++		vreg_s1c_1p1: smps1 {
++			regulator-min-microvolt = <1128000>;
++			regulator-max-microvolt = <1128000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150l_s1c_1p1";
++		};
++
++		vreg_s8c_1p3: smps8 {
++			regulator-min-microvolt = <1352000>;
++			regulator-max-microvolt = <1352000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150l_s8c_1p3";
++		};
++
++		vreg_l1c_1p8: ldo1 {
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <1800000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150l_l1c_1p8";
++		};
++
++		vreg_l2c_1p3: ldo2 {
++			regulator-min-microvolt = <1304000>;
++			regulator-max-microvolt = <1304000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150l_l2c_1p3";
++		};
++
++		vreg_l3c_1p2: ldo3 {
++			regulator-min-microvolt = <1200000>;
++			regulator-max-microvolt = <1200000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150l_l3c_1p2";
++		};
++
++		vreg_l4c_1p8: ldo4 {
++			regulator-min-microvolt = <1704000>;
++			regulator-max-microvolt = <2928000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150l_l4c_1p8";
++		};
++
++		vreg_l5c_1p8: ldo5 {
++			regulator-min-microvolt = <1704000>;
++			regulator-max-microvolt = <2928000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150l_l5c_1p8";
++		};
++
++		vreg_l6c_2p9: ldo6 {
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <2960000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-allow-set-load;
++			regulator-name = "pm8150l_l6c_2p9";
++		};
++
++		vreg_l7c_3p0: ldo7 {
++			regulator-min-microvolt = <2856000>;
++			regulator-max-microvolt = <3104000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150l_l7c_3p0";
++		};
++
++		vreg_l8c_1p8: ldo8 {
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <1800000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150l_l8c_1p8";
++		};
++
++		vreg_l9c_2p9: ldo9 {
++			regulator-min-microvolt = <2704000>;
++			regulator-max-microvolt = <2960000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-allow-set-load;
++			regulator-name = "pm8150l_l9c_2p9";
++		};
++
++		vreg_l10c_3p3: ldo10 {
++			regulator-min-microvolt = <3104000>;
++			regulator-max-microvolt = <3312000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150l_l10c_3p3";
++		};
++
++		vreg_l11c_3p3: ldo11 {
++			regulator-min-microvolt = <3104000>;
++			regulator-max-microvolt = <3312000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-name = "pm8150l_l11c_3p3";
++		};
++	};
++};
++
++&pm8150_gpios {
++	vol_up_default: vol-up-default-state {
++		pins = "gpio6";
++		function = "normal";
++		input-enable;
++		bias-pull-up;
++		qcom,drive-strength = <PMIC_GPIO_STRENGTH_NO>;
++	};
++
++	hot_key_default: hot-key-default-state {
++		pins = "gpio1";
++		function = "normal";
++		input-enable;
++		bias-pull-up;
++		qcom,drive-strength = <PMIC_GPIO_STRENGTH_NO>;
++	};
++};
++
++&pon {
++	mode-bootloader = <0x2>;
++	mode-recovery = <0x1>;
++};
++
++&pm8150b_fg {
++	status = "okay";
++	monitored-battery = <&battery>;
++	power-supplies = <&pm8150b_charger>;
++};
++
++&pm8150b_charger {
++	status = "okay";
++	monitored-battery = <&battery>;
++};
++
++&remoteproc_adsp {
++	status = "okay";
++	firmware-name = "qcom/sm8150/lg-mh2lm/adsp.mdt";
++};
++
++&remoteproc_cdsp {
++	status = "okay";
++	firmware-name = "qcom/sm8150/lg-mh2lm/cdsp.mdt";
++};
++
++&remoteproc_slpi {
++	status = "okay";
++	firmware-name = "qcom/sm8150/lg-mh2lm/slpi.mdt";
++
++	glink-edge {
++		fastrpc {
++			memory-region = <&fastrpc_mem>;
++			qcom,vmids = <QCOM_SCM_VMID_HLOS QCOM_SCM_VMID_SSC_Q6
++				      QCOM_SCM_VMID_ADSP_Q6>;
++		};
++	};
++};
++
++&remoteproc_mpss {
++	status = "okay";
++	firmware-name = "qcom/sm8150/lg-mh2lm/modem.mdt";
++};
++
++&wifi {
++	status = "okay";
++
++	vdd-0.8-cx-mx-supply = <&vreg_l1a_0p75>;
++	vdd-1.8-xo-supply = <&vreg_l7a_1p8>;
++	vdd-1.3-rfa-supply = <&vreg_l2c_1p3>;
++	vdd-3.3-ch0-supply = <&vreg_l11c_3p3>;
++	vdd-3.3-ch1-supply = <&vreg_l10c_3p3>;
++};
++
++&gpu {
++	status = "okay";
++};
++
++&gmu {
++	status = "okay";
++};
++
++&gpu_zap_shader {
++	firmware-name = "qcom/sm8150/lg-mh2lm/a640_zap.mdt";
++};
++
++&qupv3_id_2 {
++	status = "okay";
++};
++
++&ipa {
++	status = "okay";
++	qcom,gsi-loader = "self";
++	memory-region = <&ipa_fw_mem>;
++	firmware-name = "qcom/sm8150/lg-mh2lm/ipa_fws.mdt";
++};
++
++&i2c17 {
++	status = "okay";
++
++	touchscreen@20 {
++		compatible = "synaptics,s3618";
++		reg = <0x20>;
++		interrupts-extended = <&tlmm 122 IRQ_TYPE_LEVEL_LOW>;
++		reset-gpios = <&tlmm 54 GPIO_ACTIVE_LOW>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&ts_reset_default>, <&ts_int_default>;
++		touchscreen-size-x = <1080>;
++		touchscreen-size-y = <2340>;
++	};
++};
++
++&gpi_dma2 {
++	status = "okay";
++};
++
++&uart13 {
++	status = "okay";
++
++	pinctrl-names = "default";
++	pinctrl-0 = <&qup_uart13_bt>;
++
++	bluetooth: bluetooth {
++		local-bd-address = [67 FE 43 67 2A 02];
++		compatible = "qcom,wcn3998-bt";
++		vddio-supply = <&vreg_l7a_1p8>;
++		vddxo-supply = <&vreg_l7a_1p8>;
++		vddrf-supply = <&vreg_l2c_1p3>;
++		vddch0-supply = <&vreg_l11c_3p3>;
++		vddch1-supply = <&vreg_l10c_3p3>;
++		max-speed = <3200000>;
++		firmware-name = "crnv21.bin", "crbtfw21.tlv";
++	};
++};
++
++&pon_pwrkey {
++	status = "okay";
++};
++
++&pon_resin {
++	linux,code = <KEY_VOLUMEDOWN>;
++	status = "okay";
++};
++
++&tlmm {
++	/* secure-world SPI ranges, same conservative set as the SM8150 reference boards */
++	gpio-reserved-ranges = <0 4>, <93 3>, <98 4>, <126 4>; /* LG lge,access-denied-gpios confirmed by boot testing */
++
++	/*
++	 * USB-C SBU routing (stock lge_usb_debugger / lge_sbu_switch). The
++	 * bootloader leaves GPIO 35 high, which routes SBU to LG's debug UART:
++	 * DP AUX then times out (-110). Low = SBU to the DP AUX switch.
++	 * GPIO 87 (LG SBU switch select) stays high as on stock.
++	 */
++	usb-uart-sbu-sel-hog {
++		gpio-hog;
++		gpios = <35 GPIO_ACTIVE_HIGH>;
++		output-low;
++		line-name = "usb-uart-sbu-sel";
++	};
++
++	lge-sbu-sel-hog {
++		gpio-hog;
++		gpios = <87 GPIO_ACTIVE_HIGH>;
++		output-high;
++		line-name = "lge-sbu-sel";
++	};
++
++	dp_aux_sw_default: dp-aux-sw-default-state {
++		pins = "gpio42", "gpio148";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++
++	ts_reset_default: ts-reset-default-state {
++		pins = "gpio54";
++		function = "gpio";
++		drive-strength = <6>;
++		bias-pull-up;
++	};
++
++	ts_int_default: ts-int-default-state {
++		pins = "gpio122";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-up;
++	};
++
++	qup_uart13_bt: qup-uart13-bt-state {
++		pins = "gpio43", "gpio44", "gpio45", "gpio46";
++		function = "qup13";
++		drive-strength = <2>;
++		bias-disable;
++	};
++};
++
++&ufs_mem_hc {
++	status = "okay";
++
++	reset-gpios = <&tlmm 175 GPIO_ACTIVE_LOW>;
++
++	vcc-supply = <&vreg_l10a_2p5>;
++	vcc-max-microamp = <750000>;
++	vccq-supply = <&vreg_l9a_1p2>;
++	vccq-max-microamp = <700000>;
++	vccq2-supply = <&vreg_s4a_1p8>;
++	vccq2-max-microamp = <750000>;
++};
++
++&ufs_mem_phy {
++	status = "okay";
++
++	vdda-phy-supply = <&vreg_l5a_0p875>;
++	vdda-pll-supply = <&vreg_l3c_1p2>;
++};
++
++&usb_1 {
++	status = "okay";
++};
++
++&usb_1_dwc3 {
++	dr_mode = "otg";
++	usb-role-switch;
++	maximum-speed = "high-speed";
++};
++
++&usb_1_dwc3_hs {
++	remote-endpoint = <&pm8150b_hs_in>;
++};
++
++/* USB-C: PM8150B Type-C/PD port with DisplayPort alt mode (stock: sde_dp
++ * with qcom,dp-usbpd-detection = <&pm8150b_pdphy>). */
++&pm8150b_vbus {
++	regulator-min-microamp = <500000>;
++	regulator-max-microamp = <1500000>;
++	status = "okay";
++};
++
++&pm8150b_typec {
++	vdd-pdphy-supply = <&vreg_l2a_3p1>;
++	status = "okay";
++
++	connector {
++		compatible = "usb-c-connector";
++
++		power-role = "dual";
++		try-power-role = "sink";
++		data-role = "dual";
++
++		source-pdos = <PDO_FIXED(5000, 1500,
++					 PDO_FIXED_DUAL_ROLE |
++					 PDO_FIXED_USB_COMM |
++					 PDO_FIXED_DATA_SWAP)>;
++		sink-pdos = <PDO_FIXED(5000, 3000,
++				       PDO_FIXED_DUAL_ROLE |
++				       PDO_FIXED_USB_COMM |
++				       PDO_FIXED_DATA_SWAP)>;
++		op-sink-microwatt = <10000000>;
++
++		altmodes {
++			displayport {
++				svid = /bits/ 16 <0xff01>;
++				vdo = <0x00001c46>;
++			};
++		};
++
++		ports {
++			#address-cells = <1>;
++			#size-cells = <0>;
++
++			port@0 {
++				reg = <0>;
++				pm8150b_hs_in: endpoint {
++					remote-endpoint = <&usb_1_dwc3_hs>;
++				};
++			};
++
++			port@1 {
++				reg = <1>;
++				pm8150b_typec_mux_in: endpoint {
++					remote-endpoint = <&usb_1_qmpphy_out>;
++				};
++			};
++
++			port@2 {
++				reg = <2>;
++				pm8150b_typec_sbu_out: endpoint {
++					remote-endpoint = <&sbu_mux_in>;
++				};
++			};
++		};
++	};
++};
++
++&mdss_dp {
++	status = "okay";
++};
++
++&mdss_dp_out {
++	data-lanes = <0 1>;
++};
++
++&usb_1_qmpphy_out {
++	remote-endpoint = <&pm8150b_typec_mux_in>;
++};
++
++&usb_1_hsphy {
++	status = "okay";
++
++	vdda-pll-supply = <&vreg_l5a_0p875>;
++	vdda18-supply = <&vreg_l12a_1p8>;
++	vdda33-supply = <&vreg_l2a_3p1>;
++};
++
++&usb_1_qmpphy {
++	status = "okay";
++
++	vdda-phy-supply = <&vreg_l3c_1p2>;
++	/* stock ssphy@88e8000 vdd-supply = pm8150_l18 (912 mV); with l5a the
++	 * PHY init times out the first time USB3/DP lanes are used */
++	vdda-pll-supply = <&vreg_l18a_0p8>;
++	mode-switch;
++	orientation-switch;
++};
++
++/* Rear flash/torch: two LEDs on PM8150L flash channels 1+2, ganged.
++ * LG: torch 100 mA and flash 800 mA per channel, 500 ms flash. */
++&pm8150l_flash {
++	status = "okay";
++
++	led-0 {
++		function = LED_FUNCTION_FLASH;
++		color = <LED_COLOR_ID_WHITE>;
++		led-sources = <1>, <2>;
++		led-max-microamp = <200000>;	/* split across both channels */
++		flash-max-microamp = <1600000>;
++		flash-max-timeout-us = <500000>;
++	};
++};
++
++/* Vibration: Dongwoon DW7800 LRA driver on QUP SE4 I2C (LG dw7800@59). */
++&i2c4 {
++	vibrator@59 {
++		compatible = "dongwoon,dw7800";
++		reg = <0x59>;
++	};
++};
++
++/* NFC: NXP PN553-family NCI controller on QUP SE9 I2C (LG nq@28):
++ * IRQ gpio47, VEN (enable) gpio41, firmware-download gpio48. */
++&gpi_dma1 {
++	status = "okay";
++};
++
++&qupv3_id_1 {
++	status = "okay";
++};
++
++&i2c9 {
++	status = "okay";
++	clock-frequency = <400000>;
++
++	nfc@28 {
++		compatible = "nxp,nxp-nci-i2c";
++		reg = <0x28>;
++		interrupts-extended = <&tlmm 47 IRQ_TYPE_EDGE_RISING>;
++		enable-gpios = <&tlmm 41 GPIO_ACTIVE_HIGH>;
++		firmware-gpios = <&tlmm 48 GPIO_ACTIVE_HIGH>;
++		pinctrl-0 = <&nfc_default>;
++		pinctrl-names = "default";
++	};
++};
++
++&tlmm {
++	nfc_default: nfc-default-state {
++		irq-pins {
++			pins = "gpio47";
++			function = "gpio";
++			drive-strength = <2>;
++			bias-pull-down;
++		};
++		ctrl-pins {
++			pins = "gpio41", "gpio48";
++			function = "gpio";
++			drive-strength = <2>;
++			bias-disable;
++		};
++	};
++};
++
++&mdss {
++	status = "okay";
++};
++
++&mdss_dsi0 {
++	vdda-supply = <&vreg_l3c_1p2>;
++	status = "okay";
++
++	panel@0 {
++		compatible = "lg,mh2lm-r66456";
++		reg = <0>;
++		vddi-supply = <&vreg_l14a_1p8>;
++		vpnl-supply = <&vreg_l17a_3p0>;
++		reset-gpios = <&tlmm 6 GPIO_ACTIVE_LOW>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&panel_te_active>;
++
++		port {
++			panel_in: endpoint {
++				remote-endpoint = <&mdss_dsi0_out>;
++			};
++		};
++	};
++};
++
++&mdss_dsi0_out {
++	data-lanes = <0 1 2 3>;
++	remote-endpoint = <&panel_in>;
++};
++
++&mdss_dsi0_phy {
++	vdds-supply = <&vreg_l5a_0p875>;
++	status = "okay";
++};
++
++&tlmm {
++	panel_te_active: panel-te-active-state {
++		pins = "gpio8";
++		function = "mdp_vsync";
++		drive-strength = <2>;
++		bias-pull-down;
++	};
++};
++
++/* LG drives the panel's vpnl at exactly 3.0 V (sm8150_common-panel.dtsi) */
++&vreg_l17a_3p0 {
++	regulator-min-microvolt = <3000000>;
++	regulator-max-microvolt = <3000000>;
++};
++#include <dt-bindings/sound/qcom,q6asm.h>
++#include <dt-bindings/sound/qcom,q6dsp-lpass-ports.h>
++#include "sm8150-wcd9340.dtsi"
++
++/* Speakers: two Cirrus CS35L41 amps on QUP SE4 I2C, secondary MI2S.
++ * Left amp = bottom speaker, right amp = earpiece used as second speaker.
++ * (LG sm8150-mh2lm_common-sound-cs35l41.dtsi.) LG drives gpio126-129 as
++ * sec_mi2s (sck, ws, sd0, sd1), so they are not reserved on this phone. */
++&qupv3_id_0 {
++	status = "okay";
++};
++
++&i2c4 {
++	status = "okay";
++	clock-frequency = <400000>;
++
++	cs35l41_l: cs35l41@40 {
++		compatible = "cirrus,cs35l41";
++		reg = <0x40>;
++		interrupts-extended = <&tlmm 26 IRQ_TYPE_LEVEL_LOW>;
++		reset-gpios = <&tlmm 36 GPIO_ACTIVE_HIGH>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&cs35l41_l_int>, <&cs35l41_reset>;
++		#sound-dai-cells = <1>;
++		sound-name-prefix = "L";
++		cirrus,boost-peak-milliamp = <4500>;
++		cirrus,boost-ind-nanohenry = <1000>;
++		cirrus,boost-cap-microfarad = <15>;
++		cirrus,asp-sdout-hiz = <3>;
++		cirrus,gpio2-src-select = <4>;
++		cirrus,gpio2-output-enable;
++	};
++
++	cs35l41_r: cs35l41@41 {
++		compatible = "cirrus,cs35l41";
++		reg = <0x41>;
++		interrupts-extended = <&tlmm 125 IRQ_TYPE_LEVEL_LOW>;
++		reset-gpios = <&tlmm 36 GPIO_ACTIVE_HIGH>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&cs35l41_r_int>;
++		#sound-dai-cells = <1>;
++		sound-name-prefix = "R";
++		cirrus,boost-peak-milliamp = <4500>;
++		cirrus,boost-ind-nanohenry = <1000>;
++		cirrus,boost-cap-microfarad = <15>;
++		cirrus,asp-sdout-hiz = <3>;
++		cirrus,gpio2-src-select = <4>;
++		cirrus,gpio2-output-enable;
++	};
++};
++
++&tlmm {
++	gpio-reserved-ranges = <0 4>, <93 3>, <98 4>;
++
++	sec_mi2s_active: sec-mi2s-active-state {
++		pins = "gpio126", "gpio127", "gpio128", "gpio129";
++		function = "sec_mi2s";
++		drive-strength = <8>;
++		bias-disable;
++	};
++
++	cs35l41_l_int: cs35l41-l-int-state {
++		pins = "gpio26";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-up;
++	};
++
++	cs35l41_r_int: cs35l41-r-int-state {
++		pins = "gpio125";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-up;
++	};
++
++	cs35l41_reset: cs35l41-reset-state {
++		pins = "gpio36";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++	};
++};
++
++&q6afedai {
++	dai@18 {
++		reg = <SECONDARY_MI2S_RX>;
++		qcom,sd-lines = <1>;	/* SD1 is the speaker data line (LG rx-lines = <2>) */
++	};
++};
++
++&q6asmdai {
++	dai@0 {
++		reg = <0>;
++	};
++
++	dai@1 {
++		reg = <1>;
++	};
++};
++
++&sound {
++	compatible = "qcom,sm8150-sndcard";
++	model = "LG G8x ThinQ";
++	pinctrl-0 = <&sec_mi2s_active>;
++	pinctrl-names = "default";
++
++	/* mic bias routing from LG sm8150-mh2lm_common-sound.dtsi */
++	audio-routing = "MultiMedia1 Playback", "L SPK",
++			"MultiMedia1 Playback", "R SPK",
++			"RX_BIAS", "MCLK",
++			"AMIC1", "MIC BIAS1",
++			"AMIC2", "MIC BIAS2",
++			"AMIC3", "MIC BIAS3",
++			"AMIC4", "MIC BIAS4";
++
++	mm1-dai-link {
++		link-name = "MultiMedia1";
++		cpu {
++			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA1>;
++		};
++	};
++
++	mm2-dai-link {
++		link-name = "MultiMedia2";
++		cpu {
++			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA2>;
++		};
++	};
++
++	speaker-dai-link {
++		link-name = "Speaker Playback";
++		cpu {
++			sound-dai = <&q6afedai SECONDARY_MI2S_RX>;
++		};
++
++		platform {
++			sound-dai = <&q6routing>;
++		};
++
++		codec {
++			sound-dai = <&cs35l41_l 0>, <&cs35l41_r 0>;
++		};
++	};
++
++	/* 3.5 mm headphones through the WCD9340 (LG: SLIM RX0 MUX = AIF1_PB) */
++	slim-dai-link {
++		link-name = "SLIM Playback";
++		cpu {
++			sound-dai = <&q6afedai SLIMBUS_0_RX>;
++		};
++
++		platform {
++			sound-dai = <&q6routing>;
++		};
++
++		codec {
++			sound-dai = <&wcd9340 0>; /* AIF1_PB */
++		};
++	};
++
++	/* AMIC1 handset mic, AMIC2 headset mic, AMIC3 second mic */
++	slimcap-dai-link {
++		link-name = "SLIM Capture";
++		cpu {
++			sound-dai = <&q6afedai SLIMBUS_0_TX>;
++		};
++
++		platform {
++			sound-dai = <&q6routing>;
++		};
++
++		codec {
++			sound-dai = <&wcd9340 1>; /* AIF1_CAP */
++		};
++	};
++};
++
++&wcd9340 {
++	reset-gpios = <&tlmm 143 GPIO_ACTIVE_HIGH>;
++	vdd-buck-sido-supply = <&vreg_s4a_1p8>;
++	vdd-buck-supply = <&vreg_s4a_1p8>;
++	vdd-tx-supply = <&vreg_s4a_1p8>;
++	vdd-rx-supply = <&vreg_s4a_1p8>;
++	vdd-io-supply = <&vreg_s4a_1p8>;
++
++	qcom,micbias1-microvolt = <1800000>;
++	qcom,micbias2-microvolt = <2750000>;
++	qcom,micbias3-microvolt = <1800000>;
++	qcom,micbias4-microvolt = <1800000>;
++
++	/* LG: qcom,msm-mbhc-hphl-swh = <1>, gnd-swh = <0> */
++	qcom,ground-jack-type-normally-closed;
++	qcom,mbhc-buttons-vthreshold-microvolt = <75000 150000 237000 500000 500000 500000 500000 500000>;
++	qcom,mbhc-headset-vthreshold-microvolt = <1700000>;
++	qcom,mbhc-headphone-vthreshold-microvolt = <50000>;
++};
++/* Camera bring-up, stage 1: camera I2C (CCI) and sensor power, for scanning.
++ * From LG's stock DT (sm8150 base + mh2lm dtbo):
++ *   rear main: CCI0 master 0, CSIPHY0, MCLK0 (gpio13), reset gpio28,
++ *              AVDD PM8150L gpio1, AFVDD gpio2, DVDD gpio3, MVDD gpio4, VIO L1C
++ *   rear wide: CCI0 master 1, CSIPHY1, MCLK1 (gpio14), reset gpio30,
++ *              AVDD gpio6, DVDD gpio8, VIO L1C
++ *   front:     CCI1 master 0, CSIPHY2, MCLK2 (gpio15), reset gpio9,
++ *              AVDD gpio10, DVDD gpio11, IOVDD gpio12
++ * All MCLKs are 19.2 MHz. For the scan the MCLKs are listed as CCI clocks
++ * (the CCI driver enables every clock in its node) and the rails are
++ * always-on; a real sensor driver will own these later. */
++#include <dt-bindings/clock/qcom,sm8150-camcc.h>
++
++/ {
++	cam_rn_avdd: regulator-cam-rn-avdd {
++		compatible = "regulator-fixed";
++		regulator-name = "cam_rear_n_avdd";
++		regulator-min-microvolt = <2800000>;
++		regulator-max-microvolt = <2800000>;
++		gpio = <&pm8150l_gpios 1 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		regulator-always-on;
++	};
++	cam_rn_afvdd: regulator-cam-rn-afvdd {
++		compatible = "regulator-fixed";
++		regulator-name = "cam_rear_n_afvdd";
++		regulator-min-microvolt = <2800000>;
++		regulator-max-microvolt = <2800000>;
++		gpio = <&pm8150l_gpios 2 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		regulator-always-on;
++	};
++	cam_rn_dvdd: regulator-cam-rn-dvdd {
++		compatible = "regulator-fixed";
++		regulator-name = "cam_rear_n_dvdd";
++		regulator-min-microvolt = <1050000>;
++		regulator-max-microvolt = <1050000>;
++		gpio = <&pm8150l_gpios 3 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		regulator-always-on;
++	};
++	cam_rn_mvdd: regulator-cam-rn-mvdd {
++		compatible = "regulator-fixed";
++		regulator-name = "cam_rear_n_mvdd";
++		regulator-min-microvolt = <2800000>;
++		regulator-max-microvolt = <2800000>;
++		gpio = <&pm8150l_gpios 4 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		regulator-always-on;
++	};
++	cam_rw_avdd: regulator-cam-rw-avdd {
++		compatible = "regulator-fixed";
++		regulator-name = "cam_rear_w_avdd";
++		regulator-min-microvolt = <2800000>;
++		regulator-max-microvolt = <2800000>;
++		gpio = <&pm8150l_gpios 6 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		regulator-always-on;
++	};
++	cam_rw_dvdd: regulator-cam-rw-dvdd {
++		compatible = "regulator-fixed";
++		regulator-name = "cam_rear_w_dvdd";
++		regulator-min-microvolt = <1000000>;
++		regulator-max-microvolt = <1000000>;
++		gpio = <&pm8150l_gpios 8 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		regulator-always-on;
++	};
++	cam_f_avdd: regulator-cam-f-avdd {
++		compatible = "regulator-fixed";
++		regulator-name = "cam_front_avdd";
++		regulator-min-microvolt = <2800000>;
++		regulator-max-microvolt = <2800000>;
++		gpio = <&pm8150l_gpios 10 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		regulator-always-on;
++	};
++	cam_f_dvdd: regulator-cam-f-dvdd {
++		compatible = "regulator-fixed";
++		regulator-name = "cam_front_dvdd";
++		regulator-min-microvolt = <1050000>;
++		regulator-max-microvolt = <1050000>;
++		gpio = <&pm8150l_gpios 11 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		regulator-always-on;
++	};
++	cam_f_iovdd: regulator-cam-f-iovdd {
++		compatible = "regulator-fixed";
++		regulator-name = "cam_front_iovdd";
++		regulator-min-microvolt = <1800000>;
++		regulator-max-microvolt = <1800000>;
++		gpio = <&pm8150l_gpios 12 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		regulator-always-on;
++	};
++};
++
++&soc {
++	cci0: cci@ac4a000 {
++		compatible = "qcom,sm8250-cci", "qcom,msm8996-cci";
++		#address-cells = <1>;
++		#size-cells = <0>;
++		reg = <0 0x0ac4a000 0 0x1000>;
++		interrupts = <GIC_SPI 460 IRQ_TYPE_EDGE_RISING>;
++		power-domains = <&camcc TITAN_TOP_GDSC>;
++		clocks = <&camcc CAM_CC_CAMNOC_AXI_CLK>,
++			 <&camcc CAM_CC_SLOW_AHB_CLK_SRC>,
++			 <&camcc CAM_CC_CPAS_AHB_CLK>,
++			 <&camcc CAM_CC_CCI_0_CLK>,
++			 <&camcc CAM_CC_CCI_0_CLK_SRC>,
++			 <&camcc CAM_CC_MCLK0_CLK>,
++			 <&camcc CAM_CC_MCLK1_CLK>;
++		clock-names = "camnoc_axi", "slow_ahb_src", "cpas_ahb", "cci", "cci_src",
++			      "mclk0", "mclk1";
++		assigned-clocks = <&camcc CAM_CC_CCI_0_CLK_SRC>,
++				  <&camcc CAM_CC_MCLK0_CLK_SRC>,
++				  <&camcc CAM_CC_MCLK1_CLK_SRC>;
++		assigned-clock-rates = <37500000>, <24000000>, <19200000>;	/* MCLK1: S5K3M3 tables use 19.2 MHz */
++		pinctrl-0 = <&cci0_default &cam_mclk01_default>;
++		pinctrl-names = "default";
++
++		cci0_i2c0: i2c-bus@0 {
++			reg = <0>;
++			clock-frequency = <400000>;
++			#address-cells = <1>;
++			#size-cells = <0>;
++		};
++
++		cci0_i2c1: i2c-bus@1 {
++			reg = <1>;
++			clock-frequency = <400000>;
++			#address-cells = <1>;
++			#size-cells = <0>;
++		};
++	};
++
++	cci1: cci@ac4b000 {
++		compatible = "qcom,sm8250-cci", "qcom,msm8996-cci";
++		#address-cells = <1>;
++		#size-cells = <0>;
++		reg = <0 0x0ac4b000 0 0x1000>;
++		interrupts = <GIC_SPI 271 IRQ_TYPE_EDGE_RISING>;
++		power-domains = <&camcc TITAN_TOP_GDSC>;
++		clocks = <&camcc CAM_CC_CAMNOC_AXI_CLK>,
++			 <&camcc CAM_CC_SLOW_AHB_CLK_SRC>,
++			 <&camcc CAM_CC_CPAS_AHB_CLK>,
++			 <&camcc CAM_CC_CCI_1_CLK>,
++			 <&camcc CAM_CC_CCI_1_CLK_SRC>,
++			 <&camcc CAM_CC_MCLK2_CLK>;
++		clock-names = "camnoc_axi", "slow_ahb_src", "cpas_ahb", "cci", "cci_src",
++			      "mclk2";
++		assigned-clocks = <&camcc CAM_CC_CCI_1_CLK_SRC>,
++				  <&camcc CAM_CC_MCLK2_CLK_SRC>;
++		assigned-clock-rates = <37500000>, <19200000>;
++		pinctrl-0 = <&cci1_default &cam_mclk2_default>;
++		pinctrl-names = "default";
++
++		cci1_i2c0: i2c-bus@0 {
++			reg = <0>;
++			clock-frequency = <400000>;
++			#address-cells = <1>;
++			#size-cells = <0>;
++		};
++
++		cci1_i2c1: i2c-bus@1 {
++			reg = <1>;
++			clock-frequency = <400000>;
++			#address-cells = <1>;
++			#size-cells = <0>;
++		};
++	};
++};
++
++&tlmm {
++	cci0_default: cci0-default-state {
++		pins = "gpio17", "gpio18", "gpio19", "gpio20";
++		function = "cci_i2c";
++		drive-strength = <2>;
++		bias-pull-up;
++	};
++	cci1_default: cci1-default-state {
++		pins = "gpio31", "gpio32", "gpio33", "gpio34";
++		function = "cci_i2c";
++		drive-strength = <2>;
++		bias-pull-up;
++	};
++	cam_mclk01_default: cam-mclk01-default-state {
++		pins = "gpio13", "gpio14";
++		function = "cam_mclk";
++		drive-strength = <2>;
++		bias-disable;
++	};
++	cam_mclk2_default: cam-mclk2-default-state {
++		pins = "gpio15";
++		function = "cam_mclk";
++		drive-strength = <2>;
++		bias-disable;
++	};
++};
++
++
++&vreg_l1c_1p8 {
++	regulator-always-on;	/* rear camera VIO */
++};
++
++/* Stage 2: CAMSS (Titan 175). Addresses and interrupts from LG's stock DT;
++ * the driver reuses the SM6150 (Titan 17x) resource tables. CSIPHY supply is
++ * PM8150L L3 (1.2 V) as in the stock "mipi-csi-vdd". SM8150 camcc has no
++ * SOC_AHB clock; the slow AHB source stands in for "soc_ahb". */
++&soc {
++	camss: camss@acb3000 {
++		compatible = "qcom,sm8150-camss";
++		reg = <0 0x0acb3000 0 0x1000>,
++		      <0 0x0acba000 0 0x1000>,
++		      <0 0x0acc8000 0 0x1000>,
++		      <0 0x0ac65000 0 0x1000>,
++		      <0 0x0ac66000 0 0x1000>,
++		      <0 0x0ac67000 0 0x1000>,
++		      <0 0x0acaf000 0 0x4000>,
++		      <0 0x0acb6000 0 0x4000>,
++		      <0 0x0acc4000 0 0x4000>;
++		reg-names = "csid0", "csid1", "csid_lite",
++			    "csiphy0", "csiphy1", "csiphy2",
++			    "vfe0", "vfe1", "vfe_lite";
++		interrupts = <GIC_SPI 464 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 466 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 468 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 477 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 478 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 479 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 465 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 467 IRQ_TYPE_EDGE_RISING>,
++			     <GIC_SPI 469 IRQ_TYPE_EDGE_RISING>;
++		interrupt-names = "csid0", "csid1", "csid_lite",
++				  "csiphy0", "csiphy1", "csiphy2",
++				  "vfe0", "vfe1", "vfe_lite";
++		clocks = <&gcc GCC_CAMERA_AHB_CLK>,
++			 <&gcc GCC_CAMERA_HF_AXI_CLK>,
++			 <&camcc CAM_CC_CAMNOC_AXI_CLK>,
++			 <&camcc CAM_CC_CPAS_AHB_CLK>,
++			 <&camcc CAM_CC_CSIPHY0_CLK>,
++			 <&camcc CAM_CC_CSI0PHYTIMER_CLK>,
++			 <&camcc CAM_CC_CSIPHY1_CLK>,
++			 <&camcc CAM_CC_CSI1PHYTIMER_CLK>,
++			 <&camcc CAM_CC_CSIPHY2_CLK>,
++			 <&camcc CAM_CC_CSI2PHYTIMER_CLK>,
++			 <&camcc CAM_CC_SLOW_AHB_CLK_SRC>,
++			 <&camcc CAM_CC_IFE_0_CLK>,
++			 <&camcc CAM_CC_IFE_0_AXI_CLK>,
++			 <&camcc CAM_CC_IFE_0_CPHY_RX_CLK>,
++			 <&camcc CAM_CC_IFE_0_CSID_CLK>,
++			 <&camcc CAM_CC_IFE_1_CLK>,
++			 <&camcc CAM_CC_IFE_1_AXI_CLK>,
++			 <&camcc CAM_CC_IFE_1_CPHY_RX_CLK>,
++			 <&camcc CAM_CC_IFE_1_CSID_CLK>,
++			 <&camcc CAM_CC_IFE_LITE_0_CLK>,
++			 <&camcc CAM_CC_IFE_LITE_0_CPHY_RX_CLK>,
++			 <&camcc CAM_CC_IFE_LITE_0_CSID_CLK>;
++		clock-names = "gcc_ahb", "gcc_axi_hf", "camnoc_axi", "cpas_ahb",
++			      "csiphy0", "csiphy0_timer", "csiphy1", "csiphy1_timer",
++			      "csiphy2", "csiphy2_timer", "soc_ahb",
++			      "vfe0", "vfe0_axi", "vfe0_cphy_rx", "vfe0_csid",
++			      "vfe1", "vfe1_axi", "vfe1_cphy_rx", "vfe1_csid",
++			      "vfe_lite", "vfe_lite_cphy_rx", "vfe_lite_csid";
++		interconnects = <&gem_noc MASTER_AMPSS_M0 0 &config_noc SLAVE_CAMERA_CFG 0>,
++				<&mmss_noc MASTER_CAMNOC_HF0 0 &mc_virt SLAVE_EBI_CH0 0>;
++		interconnect-names = "ahb", "hf_0";
++		iommus = <&apps_smmu 0x840 0x620>, <&apps_smmu 0x860 0x620>,
++			 <&apps_smmu 0xa40 0x620>, <&apps_smmu 0xa60 0x620>,
++			 <&apps_smmu 0xc40 0x620>, <&apps_smmu 0xc60 0x620>,
++			 <&apps_smmu 0xe40 0x620>, <&apps_smmu 0xe60 0x620>; /* stock msm_cam_smmu_ife */
++		power-domains = <&camcc IFE_0_GDSC>,
++				<&camcc IFE_1_GDSC>,
++				<&camcc TITAN_TOP_GDSC>;
++		power-domain-names = "ife0", "ife1", "top";
++		/* camss never sets these; at the 19.2 MHz boot rate the IFE never finishes a write */
++		assigned-clocks = <&camcc CAM_CC_CAMNOC_AXI_CLK_SRC>, <&camcc CAM_CC_SLOW_AHB_CLK_SRC>;
++		assigned-clock-rates = <400000000>, <80000000>;
++		vdd-csiphy-1p2-supply = <&vreg_l3c_1p2>;
++		vdd-csiphy-1p8-supply = <&vreg_l1c_1p8>;
++
++		ports {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			port@0 {
++				reg = <0>;
++				csiphy0_ep: endpoint {
++					clock-lanes = <7>;
++					data-lanes = <0 1 2 3>;
++					remote-endpoint = <&imx363_ep>;
++				};
++			};
++			port@1 {
++				reg = <1>;
++				csiphy1_ep: endpoint {
++					clock-lanes = <7>;
++					data-lanes = <0 1 2 3>;
++					remote-endpoint = <&s5k3m3_ep>;
++				};
++			};
++			port@2 {
++				reg = <2>;
++				csiphy2_ep: endpoint {
++					clock-lanes = <7>;
++					data-lanes = <0 1 2 3>;
++					remote-endpoint = <&s5kgd1_ep>;
++				};
++			};
++		};
++	};
++};
++
++/* Stage 3: rear main IMX363 (24 MHz MCLK as in the sdm670 driver; rails are
++ * always-on fixed regulators above, so the driver gets dummy supplies). */
++&cci0_i2c0 {
++	/* OIS/AF controller; AF position in 0xF01A (LG CamX actuator data) */
++	lc898123: lens@3e {
++		compatible = "onnn,lc898123f40";
++		reg = <0x3e>;
++	};
++
++	imx363: camera@10 {
++		compatible = "sony,imx363";
++		reg = <0x10>;
++		clocks = <&camcc CAM_CC_MCLK0_CLK>;
++		clock-frequency = <24000000>;
++		reset-gpios = <&tlmm 28 GPIO_ACTIVE_HIGH>;	/* driver drives 1 = running */
++		lens-focus = <&lc898123>;
++		orientation = <1>;	/* back */
++		rotation = <270>;	/* stock roll 90; libcamera counts the other way */
++		port {
++			imx363_ep: endpoint {
++				data-lanes = <1 2 3 4>;
++				link-frequencies = /bits/ 64 <636000000>;
++				remote-endpoint = <&csiphy0_ep>;
++			};
++		};
++	};
++};
++
++
++/* Stage 4: front S5KGD1 (CCI1 master 0, CSIPHY2, MCLK2 19.2 MHz, reset gpio9). */
++&cci1_i2c0 {
++	s5kgd1: camera@2d {
++		compatible = "samsung,s5kgd1";
++		reg = <0x2d>;
++		clocks = <&camcc CAM_CC_MCLK2_CLK>;
++		reset-gpios = <&tlmm 9 GPIO_ACTIVE_LOW>;
++		vio-supply = <&cam_f_iovdd>;
++		vana-supply = <&cam_f_avdd>;
++		vdig-supply = <&cam_f_dvdd>;
++		orientation = <0>;	/* front */
++		rotation = <90>;
++		port {
++			s5kgd1_ep: endpoint {
++				data-lanes = <1 2 3 4>;
++				link-frequencies = /bits/ 64 <380800000>;
++				remote-endpoint = <&csiphy2_ep>;
++			};
++		};
++	};
++};
++
++/* Stage 5: rear wide S5K3M3 (CCI0 master 1, CSIPHY1, MCLK1 19.2 MHz, reset gpio30). */
++&cci0_i2c1 {
++	s5k3m3: camera@10 {
++		compatible = "samsung,s5k3m3";
++		reg = <0x10>;
++		clocks = <&camcc CAM_CC_MCLK1_CLK>;
++		reset-gpios = <&tlmm 30 GPIO_ACTIVE_LOW>;
++		vio-supply = <&vreg_l1c_1p8>;
++		vana-supply = <&cam_rw_avdd>;
++		vdig-supply = <&cam_rw_dvdd>;
++		orientation = <1>;	/* back */
++		rotation = <270>;
++		port {
++			s5k3m3_ep: endpoint {
++				data-lanes = <1 2 3 4>;
++				link-frequencies = /bits/ 64 <595200000>;
++				remote-endpoint = <&csiphy1_ep>;
++			};
++		};
++	};
++};
+-- 
+2.49.1
+

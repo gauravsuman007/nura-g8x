@@ -1,0 +1,150 @@
+From dbe23ad3ab7d8e951cb3909d21c1d6049c1fb438 Mon Sep 17 00:00:00 2001
+From: Gaurav Suman <gauravsuman007@gmail.com>
+Date: Mon, 9 Nov 2026 10:30:08 +0000
+Subject: [PATCH 07/12] media: qcom: camss: add SM8150 (Titan 175) support
+
+Part of the LG G8x ThinQ (lg-mh2lm) bring-up: https://github.com/gauravsuman007/nura-g8x
+Written with the help of an AI coding assistant (Claude Opus 5.5).
+---
+ .../qcom/camss/camss-csiphy-3ph-1-0.c         | 80 ++++++++++++++++++-
+ .../media/platform/qcom/camss/camss-vfe-17x.c |  5 ++
+ drivers/media/platform/qcom/camss/camss.c     |  1 +
+ 3 files changed, 85 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
+index 4154832..96851ab 100644
+--- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
++++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
+@@ -144,6 +144,81 @@ csiphy_lane_regs lane_regs_sa8775p[] = {
+ 	{0x0664, 0x7F, 0x00, CSIPHY_DEFAULT_PARAMS},
+ };
+ 
++/* SM8150: CSIPHY v1.1 2PH, from downstream cam_csiphy_1_1_hwreg.h */
++static const struct
++csiphy_lane_regs lane_regs_sm8150[] = {
++	{0x0004, 0x0C, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x002C, 0x01, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0034, 0x0F, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x001C, 0x0A, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0014, 0x60, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0028, 0x00, 0x00, CSIPHY_DNP_PARAMS},
++	{0x003C, 0xB8, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0000, 0x90, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0008, 0x0E, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
++	{0x000c, 0x00, 0x00, CSIPHY_DNP_PARAMS},
++	{0x0010, 0x52, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0038, 0xFE, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0060, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0064, 0x7F, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0704, 0x0C, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x072C, 0x01, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0734, 0x0F, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x071C, 0x0A, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0714, 0x60, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0728, 0x04, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x073C, 0xB8, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0700, 0x80, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0708, 0x0E, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
++	{0x070C, 0xA5, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0710, 0x52, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0738, 0x1F, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0760, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0764, 0x7F, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0204, 0x0C, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x022C, 0x01, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0234, 0x0F, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x021C, 0x0A, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0214, 0x60, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0228, 0x00, 0x00, CSIPHY_DNP_PARAMS},
++	{0x023C, 0xB8, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0200, 0x90, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0208, 0x0E, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
++	{0x020C, 0x00, 0x00, CSIPHY_DNP_PARAMS},
++	{0x0210, 0x52, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0238, 0xFE, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0260, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0264, 0x7F, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0404, 0x0C, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x042C, 0x01, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0434, 0x0F, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x041C, 0x0A, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0414, 0x60, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0428, 0x00, 0x00, CSIPHY_DNP_PARAMS},
++	{0x043C, 0xB8, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0400, 0x90, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0408, 0x0E, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
++	{0x040C, 0x00, 0x00, CSIPHY_DNP_PARAMS},
++	{0x0410, 0x52, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0438, 0xFE, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0460, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0464, 0x7F, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0604, 0x0C, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x062C, 0x01, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0634, 0x0F, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x061C, 0x0A, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0614, 0x60, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0628, 0x00, 0x00, CSIPHY_DNP_PARAMS},
++	{0x063C, 0xB8, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0600, 0x90, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0608, 0x0E, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
++	{0x060C, 0x00, 0x00, CSIPHY_DNP_PARAMS},
++	{0x0610, 0x52, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0638, 0xFE, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0660, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0664, 0x7F, 0x00, CSIPHY_DEFAULT_PARAMS},
++};
++
+ /* GEN2 1.0 2PH */
+ static const struct
+ csiphy_lane_regs lane_regs_sdm845[] = {
+@@ -1100,8 +1175,11 @@ static int csiphy_init(struct csiphy_device *csiphy)
+ 		regs->lane_regs = &lane_regs_sdm845[0];
+ 		regs->lane_array_size = ARRAY_SIZE(lane_regs_sdm845);
+ 		break;
+-	case CAMSS_2290:
+ 	case CAMSS_6150:
++		regs->lane_regs = &lane_regs_sm8150[0];
++		regs->lane_array_size = ARRAY_SIZE(lane_regs_sm8150);
++		break;
++	case CAMSS_2290:
+ 		regs->lane_regs = &lane_regs_qcm2290[0];
+ 		regs->lane_array_size = ARRAY_SIZE(lane_regs_qcm2290);
+ 		break;
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe-17x.c b/drivers/media/platform/qcom/camss/camss-vfe-17x.c
+index e5ee7e7..9f3974d 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe-17x.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe-17x.c
+@@ -325,6 +325,8 @@ static void vfe_violation_read(struct vfe_device *vfe)
+  *
+  * Return IRQ_HANDLED on success
+  */
++static int vfedbg;
++module_param(vfedbg, int, 0644);
+ static irqreturn_t vfe_isr(int irq, void *dev)
+ {
+ 	struct vfe_device *vfe = dev;
+@@ -344,6 +346,9 @@ static irqreturn_t vfe_isr(int irq, void *dev)
+ 
+ 	/* Enforce ordering between IRQ reading and interpretation */
+ 	wmb();
++	if (vfedbg)
++		pr_info_ratelimited("vfedbg s0=%08x s1=%08x b0=%08x b1=%08x b2=%08x viol=%08x\n", status0, status1, vfe_bus_status[0], vfe_bus_status[1], vfe_bus_status[2], readl_relaxed(vfe->base + VFE_VIOLATION_STATUS));
++	if (vfedbg > 1) { int w; for (w = 0; w < 4; w++) pr_info_ratelimited("vfedbg wm%d st0=%08x st1=%08x cfg=%08x img=%08x w=%08x h=%08x pk=%08x str=%08x inc=%08x\n", w, readl_relaxed(vfe->base + VFE_BUS_WM_STATUS0(w)), readl_relaxed(vfe->base + VFE_BUS_WM_STATUS1(w)), readl_relaxed(vfe->base + VFE_BUS_WM_CFG(w)), readl_relaxed(vfe->base + VFE_BUS_WM_IMAGE_ADDR(w)), readl_relaxed(vfe->base + VFE_BUS_WM_BUFFER_WIDTH_CFG(w)), readl_relaxed(vfe->base + VFE_BUS_WM_BUFFER_HEIGHT_CFG(w)), readl_relaxed(vfe->base + VFE_BUS_WM_PACKER_CFG(w)), readl_relaxed(vfe->base + VFE_BUS_WM_STRIDE(w)), readl_relaxed(vfe->base + VFE_BUS_WM_FRAME_INC(w))); pr_info_ratelimited("vfedbg mask %08x %08x bus %08x %08x %08x core %08x\n", readl_relaxed(vfe->base + VFE_IRQ_MASK_0), readl_relaxed(vfe->base + VFE_IRQ_MASK_1), readl_relaxed(vfe->base + VFE_BUS_IRQ_MASK(0)), readl_relaxed(vfe->base + VFE_BUS_IRQ_MASK(1)), readl_relaxed(vfe->base + VFE_BUS_IRQ_MASK(2)), readl_relaxed(vfe->base + VFE_CORE_CFG)); }
+ 
+ 	writel_relaxed(CMD_GLOBAL_CLEAR, vfe->base + VFE_IRQ_CMD);
+ 	writel_relaxed(1, vfe->base + VFE_BUS_IRQ_CLEAR_GLOBAL);
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index 00b87fd..406a5a6 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -5329,6 +5329,7 @@ static const struct of_device_id camss_dt_match[] = {
+ 	{ .compatible = "qcom,sdm670-camss", .data = &sdm670_resources },
+ 	{ .compatible = "qcom,sdm845-camss", .data = &sdm845_resources },
+ 	{ .compatible = "qcom,sm6150-camss", .data = &sm6150_resources },
++	{ .compatible = "qcom,sm8150-camss", .data = &sm6150_resources },
+ 	{ .compatible = "qcom,sm8250-camss", .data = &sm8250_resources },
+ 	{ .compatible = "qcom,sm8550-camss", .data = &sm8550_resources },
+ 	{ .compatible = "qcom,sm8650-camss", .data = &sm8650_resources },
+-- 
+2.49.1
+

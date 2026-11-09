@@ -1,0 +1,118 @@
+From 0ab0669f19a0a082e5d5eb15d294121b7f17ab02 Mon Sep 17 00:00:00 2001
+From: Gaurav Suman <gauravsuman007@gmail.com>
+Date: Mon, 9 Nov 2026 10:30:07 +0000
+Subject: [PATCH 02/12] drm/msm: debug aids and workarounds used during G8x
+ bring-up
+
+Part of the LG G8x ThinQ (lg-mh2lm) bring-up: https://github.com/gauravsuman007/nura-g8x
+Written with the help of an AI coding assistant (Claude Opus 5.5).
+---
+ drivers/gpu/drm/msm/adreno/adreno_gpu.c           | 2 +-
+ drivers/gpu/drm/msm/disp/msm_disp_snapshot_util.c | 3 ++-
+ drivers/gpu/drm/msm/msm_drv.c                     | 6 +++++-
+ drivers/gpu/drm/msm/msm_drv.h                     | 2 ++
+ drivers/gpu/drm/msm/msm_gem_vma.c                 | 9 +++++++++
+ drivers/gpu/drm/msm/msm_iommu.c                   | 2 +-
+ 6 files changed, 20 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/adreno/adreno_gpu.c b/drivers/gpu/drm/msm/adreno/adreno_gpu.c
+index d5fe6f6..0621d53 100644
+--- a/drivers/gpu/drm/msm/adreno/adreno_gpu.c
++++ b/drivers/gpu/drm/msm/adreno/adreno_gpu.c
+@@ -263,7 +263,7 @@ void adreno_check_and_reenable_stall(struct adreno_gpu *adreno_gpu)
+ 	 * collect a crashdump to re-enable stall-on-fault.
+ 	 */
+ 	spin_lock_irqsave(&priv->fault_stall_lock, flags);
+-	if (!priv->stall_enabled &&
++	if (msm_stall_on_fault && !priv->stall_enabled &&
+ 			ktime_after(ktime_get(), priv->stall_reenable_time) &&
+ 			!READ_ONCE(gpu->crashstate)) {
+ 		struct msm_mmu *mmu = to_msm_vm(gpu->vm)->mmu;
+diff --git a/drivers/gpu/drm/msm/disp/msm_disp_snapshot_util.c b/drivers/gpu/drm/msm/disp/msm_disp_snapshot_util.c
+index 427d3ee..1ceff09 100644
+--- a/drivers/gpu/drm/msm/disp/msm_disp_snapshot_util.c
++++ b/drivers/gpu/drm/msm/disp/msm_disp_snapshot_util.c
+@@ -143,7 +143,8 @@ void msm_disp_snapshot_capture_state(struct msm_disp_state *disp_state)
+ 	if (kms->funcs->snapshot)
+ 		kms->funcs->snapshot(disp_state, kms);
+ 
+-	msm_disp_capture_atomic_state(disp_state);
++	if (drm_dev->registered)
++		msm_disp_capture_atomic_state(disp_state);
+ }
+ 
+ void msm_disp_state_free(void *data)
+diff --git a/drivers/gpu/drm/msm/msm_drv.c b/drivers/gpu/drm/msm/msm_drv.c
+index e5ab1e2..e7a41af 100644
+--- a/drivers/gpu/drm/msm/msm_drv.c
++++ b/drivers/gpu/drm/msm/msm_drv.c
+@@ -50,6 +50,10 @@ bool dumpstate;
+ MODULE_PARM_DESC(dumpstate, "Dump KMS state on errors");
+ module_param(dumpstate, bool, 0600);
+ 
++bool msm_stall_on_fault;
++MODULE_PARM_DESC(stall_on_fault, "Stall the GPU SMMU on faults to capture crash dumps (turns stray faults into GPU hangs)");
++module_param_named(stall_on_fault, msm_stall_on_fault, bool, 0600);
++
+ static bool modeset = true;
+ MODULE_PARM_DESC(modeset, "Use kernel modesetting [KMS] (1=on (default), 0=disable)");
+ module_param(modeset, bool, 0600);
+@@ -136,7 +140,7 @@ static int msm_drm_init(struct device *dev, const struct drm_driver *drv,
+ 
+ 	/* Initialize stall-on-fault */
+ 	spin_lock_init(&priv->fault_stall_lock);
+-	priv->stall_enabled = true;
++	priv->stall_enabled = msm_stall_on_fault;
+ 
+ 	/* Teach lockdep about lock ordering wrt. shrinker: */
+ 	fs_reclaim_acquire(GFP_KERNEL);
+diff --git a/drivers/gpu/drm/msm/msm_drv.h b/drivers/gpu/drm/msm/msm_drv.h
+index 6d847d5..e4e4b04 100644
+--- a/drivers/gpu/drm/msm/msm_drv.h
++++ b/drivers/gpu/drm/msm/msm_drv.h
+@@ -70,6 +70,8 @@ enum msm_dsi_controller {
+ 
+ #define MSM_GPU_MAX_RINGS 4
+ 
++extern bool msm_stall_on_fault;
++
+ struct msm_drm_private {
+ 
+ 	struct drm_device *dev;
+diff --git a/drivers/gpu/drm/msm/msm_gem_vma.c b/drivers/gpu/drm/msm/msm_gem_vma.c
+index adf88cf..3b60107 100644
+--- a/drivers/gpu/drm/msm/msm_gem_vma.c
++++ b/drivers/gpu/drm/msm/msm_gem_vma.c
+@@ -382,7 +382,16 @@ msm_gem_vma_new(struct drm_gpuvm *gpuvm, struct drm_gem_object *obj,
+ 	if (vm->managed) {
+ 		BUG_ON(offset != 0);
+ 		BUG_ON(!obj);  /* NULL mappings not valid for kernel managed VM */
++		/*
++		 * The a6xx CCU reads the 64 KiB-aligned start of the block that
++		 * holds a render target; keep that block start inside the buffer.
++		 * Callers with a tight fixed window (the GMU) fall back to 4 KiB.
++		 */
+ 		ret = drm_mm_insert_node_in_range(&vm->mm, &vma->node,
++						obj->size, SZ_64K, 0,
++						range_start, range_end, 0);
++		if (ret == -ENOSPC)
++			ret = drm_mm_insert_node_in_range(&vm->mm, &vma->node,
+ 						obj->size, PAGE_SIZE, 0,
+ 						range_start, range_end, 0);
+ 
+diff --git a/drivers/gpu/drm/msm/msm_iommu.c b/drivers/gpu/drm/msm/msm_iommu.c
+index 7d449e5..5ec2bdc 100644
+--- a/drivers/gpu/drm/msm/msm_iommu.c
++++ b/drivers/gpu/drm/msm/msm_iommu.c
+@@ -793,7 +793,7 @@ struct msm_mmu *msm_iommu_gpu_new(struct device *dev, struct msm_gpu *gpu, unsig
+ 
+ 	/* Enable stall on iommu fault: */
+ 	if (adreno_smmu->set_stall)
+-		adreno_smmu->set_stall(adreno_smmu->cookie, true);
++		adreno_smmu->set_stall(adreno_smmu->cookie, msm_stall_on_fault);
+ 
+ 	return mmu;
+ }
+-- 
+2.49.1
+

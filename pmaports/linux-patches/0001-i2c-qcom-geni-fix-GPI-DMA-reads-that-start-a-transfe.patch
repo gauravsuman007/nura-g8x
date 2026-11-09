@@ -1,0 +1,81 @@
+From 8982062c3a661d4a6979e7ea74175f5404224faa Mon Sep 17 00:00:00 2001
+From: Gaurav Suman <gauravsuman007@gmail.com>
+Date: Mon, 9 Nov 2026 10:30:07 +0000
+Subject: [PATCH 01/12] i2c: qcom-geni: fix GPI DMA reads that start a transfer
+
+Part of the LG G8x ThinQ (lg-mh2lm) bring-up: https://github.com/gauravsuman007/nura-g8x
+Written with the help of an AI coding assistant (Claude Opus 5.5).
+---
+ drivers/i2c/busses/i2c-qcom-geni.c | 28 +++++++++++++++++++++++++++-
+ 1 file changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/i2c/busses/i2c-qcom-geni.c b/drivers/i2c/busses/i2c-qcom-geni.c
+index a4acb78..f7a7795 100644
+--- a/drivers/i2c/busses/i2c-qcom-geni.c
++++ b/drivers/i2c/busses/i2c-qcom-geni.c
+@@ -118,6 +118,7 @@ struct geni_i2c_dev {
+ 	struct dma_chan *rx_c;
+ 	bool no_dma;
+ 	bool gpi_mode;
++	bool gpi_cfg_done;
+ 	bool abort_done;
+ 	bool is_tx_multi_desc_xfer;
+ 	u32 num_msgs;
+@@ -519,6 +520,17 @@ static int geni_i2c_tx_one_msg(struct geni_i2c_dev *gi2c, struct i2c_msg *msg,
+ 	return gi2c->err;
+ }
+ 
++static void i2c_gpi_cb_read_tx(void *cb, const struct dmaengine_result *result)
++{
++	struct geni_i2c_dev *gi2c = cb;
++
++	/* a read finishes on the rx channel; only a tx error ends it early */
++	if (result->result != DMA_TRANS_NOERROR) {
++		gi2c->err = -EIO;
++		complete(&gi2c->done);
++	}
++}
++
+ static void i2c_gpi_cb_result(void *cb, const struct dmaengine_result *result)
+ {
+ 	struct geni_i2c_dev *gi2c = cb;
+@@ -701,7 +713,10 @@ static int geni_i2c_gpi(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[],
+ 		goto err_config;
+ 	}
+ 
+-	desc->callback_result = i2c_gpi_cb_result;
++	if ((msgs[msg_idx].flags & I2C_M_RD) && op == I2C_WRITE)
++		desc->callback_result = i2c_gpi_cb_read_tx;
++	else
++		desc->callback_result = i2c_gpi_cb_result;
+ 	desc->callback_param = gi2c;
+ 
+ 	if (!((msgs[msg_idx].flags & I2C_M_RD) && op == I2C_WRITE))
+@@ -816,6 +831,12 @@ static int geni_i2c_gpi_xfer(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[], i
+ 			peripheral.stretch = 1;
+ 
+ 		peripheral.addr = msgs[i].addr;
++		/* single-read fix: a leading read must issue a read GO on tx */
++		if (msgs[i].flags & I2C_M_RD)
++			peripheral.multi_msg = true;
++		/* a config TRE chained to a read GO never completes */
++		if (i == 0 && (msgs[i].flags & I2C_M_RD) && gi2c->gpi_cfg_done)
++			peripheral.set_config = 0;
+ 		if (i > 0 && (!(msgs[i].flags & I2C_M_RD)))
+ 			peripheral.multi_msg = false;
+ 
+@@ -847,6 +868,11 @@ static int geni_i2c_gpi_xfer(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[], i
+ 			goto err;
+ 		}
+ 
++		gi2c->gpi_cfg_done = true;
++		/* a read GO raises no tx event: drop its descriptor or the next xfer stalls */
++		if (msgs[i].flags & I2C_M_RD)
++			dmaengine_terminate_sync(gi2c->tx_c);
++
+ 		if (!gi2c->is_tx_multi_desc_xfer)
+ 			geni_i2c_gpi_unmap(gi2c, &msgs[i], tx_buf, tx_addr, rx_buf, rx_addr);
+ 		else if (tx_multi_xfer->unmap_msg_cnt != tx_multi_xfer->irq_cnt)
+-- 
+2.49.1
+

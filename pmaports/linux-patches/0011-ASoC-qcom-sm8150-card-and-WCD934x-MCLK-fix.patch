@@ -1,0 +1,121 @@
+From fcd13468e65eff3df0f37805e1e9e56689027e0a Mon Sep 17 00:00:00 2001
+From: Gaurav Suman <gauravsuman007@gmail.com>
+Date: Mon, 9 Nov 2026 10:30:10 +0000
+Subject: [PATCH 11/12] ASoC: qcom: sm8150 card and WCD934x MCLK fix
+
+Part of the LG G8x ThinQ (lg-mh2lm) bring-up: https://github.com/gauravsuman007/nura-g8x
+Written with the help of an AI coding assistant (Claude Opus 5.5).
+---
+ sound/soc/codecs/wcd934x.c | 19 ++++++++++++++-----
+ sound/soc/qcom/sm8150.c    | 35 +++++++++++++++++++++++++++++++++++
+ 2 files changed, 49 insertions(+), 5 deletions(-)
+
+diff --git a/sound/soc/codecs/wcd934x.c b/sound/soc/codecs/wcd934x.c
+index bc41a14..30099b5 100644
+--- a/sound/soc/codecs/wcd934x.c
++++ b/sound/soc/codecs/wcd934x.c
+@@ -3007,6 +3007,8 @@ static int wcd934x_comp_probe(struct snd_soc_component *component)
+ 	/* Default HPH Mode to Class-H Low HiFi */
+ 	wcd->hph_mode = CLS_H_LOHIFI;
+ 
++	/* nura: keep MCLK on so init and later writes reach the digital core */
++	__wcd934x_cdc_mclk_enable(wcd, true);
+ 	wcd934x_comp_init(component);
+ 
+ 	for (i = 0; i < NUM_CODEC_DAIS; i++)
+@@ -3775,8 +3777,14 @@ static int slim_tx_mixer_get(struct snd_kcontrol *kc,
+ 	struct soc_mixer_control *mixer =
+ 			(struct soc_mixer_control *)kc->private_value;
+ 	int port_id = mixer->shift;
++	int dai_id = snd_soc_dapm_kcontrol_to_widget(kc)->shift;
++	struct wcd934x_slim_ch *ch;
++	int on = 0;
+ 
+-	ucontrol->value.integer.value[0] = wcd->tx_port_value[port_id];
++	list_for_each_entry(ch, &wcd->dai[dai_id].slim_ch_list, list)
++		if (ch->port == port_id)
++			on = 1;
++	ucontrol->value.integer.value[0] = on;
+ 
+ 	return 0;
+ }
+@@ -3795,11 +3803,12 @@ static int slim_tx_mixer_put(struct snd_kcontrol *kc,
+ 	int dai_id = widget->shift;
+ 	int port_id = mixer->shift;
+ 
+-	/* only add to the list if value not set */
+-	if (enable == wcd->tx_port_value[port_id])
+-		return 0;
+-
+ 	if (enable) {
++		list_for_each_entry(ch, &wcd->dai[dai_id].slim_ch_list, list)
++			if (ch->port == port_id)
++				return 0;	/* already routed to this AIF */
++		if (!list_empty(&wcd->tx_chs[port_id].list))
++			list_del_init(&wcd->tx_chs[port_id].list); /* move from another AIF */
+ 		if (list_empty(&wcd->tx_chs[port_id].list)) {
+ 			list_add_tail(&wcd->tx_chs[port_id].list,
+ 				      &wcd->dai[dai_id].slim_ch_list);
+diff --git a/sound/soc/qcom/sm8150.c b/sound/soc/qcom/sm8150.c
+index 3f1ca7c..d86d03e 100644
+--- a/sound/soc/qcom/sm8150.c
++++ b/sound/soc/qcom/sm8150.c
+@@ -202,6 +202,25 @@ static int sm8150_snd_hw_params(struct snd_pcm_substream *substream,
+ 	switch (cpu_dai->id) {
+ 	case QUATERNARY_MI2S_RX:
+ 		break;
++	case SECONDARY_MI2S_RX: {
++		/* CS35L41 PLL runs from SCLK: tell both amps the bit clock and
++		 * give the right amp (earpiece) slot 1. */
++		unsigned int bclk = params_rate(params) * params_physical_width(params) * 2;
++		struct snd_soc_dai *codec_dai;
++		int j;
++
++		snd_soc_dai_set_sysclk(cpu_dai, Q6AFE_LPASS_CLK_ID_SEC_MI2S_IBIT,
++				       bclk, SNDRV_PCM_STREAM_PLAYBACK);
++		for_each_rtd_codec_dais(rtd, j, codec_dai) {
++			unsigned int slot = j;
++
++			snd_soc_dai_set_sysclk(codec_dai, 0, bclk, SND_SOC_CLOCK_IN);
++			snd_soc_component_set_sysclk(codec_dai->component, 0, 0,
++						     bclk, SND_SOC_CLOCK_IN);
++			snd_soc_dai_set_channel_map(codec_dai, 0, NULL, 1, &slot);
++		}
++		break;
++	}
+ 	case QUATERNARY_TDM_RX_0:
+ 	case QUATERNARY_TDM_TX_0:
+ 		ret = sm8150_tdm_snd_hw_params(substream, params);
+@@ -321,6 +340,17 @@ static int sm8150_snd_startup(struct snd_pcm_substream *substream)
+ 		snd_soc_dai_set_fmt(codec_dai, codec_dai_fmt);
+ 		break;
+ 
++	case SECONDARY_MI2S_RX:
++		fmt = SND_SOC_DAIFMT_BP_FP;
++		codec_dai_fmt = SND_SOC_DAIFMT_BC_FC |
++				SND_SOC_DAIFMT_NB_NF |
++				SND_SOC_DAIFMT_I2S;
++		/* bit clock is set in hw_params, from the back-end format */
++		snd_soc_dai_set_fmt(cpu_dai, fmt);
++		for (int i = 0; i < rtd->dai_link->num_codecs; i++)
++			snd_soc_dai_set_fmt(snd_soc_rtd_to_codec(rtd, i), codec_dai_fmt);
++		break;
++
+ 	case QUATERNARY_TDM_RX_0:
+ 		codec_dai_fmt |= SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_DSP_A;
+ 		if (++(data->quat_tdm_clk_count) == 1) {
+@@ -356,6 +386,11 @@ static void sm8150_snd_shutdown(struct snd_pcm_substream *substream)
+ 				0, SNDRV_PCM_STREAM_PLAYBACK);
+ 		}
+ 		break;
++	case SECONDARY_MI2S_RX:
++		snd_soc_dai_set_sysclk(cpu_dai,
++			Q6AFE_LPASS_CLK_ID_SEC_MI2S_IBIT,
++			0, SNDRV_PCM_STREAM_PLAYBACK);
++		break;
+ 	case SLIMBUS_0_RX...SLIMBUS_6_TX:
+ 	case QUATERNARY_MI2S_RX:
+ 		break;
+-- 
+2.49.1
+

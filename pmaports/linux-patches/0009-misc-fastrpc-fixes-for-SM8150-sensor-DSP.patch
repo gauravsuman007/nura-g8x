@@ -1,0 +1,42 @@
+From 7bb503fdec4db3c898cfe213c3735a1d527b2ddb Mon Sep 17 00:00:00 2001
+From: Gaurav Suman <gauravsuman007@gmail.com>
+Date: Mon, 9 Nov 2026 10:30:09 +0000
+Subject: [PATCH 09/12] misc: fastrpc: fixes for SM8150 sensor DSP
+
+Part of the LG G8x ThinQ (lg-mh2lm) bring-up: https://github.com/gauravsuman007/nura-g8x
+Written with the help of an AI coding assistant (Claude Opus 5.5).
+---
+ drivers/misc/fastrpc.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/misc/fastrpc.c b/drivers/misc/fastrpc.c
+index 1080f9a..ad2ed02 100644
+--- a/drivers/misc/fastrpc.c
++++ b/drivers/misc/fastrpc.c
+@@ -1005,7 +1005,7 @@ static int fastrpc_get_args(u32 kernel, struct fastrpc_invoke_ctx *ctx)
+ 
+ 	ctx->msg_sz = pkt_size;
+ 
+-	if (ctx->fl->sctx->sid)
++	if (ctx->fl->sctx->sid && ctx->fl->pd != SENSORS_PD)
+ 		err = fastrpc_buf_alloc(ctx->fl, dev, pkt_size, &ctx->buf);
+ 	else
+ 		err = fastrpc_remote_heap_alloc(ctx->fl, dev, pkt_size, &ctx->buf);
+@@ -2378,11 +2378,12 @@ static int fastrpc_rpmsg_probe(struct rpmsg_device *rpdev)
+ 		data->vmcount = vmcount;
+ 		for (i = 0; i < data->vmcount; i++) {
+ 			data->vmperms[i].vmid = vmids[i];
+-			data->vmperms[i].perm = QCOM_SCM_PERM_RWX;
++			data->vmperms[i].perm = vmids[i] == QCOM_SCM_VMID_HLOS ?
++				QCOM_SCM_PERM_RW : QCOM_SCM_PERM_RWX;
+ 		}
+ 	}
+ 
+-	if (domain_id == SDSP_DOMAIN_ID) {
++	if (domain_id == SDSP_DOMAIN_ID && vmcount) {
+ 		struct resource res;
+ 		u64 src_perms;
+ 
+-- 
+2.49.1
+

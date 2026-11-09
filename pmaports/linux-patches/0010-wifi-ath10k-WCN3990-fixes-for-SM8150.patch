@@ -1,0 +1,137 @@
+From 923775f17973eb285055b13edfaac8f17f6e6979 Mon Sep 17 00:00:00 2001
+From: Gaurav Suman <gauravsuman007@gmail.com>
+Date: Mon, 9 Nov 2026 10:30:09 +0000
+Subject: [PATCH 10/12] wifi: ath10k: WCN3990 fixes for SM8150
+
+Part of the LG G8x ThinQ (lg-mh2lm) bring-up: https://github.com/gauravsuman007/nura-g8x
+Written with the help of an AI coding assistant (Claude Opus 5.5).
+---
+ drivers/net/wireless/ath/ath10k/core.c |  1 +
+ drivers/net/wireless/ath/ath10k/core.h |  2 ++
+ drivers/net/wireless/ath/ath10k/hw.h   |  4 +++
+ drivers/net/wireless/ath/ath10k/mac.c  | 34 +++++++++++++++++++++-----
+ 4 files changed, 35 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/net/wireless/ath/ath10k/core.c b/drivers/net/wireless/ath/ath10k/core.c
+index 7c2939c..c645f8d 100644
+--- a/drivers/net/wireless/ath/ath10k/core.c
++++ b/drivers/net/wireless/ath/ath10k/core.c
+@@ -746,6 +746,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
+ 		.use_fw_tx_credits = false,
+ 		.delay_unmap_buffer = true,
+ 		.mcast_frame_registration = false,
++		.peer_pmf_support = true,
+ 	},
+ };
+ 
+diff --git a/drivers/net/wireless/ath/ath10k/core.h b/drivers/net/wireless/ath/ath10k/core.h
+index 73a9db3..f68673b 100644
+--- a/drivers/net/wireless/ath/ath10k/core.h
++++ b/drivers/net/wireless/ath/ath10k/core.h
+@@ -605,6 +605,8 @@ struct ath10k_vif {
+ 	union {
+ 		struct {
+ 			u32 uapsd;
++			/* vdev was brought up since it was last started */
++			bool was_up;
+ 		} sta;
+ 		struct {
+ 			/* 512 stations */
+diff --git a/drivers/net/wireless/ath/ath10k/hw.h b/drivers/net/wireless/ath/ath10k/hw.h
+index da71dce..db565a5 100644
+--- a/drivers/net/wireless/ath/ath10k/hw.h
++++ b/drivers/net/wireless/ath/ath10k/hw.h
+@@ -638,6 +638,10 @@ struct ath10k_hw_params {
+ 
+ 	/* The hardware support multicast frame registrations */
+ 	bool mcast_frame_registration;
++
++	/* firmware handles PMF for a peer with the PMF peer flag although the
++	 * firmware file does not advertise ATH10K_FW_FEATURE_MFP_SUPPORT */
++	bool peer_pmf_support;
+ };
+ 
+ struct htt_resp;
+diff --git a/drivers/net/wireless/ath/ath10k/mac.c b/drivers/net/wireless/ath/ath10k/mac.c
+index 8e60469..3c45868 100644
+--- a/drivers/net/wireless/ath/ath10k/mac.c
++++ b/drivers/net/wireless/ath/ath10k/mac.c
+@@ -2254,8 +2254,9 @@ static void ath10k_peer_assoc_h_crypto(struct ath10k *ar,
+ 	}
+ 
+ 	if (sta->mfp &&
+-	    test_bit(ATH10K_FW_FEATURE_MFP_SUPPORT,
+-		     ar->running_fw->fw_file.fw_features)) {
++	    (test_bit(ATH10K_FW_FEATURE_MFP_SUPPORT,
++		      ar->running_fw->fw_file.fw_features) ||
++	     ar->hw_params.peer_pmf_support)) {
+ 		arg->peer_flags |= ar->wmi.peer_flags->pmf;
+ 	}
+ }
+@@ -3169,6 +3170,7 @@ static void ath10k_bss_assoc(struct ieee80211_hw *hw,
+ 	}
+ 
+ 	arvif->is_up = true;
++	arvif->u.sta.was_up = true;
+ 
+ 	ath10k_mac_set_sar_power(ar);
+ 
+@@ -3198,10 +3200,14 @@ static void ath10k_bss_disassoc(struct ieee80211_hw *hw,
+ 	ath10k_dbg(ar, ATH10K_DBG_MAC, "mac vdev %i disassoc bssid %pM\n",
+ 		   arvif->vdev_id, arvif->bssid);
+ 
+-	ret = ath10k_wmi_vdev_down(ar, arvif->vdev_id);
+-	if (ret)
+-		ath10k_warn(ar, "failed to down vdev %i: %d\n",
+-			    arvif->vdev_id, ret);
++	/* a down for a started-but-not-up vdev with the AP peer present
++	 * asserts WCN3990 firmware */
++	if (arvif->is_up) {
++		ret = ath10k_wmi_vdev_down(ar, arvif->vdev_id);
++		if (ret)
++			ath10k_warn(ar, "failed to down vdev %i: %d\n",
++				    arvif->vdev_id, ret);
++	}
+ 
+ 	arvif->def_wep_key_idx = -1;
+ 
+@@ -4900,6 +4906,10 @@ static struct ieee80211_sta_vht_cap ath10k_create_vht_cap(struct ath10k *ar)
+ 
+ 	vht_cap.vht_supported = 1;
+ 	vht_cap.cap = ar->vht_cap_info;
++	if (QCA_REV_WCN3990(ar))
++		vht_cap.cap &= ~(IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_MASK |
++				  IEEE80211_VHT_CAP_SHORT_GI_160 |
++				  IEEE80211_VHT_CAP_EXT_NSS_BW_MASK);
+ 
+ 	if (ar->vht_cap_info & (IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE |
+ 				IEEE80211_VHT_CAP_MU_BEAMFORMEE_CAPABLE)) {
+@@ -9011,6 +9021,9 @@ ath10k_mac_op_assign_vif_chanctx(struct ieee80211_hw *hw,
+ 
+ 	arvif->is_started = true;
+ 
++	if (arvif->vdev_type == WMI_VDEV_TYPE_STA)
++		arvif->u.sta.was_up = false;
++
+ 	ret = ath10k_mac_vif_setup_ps(arvif);
+ 	if (ret) {
+ 		ath10k_warn(ar, "failed to update vdev %i ps: %d\n",
+@@ -9094,6 +9107,15 @@ ath10k_mac_op_unassign_vif_chanctx(struct ieee80211_hw *hw,
+ 		ath10k_warn(ar, "failed to stop vdev %i: %d\n",
+ 			    arvif->vdev_id, ret);
+ 
++	/* a failed attempt never reaches ath10k_bss_disassoc(); without a down
++	 * after the stop, WCN3990 firmware holds the next Auth frames ~20 s */
++	if (arvif->vdev_type == WMI_VDEV_TYPE_STA && !arvif->u.sta.was_up) {
++		ret = ath10k_wmi_vdev_down(ar, arvif->vdev_id);
++		if (ret)
++			ath10k_warn(ar, "failed to down vdev %i after stop: %d\n",
++				    arvif->vdev_id, ret);
++	}
++
+ 	arvif->is_started = false;
+ 
+ 	mutex_unlock(&ar->conf_mutex);
+-- 
+2.49.1
+
