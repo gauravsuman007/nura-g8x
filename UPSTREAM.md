@@ -13,6 +13,8 @@ cd <tree> && git rebase --exec 'git commit --amend --no-edit -s' <base>
 b4 prep --enroll   # once per series, then: b4 send --web-auth-new (one time), b4 send
 ```
 
+**b4 branches are ready in the build container** (`b4/wcd934x-mclk`, `b4/msm-va-align`, `b4/sm8150-camera`, `b4/nura-sensors`). The submitter runs `pmaports/b4-send.sh` (`docker exec -it nura-kbd sh /n/b4-send.sh`).
+
 ## Published for users
 
 | What | Where | Status |

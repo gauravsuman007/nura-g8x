@@ -892,3 +892,10 @@ Boot alert added: `unit/sensors/nura-sensor-check(.service)` waits up to 90 s
 after graphical.target for service 400; if missing it logs an error and
 shows a critical GNOME notification asking for a restart. Alert path tested
 with a fake `qrtr-lookup`.
+
+**Idle drain (2026-11-09).** About 1.35 W screen-off (9%/h, 11 h full to
+empty): auto-suspend is off because the power button is broken. CPUs reach
+core sleep only; there is no cluster idle state. nura-gyro streamed 25 Hz
+with no reader (8% CPU, SLPI awake); it now streams only while its event
+node is open. qcom_smbx has writable `current_max` and `status` but no
+`charge_control_*_threshold`, which UPower/GNOME need for a charge limit.

@@ -4,6 +4,9 @@
 # per deg/s), INPUT_PROP_ACCELEROMETER, the convention SDL and game
 # controller gyros use. libinput ignores such devices, so desktop input is
 # unaffected. Axes are the sensor's (Android device) frame.
+# The sensor streams only while some process has the event node open
+# (checked every 3 s); streaming all the time cost ~8% CPU and kept the SLPI
+# busy with nobody listening.
 import fcntl, math, os, pty, re, select, struct, sys, time
 
 UI_SET_EVBIT, UI_SET_ABSBIT, UI_SET_PROPBIT = 0x40045564, 0x40045567, 0x4004556e
@@ -36,16 +39,45 @@ def emit(fd, vals):
     except BlockingIOError:
         pass
 
-def run(fd):
+def my_node():
+    for n in os.listdir('/sys/class/input'):
+        try:
+            if open(f'/sys/class/input/{n}/device/name').read().strip() == 'Nura SLPI gyroscope' and n.startswith('event'):
+                return '/dev/input/' + n
+        except OSError:
+            pass
+
+def in_use(node):
+    me = str(os.getpid())
+    for p in os.listdir('/proc'):
+        if not p.isdigit() or p == me:
+            continue
+        try:
+            for f in os.listdir(f'/proc/{p}/fd'):
+                if os.readlink(f'/proc/{p}/fd/{f}') == node:
+                    return True
+        except OSError:
+            pass
+    return False
+
+def run(fd, node):
     pid, m = pty.fork()          # a pty keeps ssccli's output line-buffered
     if pid == 0:
         os.execvp('ssccli', ['ssccli', '--sensor', 'gyroscope', '--timeout', '0'])
     buf = b''
+    last = checked = time.time()
     skip = 5                     # first samples after start are saturated/settling
     while True:
-        r, _, _ = select.select([m], [], [], 30)
+        r, _, _ = select.select([m], [], [], 3)
+        if time.time() - checked > 3:
+            checked = time.time()
+            if not in_use(node):
+                break            # nobody listening: stop the sensor
         if not r:
-            break                # no samples for 30 s: restart ssccli
+            if time.time() - last > 30:
+                break            # no samples for 30 s: restart ssccli
+            continue
+        last = time.time()
         try:
             d = os.read(m, 4096)
         except OSError:
@@ -66,6 +98,9 @@ def run(fd):
         pass
 
 fd = make_device()
+time.sleep(1)
+node = my_node()
 while True:
-    run(fd)
-    time.sleep(2)
+    if node and in_use(node):
+        run(fd, node)
+    time.sleep(3)
