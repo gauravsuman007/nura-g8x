@@ -888,3 +888,7 @@ worked the boot before and after: an intermittent SLPI start race. A hot
 re-probe (SCM assign -22), so the sensors still don't work: reboot instead.
 The `sensors` test group now checks for service 400 and an `auto_brightness`
 test checks the proxy, `ambient-enabled` and the SensorDaemon errors.
+Boot alert added: `unit/sensors/nura-sensor-check(.service)` waits up to 90 s
+after graphical.target for service 400; if missing it logs an error and
+shows a critical GNOME notification asking for a restart. Alert path tested
+with a fake `qrtr-lookup`.

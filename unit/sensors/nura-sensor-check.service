@@ -1,0 +1,10 @@
+[Unit]
+Description=Check that the SLPI sensor core started (alerts if not)
+After=hexagonrpcd-sdsp.service graphical.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/nura-sensor-check
+
+[Install]
+WantedBy=graphical.target

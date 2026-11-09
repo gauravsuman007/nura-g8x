@@ -1,0 +1,21 @@
+#!/bin/sh
+# Boot check: the SLPI sometimes starts without publishing its QMI sensor
+# core service (400), which leaves auto-brightness, rotation and proximity
+# dead until a reboot. Wait up to 90 s for it; if it never appears, log an
+# error and show a notification in the user's GNOME session.
+for i in $(seq 90); do
+	qrtr-lookup 2>/dev/null | awk '$1==400{f=1} END{exit !f}' && { echo "sensor core up after ${i}s"; exit 0; }
+	sleep 1
+done
+echo "<3>SLPI sensor core (QMI service 400) missing: sensors dead until reboot"
+for u in $(loginctl list-sessions --no-legend | awk '{print $3}' | sort -u); do
+	uid=$(id -u "$u") || continue
+	[ -S /run/user/$uid/bus ] || continue
+	runuser -u "$u" -- env DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus \
+		gdbus call --session -d org.freedesktop.Notifications -o /org/freedesktop/Notifications \
+		-m org.freedesktop.Notifications.Notify "Sensors" 0 "dialog-warning" \
+		"Sensors did not start" \
+		"Auto-brightness, rotation and proximity will not work. Restart the phone to fix." \
+		"[]" "{'urgency': <byte 2>}" 0 >/dev/null
+done
+exit 1

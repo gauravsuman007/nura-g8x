@@ -66,6 +66,7 @@ Grouped by where each part belongs (see "Scope" below).
 | `.../device-lg-mh2lm/sensors/` | device package | hexagonrpcd and iio-sensor-proxy drop-ins |
 | `pmaports/upstream-patches/` | other projects | hexagonrpc and libssc fixes, to send upstream |
 | `unit/screen/` | this phone only | 5-minute blank, no suspend, pocket guard (frozen) |
+| `unit/sensors/` | this phone only | boot check: alerts if the SLPI sensor core did not start |
 | `devtools/testwd/` | development | auto-restart and watchdog for test images |
 | `devtools/bootok/` | retired | old boot slot marker, replaced by `qbootctl` on the phone |
 | `devtools/usbmac/`, `devtools/usbreplug/` | development | USB networking fixes for a Mac host |
