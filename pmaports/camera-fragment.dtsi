@@ -8,7 +8,8 @@
  *              AVDD gpio10, DVDD gpio11, IOVDD gpio12
  * All MCLKs are 19.2 MHz. For the scan the MCLKs are listed as CCI clocks
  * (the CCI driver enables every clock in its node) and the rails are
- * always-on; a real sensor driver will own these later. */
+ * always-on for the scan. Since 2026-11-10 the sensor and lens drivers own
+ * them, so the rails are off while the cameras are idle (saves idle power). */
 #include <dt-bindings/clock/qcom,sm8150-camcc.h>
 
 / {
@@ -19,7 +20,6 @@
 		regulator-max-microvolt = <2800000>;
 		gpio = <&pm8150l_gpios 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
-		regulator-always-on;
 	};
 	cam_rn_afvdd: regulator-cam-rn-afvdd {
 		compatible = "regulator-fixed";
@@ -28,7 +28,6 @@
 		regulator-max-microvolt = <2800000>;
 		gpio = <&pm8150l_gpios 2 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
-		regulator-always-on;
 	};
 	cam_rn_dvdd: regulator-cam-rn-dvdd {
 		compatible = "regulator-fixed";
@@ -37,7 +36,6 @@
 		regulator-max-microvolt = <1050000>;
 		gpio = <&pm8150l_gpios 3 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
-		regulator-always-on;
 	};
 	cam_rn_mvdd: regulator-cam-rn-mvdd {
 		compatible = "regulator-fixed";
@@ -46,7 +44,6 @@
 		regulator-max-microvolt = <2800000>;
 		gpio = <&pm8150l_gpios 4 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
-		regulator-always-on;
 	};
 	cam_rw_avdd: regulator-cam-rw-avdd {
 		compatible = "regulator-fixed";
@@ -55,7 +52,6 @@
 		regulator-max-microvolt = <2800000>;
 		gpio = <&pm8150l_gpios 6 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
-		regulator-always-on;
 	};
 	cam_rw_dvdd: regulator-cam-rw-dvdd {
 		compatible = "regulator-fixed";
@@ -64,7 +60,6 @@
 		regulator-max-microvolt = <1000000>;
 		gpio = <&pm8150l_gpios 8 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
-		regulator-always-on;
 	};
 	cam_f_avdd: regulator-cam-f-avdd {
 		compatible = "regulator-fixed";
@@ -73,7 +68,6 @@
 		regulator-max-microvolt = <2800000>;
 		gpio = <&pm8150l_gpios 10 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
-		regulator-always-on;
 	};
 	cam_f_dvdd: regulator-cam-f-dvdd {
 		compatible = "regulator-fixed";
@@ -82,7 +76,6 @@
 		regulator-max-microvolt = <1050000>;
 		gpio = <&pm8150l_gpios 11 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
-		regulator-always-on;
 	};
 	cam_f_iovdd: regulator-cam-f-iovdd {
 		compatible = "regulator-fixed";
@@ -91,7 +84,6 @@
 		regulator-max-microvolt = <1800000>;
 		gpio = <&pm8150l_gpios 12 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
-		regulator-always-on;
 	};
 };
 
@@ -321,8 +313,8 @@
 	};
 };
 
-/* Stage 3: rear main IMX363 (24 MHz MCLK as in the sdm670 driver; rails are
- * always-on fixed regulators above, so the driver gets dummy supplies). */
+/* Stage 3: rear main IMX363 (24 MHz MCLK as in the sdm670 driver). The rear
+ * MVDD rail (gpio4) has no consumer and stays off. */
 &cci0_i2c0 {
 	/* OIS/AF controller; AF position in 0xF01A (LG CamX actuator data) */
 	lc898123: camera-lens@3e {
@@ -336,6 +328,9 @@
 		reg = <0x10>;
 		clocks = <&camcc CAM_CC_MCLK0_CLK>;
 		clock-frequency = <24000000>;
+		vana-supply = <&cam_rn_avdd>;
+		vdig-supply = <&cam_rn_dvdd>;
+		vif-supply = <&vreg_l1c_1p8>;
 		reset-gpios = <&tlmm 28 GPIO_ACTIVE_HIGH>;	/* driver drives 1 = running */
 		lens-focus = <&lc898123>;
 		orientation = <1>;	/* back */
