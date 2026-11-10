@@ -995,3 +995,11 @@ about 1 s through `/dev/video14` (stateful V4L2 decoder); the VPU powers off
 - Auto-suspend gotcha while testing: with charging paused by the 80% limit,
   the phone counts as on battery and suspends after 5 min without an SSH
   session. Hold a session open (`g8x 'exec sleep 3000'`).
+
+### Server mode and the awake idle drain, 2026-11-10
+
+- Auto-suspend is off again (`sleep-inactive-battery-type='nothing'`): the phone runs as a 24x7 server, and with the charge limit holding it counts as on battery even on the cable.
+- What blocks deep sleep (aosd/cxsd stay at 0) while awake: the modem, cDSP and SLPI all sleep; the ADSP is awake about 96% of the time with no PCM open and the SLIMbus NGD runtime-suspended.
+- Second blocker: the WCD934x MCLK fix keeps the PMIC clock `ln_bb_clk2` enabled forever (`extclk` of 217:250:1:0). Any LN_BB vote keeps the crystal (CXO) on, so aosd/cxsd are blocked even if the ADSP sleeps.
+- Do NOT `echo stop > /sys/class/remoteproc/remoteproc3/state` (ADSP) at runtime. The stop wedged in the clock framework: gnome-shell was stuck in clk_set_rate, storage was stuck in blk_mq, pid 1 and journald were in D state, and sudo hung. The watchdog did not fire. Recovery needed a manual reboot to fastboot and then `fastboot reboot`.
+- Next options: keep the ADSP from booting (no audio, for headless server use), or rework the mic fix so MCLK is released when no stream is open, then find what keeps the ADSP awake.
