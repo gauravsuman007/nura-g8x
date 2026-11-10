@@ -8,7 +8,7 @@ wrong, and how to recover a phone with both boot slots marked unbootable.
 
 ## Status
 
-Flashed to boot_b on 2026-11-08 (`out/boot-flash.img`, built with
+Flashed to boot_b on 2026-11-10 with hardware H.264/HEVC decode (`out/boot-flash.img`, previous in `out/boot-flash-prev8.img`). Earlier: flashed on 2026-11-08 (`out/boot-flash.img`, built with
 `TEST=0 OUT=out/boot-flash.img python3 build-dtb.py`; previous image kept as
 `out/boot-nura-good.img`).
 
