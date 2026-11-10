@@ -4,7 +4,7 @@ import re,struct,subprocess,sys,hashlib,zlib,os
 DSI=os.environ.get('DSI','1')=='1'
 AUDIO=os.environ.get('AUDIO','1')=='1'
 CAMERA=os.environ.get('CAMERA','1')=='1'
-VIDEO=os.environ.get('VIDEO','0')=='1'  # Iris: firmware start resets the phone (2026-11-10)
+VIDEO=os.environ.get('VIDEO','0')=='1'  # Iris: H.264 decode OK; HEVC decode and encode reset the phone (2026-11-10)
 TEST=os.environ.get('TEST','1')=='1'
 OUT=os.environ.get('OUT','out/boot-test.img')
 N='/Users/hellonfire/Coding/nura/'

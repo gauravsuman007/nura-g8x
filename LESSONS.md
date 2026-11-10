@@ -944,13 +944,35 @@ GNOME now suspends after 5 minutes idle on battery
 - With no SSH session the RAM-test image's testwd reboots after 120 s; that
   looked like suspend crashes at first.
 
-**Hardware video (Iris1) - blocked at firmware start.**
+**Hardware video (Iris1): H.264 decode works, HEVC/encode crash (RAM-boot tested 2026-11-10).**
 `extra-iris-sm8150.py` replaces 7.0's iris driver with CFM880/nabu-iris
-(Xiaomi Pad 5, SM8150, commit 6323e31; fix: `v4l2_fh_add/del` take the
+(Xiaomi Pad 5, SM8150, commit 6323e31; port fix: `v4l2_fh_add/del` take the
 file) and sets HW_CTRL_TRIGGER on the MVSC GDSC; `video-fragment.dtsi` adds
-the node (firmware `qcom/sm8150/lg-mh2lm/venus.mdt`). It probes and creates
-`qcom-iris-decoder/encoder`. Opening needs `allow_fw_boot=1`; the first open
-then resets the phone instantly with no log (TZ/XPU or bus fault). Suspects:
-LG's `venus_mem` at 0x98000000 (Pad 5 uses the dtsi's 0x96e00000), stream
-IDs, or PAS of the LG-signed image. The DT node is off by default
-(`VIDEO=1 python3 build-dtb.py` to test).
+the node (firmware `qcom/sm8150/lg-mh2lm/venus.mdt`, LG's `venus_mem` at
+0x98000000 is right: LG's dtbo moves it there). 720p H.264: 90 frames in
+about 1 s through `/dev/video14` (stateful V4L2 decoder); the VPU powers off
+5 s after the last user; suspend/resume and a decode afterwards work.
+- **Crash found: power-collapse race.** The first open reset the phone with
+  no log. Streaming `dmesg -w` to the Mac over SSH, with every `dev_dbg`
+  turned into `dev_emerg` + 300 ms pause, showed the sequence: firmware and
+  HFI init fine, then "power collapse", then a doorbell write -> reset. The
+  idle worker collapses the VPU when no session is listed, but `iris_open()`
+  lists its session only after core init, which drops `core->lock` while
+  waiting for the firmware. Fix: an open-in-progress counter (`pc_hold`)
+  that the worker respects. Firmware boot is allowed by default now.
+- Debug method for instant resets with no log: stream `dmesg -w` over SSH
+  and slow the suspect path down; pstore does not survive the reset.
+- Disabling power collapse (`power_collapse=0`) also avoids the crash but
+  leaves the video PLL, GDSCs and MMCX on forever (standby drain).
+- Status per codec (RAM boot, same image): H.264 decode good (v4l2-ctl and
+  GStreamer `v4l2h264dec`); HEVC decode through GStreamer `v4l2h265dec`
+  reset the phone (v4l2-ctl only fed one frame: it has no HEVC/IVF frame
+  parser); VP9 untested. H.264 and HEVC encode produce valid streams with
+  chroma bands even with input padded to the 736-row layout the driver
+  reports, and the phone reset a few seconds after encoding. The encoder node
+  is hidden unless `enable_encoder=1`. The DT node stays off by default and
+  `out/boot-video-flash.img` is not flashed.
+- With the module autoloading, the codec takes `/dev/video0/1`; find it by
+  name (`qcom-iris-decoder`). Run depmod after copying into `updates/`.
+- The fixed module sits in `updates/` on the phone; without the DT node it
+  never binds, so the flashed system is unaffected.
