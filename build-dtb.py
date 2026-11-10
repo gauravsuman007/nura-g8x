@@ -5,6 +5,7 @@ DSI=os.environ.get('DSI','1')=='1'
 AUDIO=os.environ.get('AUDIO','1')=='1'
 CAMERA=os.environ.get('CAMERA','1')=='1'
 VIDEO=os.environ.get('VIDEO','1')=='1'
+POWER=os.environ.get('POWER','0')=='1'
 TEST=os.environ.get('TEST','1')=='1'
 OUT=os.environ.get('OUT','out/boot-test.img')
 N='/Users/hellonfire/Coding/nura/'
@@ -12,7 +13,7 @@ S='/private/tmp/claude-501/-Users-hellonfire--claude-spares-spare-robjgK/97c2ece
 def run(*a,**k): return subprocess.run(a,check=True,**k)
 run('docker','exec','nura-kbd','sh','-c','''set -e
 cd /work/linux; cp /n/sm8150-lg-mh2lm.dts arch/arm64/boot/dts/qcom/
-'''+('cat /n/dsi-fragment.dtsi >> arch/arm64/boot/dts/qcom/sm8150-lg-mh2lm.dts\n' if DSI else '')+('cat /n/audio-fragment.dtsi >> arch/arm64/boot/dts/qcom/sm8150-lg-mh2lm.dts\n' if AUDIO else '')+('cat /n/camera-fragment.dtsi >> arch/arm64/boot/dts/qcom/sm8150-lg-mh2lm.dts\n' if CAMERA else '')+('cat /n/video-fragment.dtsi >> arch/arm64/boot/dts/qcom/sm8150-lg-mh2lm.dts\n' if VIDEO else '')+'''
+'''+('cat /n/dsi-fragment.dtsi >> arch/arm64/boot/dts/qcom/sm8150-lg-mh2lm.dts\n' if DSI else '')+('cat /n/audio-fragment.dtsi >> arch/arm64/boot/dts/qcom/sm8150-lg-mh2lm.dts\n' if AUDIO else '')+('cat /n/camera-fragment.dtsi >> arch/arm64/boot/dts/qcom/sm8150-lg-mh2lm.dts\n' if CAMERA else '')+('cat /n/video-fragment.dtsi >> arch/arm64/boot/dts/qcom/sm8150-lg-mh2lm.dts\n' if VIDEO else '')+('cat /n/power-fragment.dtsi >> arch/arm64/boot/dts/qcom/sm8150-lg-mh2lm.dts\n' if POWER else '')+'''
 make ARCH=arm64 LLVM=1 DTC_FLAGS=-@ qcom/sm8150-lg-mh2lm.dtb >/dev/null
 cp arch/arm64/boot/dts/qcom/sm8150-lg-mh2lm.dtb /n/sm8150-lg-mh2lm.base.dtb''')
 o=N+'out/probes/'

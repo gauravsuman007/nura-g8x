@@ -1,0 +1,9 @@
+
+/* Idle power test (2026-11-10): ath10k holds both clocks for as long as
+ * Wi-Fi is up. rf_clk2 keeps CXO on (blocks aosd); qdss is a debug vote.
+ * Both are optional in ath10k_snoc. Test whether WCN3990 still works with
+ * the crystal requested by its own pin, as on Android. */
+&wifi {
+	/delete-property/ clocks;
+	/delete-property/ clock-names;
+};
