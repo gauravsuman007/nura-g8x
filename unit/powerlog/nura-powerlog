@@ -1,0 +1,16 @@
+#!/bin/sh
+# Unplugged power logger (2026-11-10): one CSV line per minute to
+# /var/lib/nura-powerlog/log.csv. qcom_stats are count/accumulated-duration
+# (19.2 MHz ticks); cpuidle is the sum of state1 (power collapse) time in us.
+D=/var/lib/nura-powerlog; mkdir -p $D; L=$D/log.csv
+B=/sys/class/power_supply/qcom-battery; Q=/sys/kernel/debug/qcom_stats
+S="aosd cxsd ddr adsp cdsp slpi modem"
+[ -s $L ] || { printf "time,up,cap,uA,uV,status,usb_online,wlan,wifi_link,load,cpu_pc_us"; for s in $S; do printf ",%s_n,%s_t" $s $s; done; echo; } > $L
+while :; do
+  l="$(date +%s),$(cut -d. -f1 /proc/uptime),$(cat $B/capacity),$(cat $B/current_now),$(cat $B/voltage_now),$(cat $B/status)"
+  l="$l,$(cat /sys/class/power_supply/pm8150b-charger/online 2>/dev/null),$(cat /sys/class/net/wlan0/operstate 2>/dev/null),$(iw dev wlan0 link 2>/dev/null | awk '/signal/{print $2}')"
+  l="$l,$(cut -d' ' -f1 /proc/loadavg),$(cat /sys/devices/system/cpu/cpu*/cpuidle/state1/time | awk '{s+=$1} END{printf "%d", s}')"
+  for s in $S; do l="$l,$(awk '/^Count/{c=$NF} /^Accum/{a=$NF} END{printf "%s,%s", c, a}' $Q/$s)"; done
+  echo "$l" >> $L; sync $L 2>/dev/null || sync
+  sleep 60
+done
