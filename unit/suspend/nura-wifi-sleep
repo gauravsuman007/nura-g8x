@@ -1,0 +1,18 @@
+#!/bin/sh
+# systemd-sleep hook: ath10k_snoc crashes the G8x when the system suspends
+# with Wi-Fi up (s2idle, devices stage). Taking Wi-Fi down first avoids it.
+# Installed as /usr/lib/systemd/system-sleep/nura-wifi-sleep.
+case "$1" in
+pre)
+	rfkill block wlan
+	# wait until mac80211 has stopped the radio
+	for i in 1 2 3 4 5 6 7 8 9 10; do
+		ip link show wlan0 2>/dev/null | grep -q "state UP" || break
+		sleep 0.3
+	done
+	;;
+post)
+	rfkill unblock wlan
+	;;
+esac
+exit 0

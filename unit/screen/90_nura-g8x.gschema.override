@@ -1,8 +1,10 @@
-# LG G8x: the power button is broken, so never auto-suspend (volume keys
-# cannot wake the phone from suspend yet). Blank the screen after 5 minutes.
+# LG G8x: the power button is broken; Volume Up / Assistant wake from suspend.
 [org.gnome.settings-daemon.plugins.power]
 sleep-inactive-ac-type='nothing'
-sleep-inactive-battery-type='nothing'
+# On battery, suspend 5 minutes after the last input (2026-11-10). Volume Up
+# or the Assistant key wakes it; Wi-Fi is taken down by nura-wifi-sleep.
+sleep-inactive-battery-type='suspend'
+sleep-inactive-battery-timeout=300
 idle-dim=true
 # auto-brightness from the APDS9169 light sensor (via SLPI)
 ambient-enabled=true

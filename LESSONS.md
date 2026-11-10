@@ -907,3 +907,50 @@ and its status changes a moment later, so the driver re-reads it for 9 s.
 Input is restored at probe and shutdown. UPower also needs a `CHARGE_LIMIT`
 udev property on the battery or it reports "unsupported"
 (`unit/battery/61-nura-charge-limit.rules`, 75-80%).
+
+## Standby, suspend and hardware video, 2026-11-10
+
+**Overnight drain.** 9.5 h from 22:27 to empty, about 1.3 W screen-off. With
+the screen off the SoC never reaches AOSS sleep or CX collapse (qcom_stats
+`aosd`/`cxsd` stay 0) and the ADSP almost never sleeps. Measured with
+charging paused through the charge-limit attributes (USB data stays up), in
+A/B steps of about +-50 mW: dropping `clk/pd/regulator_ignore_unused` ~0,
+WCD934x MCLK released ~0, Wi-Fi off -150 mW, modem/Bluetooth/big-core cap
+small. nura-gyro and nura-touch-guard each used ~1.5% of a core overnight.
+Only suspend fixes the baseline.
+
+**WCD934x MCLK v2 (rejected).** Letting MCLK stop and replaying the regmap
+cache (`regcache_mark_dirty` when sysclk stops, `regcache_sync` when it
+starts) released `ln_bb_clk2` but brought the silent mic back on a
+codec-first boot and saved nothing. v1 (MCLK always on) stays. Test codec
+modules by swapping them in `updates/` with a backup in `/var/lib/`.
+
+**Suspend (s2idle) works; Wi-Fi was the crash.** Method: `pm_test` stages
+(freezer passed, devices crashed), then unbinding driver groups before a
+devices-stage test, each from a RAM boot (`cycle.sh`-style loop). Culprit:
+ath10k_snoc when the system suspends with Wi-Fi up; with the radio off every
+stage and real s2idle pass. `unit/suspend/nura-wifi-sleep` (systemd-sleep
+hook) rfkills Wi-Fi before suspend and unblocks it after; NetworkManager also
+takes wlan0 down first. 20 min of s2idle cost 1% (38 -> 37) against about 3%
+awake; resumed by RTC. Wake sources: Volume Up and Assistant (gpio-keys),
+modem, IPA, RTC, charger. Volume Down (resin) is not a wake source.
+GNOME now suspends after 5 minutes idle on battery
+(`90_nura-g8x.gschema.override`).
+- pstore/ramoops comes back empty after a watchdog reset: a crash in suspend
+  leaves no log. Bisect instead.
+- Open SSH sessions hold a logind *block* inhibitor, and polkit refuses
+  `--check-inhibitors=no` even for root. Suspend tests over SSH: use
+  `rtcwake -m freeze` (bypasses logind) or let all sessions close.
+- With no SSH session the RAM-test image's testwd reboots after 120 s; that
+  looked like suspend crashes at first.
+
+**Hardware video (Iris1) - blocked at firmware start.**
+`extra-iris-sm8150.py` replaces 7.0's iris driver with CFM880/nabu-iris
+(Xiaomi Pad 5, SM8150, commit 6323e31; fix: `v4l2_fh_add/del` take the
+file) and sets HW_CTRL_TRIGGER on the MVSC GDSC; `video-fragment.dtsi` adds
+the node (firmware `qcom/sm8150/lg-mh2lm/venus.mdt`). It probes and creates
+`qcom-iris-decoder/encoder`. Opening needs `allow_fw_boot=1`; the first open
+then resets the phone instantly with no log (TZ/XPU or bus fault). Suspects:
+LG's `venus_mem` at 0x98000000 (Pad 5 uses the dtsi's 0x96e00000), stream
+IDs, or PAS of the LG-signed image. The DT node is off by default
+(`VIDEO=1 python3 build-dtb.py` to test).

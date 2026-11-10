@@ -65,8 +65,9 @@ Grouped by where each part belongs (see "Scope" below).
 | `.../device-lg-mh2lm/ucm/` | device package | ALSA UCM profile (speaker, headphones, mics) |
 | `.../device-lg-mh2lm/sensors/` | device package | hexagonrpcd and iio-sensor-proxy drop-ins |
 | `pmaports/upstream-patches/` | other projects | hexagonrpc and libssc fixes, to send upstream |
-| `unit/screen/` | this phone only | 5-minute blank, no suspend, pocket guard (frozen) |
+| `unit/screen/` | this phone only | screen blank, suspend after 5 min idle on battery, pocket guard (frozen) |
 | `unit/battery/` | device package | udev rule that enables GNOME's Preserve Battery Health (75-80%) |
+| `unit/suspend/` | device package | systemd-sleep hook: Wi-Fi off across suspend (ath10k crash) |
 | `unit/sensors/` | this phone only | boot check: alerts if the SLPI sensor core did not start |
 | `devtools/testwd/` | development | auto-restart and watchdog for test images |
 | `devtools/bootok/` | retired | old boot slot marker, replaced by `qbootctl` on the phone |
