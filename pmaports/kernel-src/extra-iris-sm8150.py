@@ -88,6 +88,20 @@ int iris_open(struct file *filp)
     a = 'static int iris_register_video_device('
     s = s.replace(a, 'static bool enable_encoder;\nmodule_param(enable_encoder, bool, 0444);\nMODULE_PARM_DESC(enable_encoder, "Register the (unstable) encoder device");\n\n' + a, 1)
     open(p, 'w').write(s)
+    # VP9 (G8x, 2026-11-10): LG's venus firmware answers a VP9 session with
+    # error 0x1004; the driver recovers, but a player that sees VP9 listed
+    # picks the hardware decoder and fails. Hide it unless enable_vp9=1.
+    p = D + 'iris_vdec.c'
+    s = open(p).read()
+    a = '\tif (i == size || fmt[i].type != type)\n\t\treturn NULL;\n'
+    assert s.count(a) == 1
+    s = s.replace(a, '\tif (i == size || fmt[i].type != type ||\n\t    (fmt[i].pixfmt == V4L2_PIX_FMT_VP9 && !enable_vp9))\n\t\treturn NULL;\n')
+    a = '\tif (index >= size || fmt[index].type != type)\n\t\treturn NULL;\n'
+    assert s.count(a) == 1
+    s = s.replace(a, '\tif (index >= size || fmt[index].type != type ||\n\t    (fmt[index].pixfmt == V4L2_PIX_FMT_VP9 && !enable_vp9))\n\t\treturn NULL;\n')
+    a = 'static const struct iris_fmt iris_vdec_formats[] = {'
+    s = s.replace(a, 'static bool enable_vp9;\nmodule_param(enable_vp9, bool, 0644);\nMODULE_PARM_DESC(enable_vp9, "List VP9 decode (LG firmware rejects it)");\n\n' + a, 1)
+    open(p, 'w').write(s)
     open(D + '.nura-sm8150', 'w').write('nabu-iris 6323e31\n')
 
 p = L + 'drivers/clk/qcom/videocc-sm8150.c'

@@ -944,7 +944,7 @@ GNOME now suspends after 5 minutes idle on battery
 - With no SSH session the RAM-test image's testwd reboots after 120 s; that
   looked like suspend crashes at first.
 
-**Hardware video (Iris1): H.264 decode works, HEVC/encode crash (RAM-boot tested 2026-11-10).**
+**Hardware video (Iris1): H.264 and HEVC decode work (RAM-boot tested 2026-11-10).**
 `extra-iris-sm8150.py` replaces 7.0's iris driver with CFM880/nabu-iris
 (Xiaomi Pad 5, SM8150, commit 6323e31; port fix: `v4l2_fh_add/del` take the
 file) and sets HW_CTRL_TRIGGER on the MVSC GDSC; `video-fragment.dtsi` adds
@@ -976,3 +976,22 @@ about 1 s through `/dev/video14` (stateful V4L2 decoder); the VPU powers off
   name (`qcom-iris-decoder`). Run depmod after copying into `updates/`.
 - The fixed module sits in `updates/` on the phone; without the DT node it
   never binds, so the flashed system is unaffected.
+- Follow-up the same day: HEVC decode works too. The "HEVC crash" came from
+  test artifacts: a raw `.h265` file that `h265parse` rejected, and
+  unloading the module after a session error (rmmod/modprobe after a
+  failed session resets the phone; apps never unload it). With MKV clips
+  through `matroskademux ! parsebin ! v4l2h26xdec`, a sequence of rapid
+  opens, H.264, HEVC, VP9 (rejected), H.264, HEVC passes and the phone stays
+  up. VP9: LG's firmware answers with session error 0x1004, so VP9 is no
+  longer listed (`enable_vp9=1` to try).
+- Encoder: an H.264 encode is correct (frame 0 checked) and completes, but
+  about 20-30 s after the encoder's power collapse the phone hangs silently
+  and the 30 s hardware watchdog resets it. Decode followed by power
+  collapse never did. Suspect: powering down the encoder core (vcodec1).
+  Encoder stays hidden (`enable_encoder=1`).
+- The fully logged build (every dev_dbg as dev_emerg, no pause) changes
+  timing enough to hide some failures; the 150 ms-pause build makes the
+  firmware time out (-110). Compare against the plain module each time.
+- Auto-suspend gotcha while testing: with charging paused by the 80% limit,
+  the phone counts as on battery and suspends after 5 min without an SSH
+  session. Hold a session open (`g8x 'exec sleep 3000'`).
