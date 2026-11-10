@@ -1022,3 +1022,11 @@ Logged by `unit/powerlog/nura-powerlog` (systemd-run unit, a CSV line every minu
 - aosd/cxsd/ddr were still 0 off USB, so USB was not the deep-sleep blocker. The ADSP was asleep 0% of the time (held by the sound card, see above). cDSP and SLPI were asleep 100% and the modem 91%. The CPUs were about 98% in power collapse.
 - Logger bug: awk `printf "%d"` overflows above 2^31, which made the summed cpuidle time read as 4%. Fixed with `%.0f`.
 - Next lead for whole-SoC deep sleep: why loading snd_soc_sm8150 alone (no stream) keeps the ADSP awake, plus the WCD MCLK (`ln_bb_clk2`). Measured on USB earlier, audio cost only about 35 mW, but CX collapse may be worth more now that the camera rails are off.
+
+### Chasing whole-SoC deep sleep, 2026-11-10
+
+- Without the sound card and qcom_iris, and with the `*_ignore_unused` flags dropped (RAM test image, 32 min unplugged): aosd/cxsd were still 0, at about 625 mW (vs 609 mW for the normal image). So audio and video decoding cost about nothing off USB, and fixing them is not worth it for idle power.
+- **XO blocker: Wi-Fi.** ath10k_snoc keeps `rf_clk2` enabled (`cxo_ref_clk_pin`) for as long as the driver is bound. An enabled RPMh RF clock buffer keeps CXO on, so aosd can't happen while Wi-Fi is up. A server needs Wi-Fi, so this is the floor unless the WCN3990 XO vote can be dropped while the link is idle (downstream handles it in firmware/icnss; nothing in mainline).
+- **CX blocker: display clocks.** With the screen off (DPU, DSI and MDSS runtime-suspended), dispcc still has `disp_cc_pll1 → mdss_mdp_clk` (200 MHz) enabled, held by the display-controller consumer, and keeps `mmcx` at level 64. This is not the bootloader: it persists without clk_ignore_unused. It looks like an enable leak in msm DPU/MDSS. Not chased further, since XO stays on anyway.
+- qcom_iris has runtime PM control forced `on` (it does its own power collapse). ufs_card_gdsc stays on with no card.
+- Conclusion for server use: about 0.6 W unplugged with Wi-Fi on is close to the floor on mainline. Real gains now need Wi-Fi XO handling (hard) or suspend.
