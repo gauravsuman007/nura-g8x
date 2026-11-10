@@ -9,7 +9,7 @@ S="aosd cxsd ddr adsp cdsp slpi modem"
 while :; do
   l="$(date +%s),$(cut -d. -f1 /proc/uptime),$(cat $B/capacity),$(cat $B/current_now),$(cat $B/voltage_now),$(cat $B/status)"
   l="$l,$(cat /sys/class/power_supply/pm8150b-charger/online 2>/dev/null),$(cat /sys/class/net/wlan0/operstate 2>/dev/null),$(iw dev wlan0 link 2>/dev/null | awk '/signal/{print $2}')"
-  l="$l,$(cut -d' ' -f1 /proc/loadavg),$(cat /sys/devices/system/cpu/cpu*/cpuidle/state1/time | awk '{s+=$1} END{printf "%d", s}')"
+  l="$l,$(cut -d' ' -f1 /proc/loadavg),$(cat /sys/devices/system/cpu/cpu*/cpuidle/state1/time | awk '{s+=$1} END{printf "%.0f", s}')"
   for s in $S; do l="$l,$(awk '/^Count/{c=$NF} /^Accum/{a=$NF} END{printf "%s,%s", c, a}' $Q/$s)"; done
   echo "$l" >> $L; sync $L 2>/dev/null || sync
   sleep 60

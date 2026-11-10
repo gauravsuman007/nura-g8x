@@ -1013,3 +1013,12 @@ Profile (screen really off via Mutter PowerSaveMode=3, charging paused by settin
 - **Camera rails were always-on (the main finding).** `camera-fragment.dtsi` kept all 9 camera fixed regulators `regulator-always-on`, left over from the CCI scan stage, and imx363 had no supplies wired. Removing always-on and giving imx363 `vana`/`vdig`/`vif` (cam_rn_avdd, cam_rn_dvdd, L1C) cut idle draw from about 977 mW to about 684 mW (−290 mW, 30%), on a RAM-booted test image. All 3 cameras still capture 30 frames, and the rails turn off again afterwards. The lens rail (afvdd) stays on, held by the lens driver. The rear MVDD rail has no consumer and stays off.
 - Method traps: the charge limit resumes charging below its start threshold mid-run, so set thresholds below capacity for the whole profile and restore them on exit. `nohup` jobs started over SSH die when the session closes (logind), so use `systemd-run --unit=…`. On this SoC the deep CPU idle state is cpuidle `state1`. `bl_power=4` turns off only the backlight, not the display pipeline.
 - Still open: PMIC bucks s8c/s5a/s6a run in forced-PWM ("fast") mode. ufs_card_gdsc is on with no card. aosd/cxsd are still 0. The lens driver holds afvdd while idle.
+
+### Unplugged run with the camera-rail fix, 2026-11-10
+
+Logged by `unit/powerlog/nura-powerlog` (systemd-run unit, a CSV line every minute) over 64 min off USB. Conditions: screen off, Wi-Fi connected at about −59 dBm throughout, auto-suspend off.
+
+- Average draw 609 mW (range 513–925); capacity went 79→76%. That's about 4.7%/h, so about 21 h from full as an always-on server (it was about 9.5 h overnight before).
+- aosd/cxsd/ddr were still 0 off USB, so USB was not the deep-sleep blocker. The ADSP was asleep 0% of the time (held by the sound card, see above). cDSP and SLPI were asleep 100% and the modem 91%. The CPUs were about 98% in power collapse.
+- Logger bug: awk `printf "%d"` overflows above 2^31, which made the summed cpuidle time read as 4%. Fixed with `%.0f`.
+- Next lead for whole-SoC deep sleep: why loading snd_soc_sm8150 alone (no stream) keeps the ADSP awake, plus the WCD MCLK (`ln_bb_clk2`). Measured on USB earlier, audio cost only about 35 mW, but CX collapse may be worth more now that the camera rails are off.
