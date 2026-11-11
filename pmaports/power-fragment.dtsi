@@ -7,3 +7,47 @@
 	/delete-property/ clocks;
 	/delete-property/ clock-names;
 };
+
+/* Interconnect votes missing from sm8150.dtsi (2026-11-10). qnoc-sm8150 had
+ * no sync_state, so every NoC/DDR stayed at boot bandwidth (INT_MAX) forever
+ * and the SoC could never sleep. With sync_state added, masters without
+ * votes lose their bus: UFS (aggre1 path) and the QUP core clock (bcm_qup0,
+ * which only QUP master paths vote) stall and the phone crashes. Give them
+ * votes as sm8250 does. All tagged active-only: held while the apps CPU
+ * subsystem is awake, dropped from the RPMh sleep set. The QUP core clock
+ * BCM sits on the QUP master nodes (no qup_virt on sm8150), so a QUP->DDR
+ * path doubles as "qup-core". */
+#include <dt-bindings/interconnect/qcom,icc.h>
+
+&ufs_mem_hc {
+	interconnects = <&aggre1_noc MASTER_UFS_MEM QCOM_ICC_TAG_ACTIVE_ONLY &mc_virt SLAVE_EBI_CH0 QCOM_ICC_TAG_ACTIVE_ONLY>,
+			<&gem_noc MASTER_AMPSS_M0 QCOM_ICC_TAG_ACTIVE_ONLY &config_noc SLAVE_UFS_MEM_CFG QCOM_ICC_TAG_ACTIVE_ONLY>;
+	interconnect-names = "ufs-ddr", "cpu-ufs";
+};
+
+&i2c4 {
+	interconnects = <&aggre1_noc MASTER_QUP_0 QCOM_ICC_TAG_ACTIVE_ONLY &mc_virt SLAVE_EBI_CH0 QCOM_ICC_TAG_ACTIVE_ONLY>,
+			<&gem_noc MASTER_AMPSS_M0 QCOM_ICC_TAG_ACTIVE_ONLY &config_noc SLAVE_QUP_0 QCOM_ICC_TAG_ACTIVE_ONLY>,
+			<&aggre1_noc MASTER_QUP_0 QCOM_ICC_TAG_ACTIVE_ONLY &mc_virt SLAVE_EBI_CH0 QCOM_ICC_TAG_ACTIVE_ONLY>;
+	interconnect-names = "qup-core", "qup-config", "qup-memory";
+};
+
+&i2c9 {
+	interconnects = <&aggre2_noc MASTER_QUP_1 QCOM_ICC_TAG_ACTIVE_ONLY &mc_virt SLAVE_EBI_CH0 QCOM_ICC_TAG_ACTIVE_ONLY>,
+			<&gem_noc MASTER_AMPSS_M0 QCOM_ICC_TAG_ACTIVE_ONLY &config_noc SLAVE_QUP_1 QCOM_ICC_TAG_ACTIVE_ONLY>,
+			<&aggre2_noc MASTER_QUP_1 QCOM_ICC_TAG_ACTIVE_ONLY &mc_virt SLAVE_EBI_CH0 QCOM_ICC_TAG_ACTIVE_ONLY>;
+	interconnect-names = "qup-core", "qup-config", "qup-memory";
+};
+
+&i2c17 {
+	interconnects = <&aggre2_noc MASTER_QUP_2 QCOM_ICC_TAG_ACTIVE_ONLY &mc_virt SLAVE_EBI_CH0 QCOM_ICC_TAG_ACTIVE_ONLY>,
+			<&gem_noc MASTER_AMPSS_M0 QCOM_ICC_TAG_ACTIVE_ONLY &config_noc SLAVE_QUP_2 QCOM_ICC_TAG_ACTIVE_ONLY>,
+			<&aggre2_noc MASTER_QUP_2 QCOM_ICC_TAG_ACTIVE_ONLY &mc_virt SLAVE_EBI_CH0 QCOM_ICC_TAG_ACTIVE_ONLY>;
+	interconnect-names = "qup-core", "qup-config", "qup-memory";
+};
+
+&uart13 {
+	interconnects = <&aggre2_noc MASTER_QUP_2 QCOM_ICC_TAG_ACTIVE_ONLY &mc_virt SLAVE_EBI_CH0 QCOM_ICC_TAG_ACTIVE_ONLY>,
+			<&gem_noc MASTER_AMPSS_M0 QCOM_ICC_TAG_ACTIVE_ONLY &config_noc SLAVE_QUP_2 QCOM_ICC_TAG_ACTIVE_ONLY>;
+	interconnect-names = "qup-core", "qup-config";
+};

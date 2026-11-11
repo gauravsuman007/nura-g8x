@@ -2,8 +2,8 @@
 # boots an image from RAM via fastboot; a bad image falls back to boot_b on the next reset
 img=$1; PW=$(cat /Users/hellonfire/Coding/nura/test-image-password.txt); G=/Users/hellonfire/Coding/nura/out/probes/g8x
 $G "echo '$PW' | sudo -S -p '' systemctl reboot --reboot-argument=bootloader" >/dev/null 2>&1
-n=0; until fastboot devices | grep -q . || [ $n -ge 40 ]; do n=$((n+1)); perl -e 'select(undef,undef,undef,1)'; done
-fastboot devices | grep -q . || { echo 'no fastboot device after 40s'; exit 1; }
+n=0; until fastboot devices | grep -q . || [ $n -ge 90 ]; do n=$((n+1)); perl -e 'select(undef,undef,undef,1)'; done
+fastboot devices | grep -q . || { echo 'no fastboot device after 90s'; exit 1; }
 v=$(fastboot getvar all 2>&1)
 cur=$(echo "$v" | sed -n 's/.*current-slot://p' | head -1); cur=${cur// /}
 rc=$(echo "$v" | sed -n "s/.*slot-retry-count:$cur: *//p" | head -1)
