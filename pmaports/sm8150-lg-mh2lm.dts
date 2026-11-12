@@ -401,7 +401,7 @@
 		};
 
 		vreg_l18a_0p8: ldo18 {
-			regulator-min-microvolt = <880000>;
+			regulator-min-microvolt = <912000>;
 			regulator-max-microvolt = <912000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 			regulator-name = "pm8150_l18a_0p8";
@@ -700,6 +700,15 @@
 		line-name = "lge-sbu-sel";
 	};
 
+	/* stock lge_sbu_switch ldo-en: low in the AUX state (high powers
+	 * LG's USB-ID/moisture sensing on SBU) */
+	lge-sbu-ldo-en-hog {
+		gpio-hog;
+		gpios = <119 GPIO_ACTIVE_HIGH>;
+		output-low;
+		line-name = "lge-sbu-ldo-en";
+	};
+
 	dp_aux_sw_default: dp-aux-sw-default-state {
 		pins = "gpio42", "gpio148";
 		function = "gpio";
@@ -756,7 +765,6 @@
 &usb_1_dwc3 {
 	dr_mode = "otg";
 	usb-role-switch;
-	maximum-speed = "high-speed";
 };
 
 &usb_1_dwc3_hs {
@@ -845,15 +853,22 @@
 	vdda-pll-supply = <&vreg_l5a_0p875>;
 	vdda18-supply = <&vreg_l12a_1p8>;
 	vdda33-supply = <&vreg_l2a_3p1>;
+
+	/* stock qcom,hsusb-phy-tune-host <0x48 0xf0 0x2e 0x03> (OVERRIDE_X0..X3) */
+	qcom,squelch-detector-bp = <530>;
+	qcom,hs-disconnect-bp = <(-272)>;
+	qcom,hs-amplitude-bp = <(-660)>;
+	qcom,pre-emphasis-amplitude-bp = <30000>;
+	qcom,pre-emphasis-duration-bp = <10000>;
 };
 
 &usb_1_qmpphy {
 	status = "okay";
 
-	vdda-phy-supply = <&vreg_l3c_1p2>;
-	/* stock ssphy@88e8000 vdd-supply = pm8150_l18 (912 mV); with l5a the
-	 * PHY init times out the first time USB3/DP lanes are used */
-	vdda-pll-supply = <&vreg_l18a_0p8>;
+	/* names as on every mainline sm8150 board (only the loads differ);
+	 * stock ssphy@88e8000 vdd-supply = pm8150_l18 at 912 mV */
+	vdda-phy-supply = <&vreg_l18a_0p8>;
+	vdda-pll-supply = <&vreg_l3c_1p2>;
 	mode-switch;
 	orientation-switch;
 };

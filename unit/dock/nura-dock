@@ -1,0 +1,75 @@
+#!/usr/bin/python3
+"""Docked mode for GNOME Mobile (Nura, LG G8x).
+
+When an external monitor (USB-C DisplayPort dock or adapter) appears, make it
+the primary screen so GNOME switches to its desktop layout there, at the
+largest mode with at least 50 Hz, with the phone panel to its right. The
+config is applied as temporary, so on unplug Mutter falls back to the phone
+panel alone by itself. Runs in the user session (systemd --user).
+"""
+import sys
+from gi.repository import Gio, GLib
+
+NAME = 'org.gnome.Mutter.DisplayConfig'
+PATH = '/org/gnome/Mutter/DisplayConfig'
+bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+
+
+def log(*a):
+    print('nura-dock:', *a, flush=True)
+
+
+def call(method, args=None):
+    return bus.call_sync(NAME, PATH, NAME, method, args, None, 0, -1, None).unpack()
+
+
+def builtin(conn, props):
+    return props.get('is-builtin', False) or conn.startswith(('DSI', 'eDP'))
+
+
+def apply_docked():
+    serial, monitors, logical, _ = call('GetCurrentState')
+    ext = panel = None
+    for (conn, _v, _p, _s), modes, props in monitors:
+        if builtin(conn, props):
+            panel = (conn, modes)
+        elif ext is None:
+            ext = (conn, modes)
+    if not ext:
+        return
+    for l in logical:
+        if l[4] and any(m[0] == ext[0] for m in l[5]):
+            return  # already docked
+    # mode tuple: id, width, height, refresh, preferred scale, supported scales, props
+    good = [m for m in ext[1] if m[3] >= 49.5] or ext[1]
+    best = max(good, key=lambda m: (m[1] * m[2], m[3]))
+    scale = 2.0 if best[1] >= 3840 else 1.0
+    if scale not in best[5]:
+        scale = best[4]
+    lm = [(0, 0, scale, 0, True, [(ext[0], best[0], {})])]
+    if panel:
+        cur = [m for m in panel[1] if m[6].get('is-current')] or panel[1][:1]
+        pl = [l for l in logical if any(m[0] == panel[0] for m in l[5])]
+        pscale, ptrans = (pl[0][2], pl[0][3]) if pl else (cur[0][4], 0)
+        lm.append((int(round(best[1] / scale)), 0, pscale, ptrans, False,
+                   [(panel[0], cur[0][0], {})]))
+    log('docked:', ext[0], best[0], 'scale', scale)
+    try:
+        call('ApplyMonitorsConfig',
+             GLib.Variant('(uua(iiduba(ssa{sv}))a{sv})', (serial, 1, lm, {})))
+    except GLib.Error as e:
+        log('apply failed:', e.message)
+
+
+def changed(*_):
+    # let Mutter settle (hotplug sends several updates)
+    GLib.timeout_add(800, lambda: (apply_docked(), False)[1])
+
+
+def appeared(*_):
+    bus.signal_subscribe(NAME, NAME, 'MonitorsChanged', PATH, None, 0, changed)
+    changed()
+
+
+Gio.bus_watch_name_on_connection(bus, NAME, 0, appeared, None)
+GLib.MainLoop().run()

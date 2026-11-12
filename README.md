@@ -8,7 +8,7 @@ wrong, and how to recover a phone with both boot slots marked unbootable.
 
 ## Status
 
-Flashed to boot_b on 2026-11-10 with hardware H.264/HEVC decode (`out/boot-flash.img`, previous in `out/boot-flash-prev8.img`). Earlier: flashed on 2026-11-08 (`out/boot-flash.img`, built with
+Flashed to boot_b on 2026-11-12 as build #66 with USB-C dock support (`out/boot-flash.img`, previous #53 in `out/boot-flash-prev.img`). Flashed 2026-11-10 with hardware H.264/HEVC decode. Earlier: flashed on 2026-11-08 (`out/boot-flash.img`, built with
 `TEST=0 OUT=out/boot-flash.img python3 build-dtb.py`; previous image kept as
 `out/boot-nura-good.img`).
 
@@ -26,11 +26,13 @@ on I2C9, needs `gpi_dma1`), optional Assistant-key helpers
 Assistant + Volume Down to restart a frozen phone, handled in the kernel).
 Kernel flashed to boot_b on 2026-11-08 (`out/boot-flash.img`; previous ones
 kept as `out/boot-flash-prev.img` and `out/boot-flash-prev2.img`).
+Flashed 2026-11-12 (build #66): **USB-C docks work**: external monitor over
+DisplayPort alt mode (up to 2560x1440 at 60 Hz on 2 lanes), automatic docked
+mode (the monitor becomes the GNOME desktop on plug-in, `nura-dock` user
+service), dock USB at 5 Gbit/s with keyboard, mouse, USB audio and Gigabit
+Ethernet; tested with a Dell Thunderbolt dock. See LESSONS.md "USB-C dock".
 Flashed 2026-11-09: gyroscope as an input motion device (`nura-gyro`),
-USB-C Type-C/PD with DisplayPort alt mode (PHY supply and SBU routing fixed;
-link trains and video runs, but no picture yet through a Dell Thunderbolt
-dock's DP-to-HDMI converter; a direct USB-C to HDMI/DP adapter is untested),
-auto-rotate (mount matrix on fastrpc-adsp), Assistant key as power plus
+USB-C Type-C/PD with DisplayPort alt mode, auto-rotate (mount matrix on fastrpc-adsp), Assistant key as power plus
 Assistant + Volume Down 8 s restart. `out/probes/dpshot.sh` screenshots both
 screens; `out/probes/dpmode.py WxH` sets the DP mode.
 Untested: headphone jack and headset mic (WCD9340, set up), GPS fix.
@@ -69,6 +71,7 @@ Grouped by where each part belongs (see "Scope" below).
 | `unit/battery/` | device package | udev rule that enables GNOME's Preserve Battery Health (75-80%) |
 | `unit/suspend/` | device package | systemd-sleep hook: Wi-Fi off across suspend (ath10k crash) |
 | `unit/sensors/` | this phone only | boot check: alerts if the SLPI sensor core did not start |
+| `unit/dock/` | device package | `nura-dock` user service: external monitor becomes the primary GNOME desktop on plug-in |
 | `devtools/testwd/` | development | auto-restart and watchdog for test images |
 | `devtools/bootok/` | retired | old boot slot marker, replaced by `qbootctl` on the phone |
 | `devtools/usbmac/`, `devtools/usbreplug/` | development | USB networking fixes for a Mac host |

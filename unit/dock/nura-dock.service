@@ -1,0 +1,12 @@
+[Unit]
+Description=Nura docked mode (external monitor becomes the primary desktop)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/libexec/nura-dock
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

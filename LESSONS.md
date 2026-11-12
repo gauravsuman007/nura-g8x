@@ -1050,3 +1050,80 @@ All RAM-tested only. Kernel scripts in `pmaports/kernel-src`, DT in `pmaports/po
 - Bisect with the debug knob (`out/probes/extra-icc-reset-knob.py.disabled`; copy it into kernel-src to use, never flash; `out/probes/iccbisect.sh`): every provider can drop its boot vote except **compute_noc (1720000)**, which kills the phone instantly (cDSP). Loading qcom_iris *after* the votes were released also crashed it; next run was to load iris first, then release, then measure aosd.
 - Reboot-to-bootloader sometimes misses fastboot: shutdown can hang (gnome-shell unkillable) until the hardware watchdog resets the phone, or fastboot just takes longer. ramtest.sh now waits 90 s.
 - The nura-kbd build tree still contains the knob patch. Rebuild with a clean tree (re-extract) or remove it before building a flash image.
+
+## USB-C dock: display, USB and docked mode, 2026-11-12 (works)
+Tested with a Dell Thunderbolt dock (in DP alt mode, pin assignment D: 2 DP
+lanes + USB3) and a Samsung U32R59x on the dock's DisplayPort output.
+Flashed to boot_b as build #66 (`out/boot-flash.img`, previous #53 in
+`out/boot-flash-prev.img`; #53's modules backed up on the phone in
+`/var/lib/nura-mods-prev-53`).
+- **Monitor in standby although the link trained** (seen 2026-11-09):
+  `qcom,sm8150-dp` falls back to `qcom,sm8350-dp`, whose descriptor turns DP
+  widebus on. Stock SM8150 never sets `qcom,widebus-enable`. Fix:
+  `extra-dp-sm8150.py` gives sm8150 its own descriptor with widebus off. After
+  it the dock reports the stream in sync (DPCD 0x205 = 01, 0x202 = 77, no
+  symbol errors) and the monitor wakes up.
+- **Monitor black, every GNOME frame rejected** (`Page flip failed:
+  drmModeAtomicCommit: Invalid argument`; drm.debug: `[PLANE:44:plane-0]
+  switching CRTC directly`). DPU gives every plane `possible_crtcs` = all,
+  and `dpu_plane_init_common()` even ignores its argument and passes 0xff.
+  Mutter picks the first primary plane that fits a CRTC, i.e. plane-0 (the
+  panel's) for DP too. Fix: `extra-dpu-plane-crtc.py` binds primary and
+  cursor plane i to CRTC i and passes the mask through. Check with
+  `out/probes/planes.py`: primaries show 0b1, 0b10, 0b100.
+- **The grey monitor that was not a bug:** with the phone panel primary,
+  GNOME Mobile draws the extended monitor as an empty dark grey area (no
+  wallpaper, no shell). A screenshot (`out/probes/dpshot.sh`) shows the same
+  grey. Making the monitor primary switches GNOME to its desktop layout.
+  `unit/dock/nura-dock` (user service `nura-dock.service`) does that on every
+  hotplug: largest mode with at least 50 Hz (4K is only 30 Hz on 2 lanes of
+  HBR2), scale 2 at 4K, phone panel to the right, applied as a temporary
+  config so Mutter returns to the panel alone on unplug.
+- **USB through the dock** (`phy initialization timed-out`, then
+  `usb1-port1: connect-debounce failed`): 7.0's QMP combo PHY enables the USB3
+  pipe clock only in `usb_power_on`. The Type-C switch to USB3+DP re-runs
+  `com_init` without it, PHYSTATUS never clears and the error path turns the
+  pipe clock off, which USB2 also needs (upstream comment: "In DP-only mode,
+  the pipe clk is still required for USB2"). Fix: `extra-qmp-combo-pipeclk.py`
+  (backport of the 2026 upstream change: pipe clock owned by com_init and
+  com_exit). Result: dock hub at 5 Gbit/s and 480 Mbit/s, keyboard, mouse,
+  USB audio, RTL8153 Ethernet at 1 Gbit/s (works without
+  `rtl_nic/rtl8153a-3.fw`, which is not installed).
+- Also in this build (device tree): dwc3 no longer limited to high speed;
+  QMP supply names as on every mainline SM8150 board (vdda-phy l18a,
+  vdda-pll l3c), l18a at stock 912 mV; GPIO 119 (LG SBU switch LDO) held low
+  as stock does in the AUX state; LG's host-mode HS PHY tuning
+  (`qcom,hsusb-phy-tune-host` 48 f0 2e 03 as femto-v2 properties). Kernel:
+  `MDP_DP_PHY_INTF_SEL` = 0x41 written for sm8150 as stock SDE does (was 0;
+  not the cause of anything seen, kept for parity), DP AUX chardev
+  (`/dev/drm_dp_aux0`) and USB UAS enabled.
+- How it was found: the DP controller's own test pattern
+  (`out/probes/dptpg.sh`, registers at 0xae90a00) showed a checkerboard, so
+  PHY, cable, dock and monitor were fine; a white mixer border (CTL1 layers
+  border-only, LM2/LM3 border colour, CTL flush) also reached the monitor, so
+  only GNOME's buffer was missing; drm.debug then showed the rejected commits.
+  `out/probes/reg.py` reads and writes 32-bit MMIO through /dev/mem.
+- **Traps hit:**
+  - Reading MDP address 0xae6a000 (a hole, not a block) stalled the bus and
+    the hardware watchdog reset the phone. Only touch addresses of blocks
+    that are mapped and clocked.
+  - DPU INTF `INTF_CONFIG` and `INTF_PANEL_FORMAT` read back 0x00800000 and
+    0x2100 whatever is written, on DSI too: not a sign of a bug.
+  - Writing `on`/`off` to the connector's debugfs `force` leaves it forced:
+    restore with `printf unspecified > force` (and `printf reset >
+    edid_override`), or DP stays "disconnected" with "panel edid read failed".
+  - `drm_dp_aux` on 7.0 drops the dock's IRQ_HPD; re-enter the alt mode with
+    `echo no/yes > /sys/bus/typec/devices/port0-partner.0/active`.
+  - A test kernel that loads the root filesystem's out-of-date `qcom_iris`
+    module crashes at boot: RAM-test new kernels with
+    `modprobe.blacklist=qcom_iris` until their modules are installed.
+  - macOS `tar` adds `._*` files; set `COPYFILE_DISABLE=1` when packing
+    modules, or delete them on the phone before `depmod`.
+  - The test watchdog reboots after 120 s without SSH; keep a Wi-Fi session
+    open (`g8xw 'exec sleep 3400'`) when USB moves from the Mac to the dock,
+    and reboot to fastboot over Wi-Fi when the phone is back on the Mac.
+- Not in this build: `extra-icc-sm8150-sync.py` (interconnect sync_state with
+  the compute-NoC keepalive, from the paused standby work) moved to
+  `out/probes/*.disabled`; with the power fragment it stalled UFS.
+- Full suite on the release kernel: 53 pass (after restoring GNOME idle-delay
+  300, which the dock tests had set to 0), 0 GPU faults, 0 hangs.
