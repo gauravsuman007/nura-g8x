@@ -1239,6 +1239,7 @@ Harmless or known, left as is:
 - GNOME "Unknown USB mode" notification: `usb-moded-notify` (from postmarketos-usb-moded) runs, but the `usb-moded` daemon is not installed or running, so its D-Bus calls fail. Not fixed yet (user: later).
 
 ### Battery hold, charge current/voltage, monitor colors, 4K (2026-11-12, build #68)
+- **Flashed 2026-11-12** as build #68 (`out/boot-flash.img`; #67 in `out/boot-flash-prev.img`). Boots, charger online, tweaks applied.
 - **Hold instead of cycle** (`extra-smbx-hold.py`): the charge limit paused charging by suspending the USB input, so a docked phone drained about 460 mA from the battery down to the start threshold and charged again (a loop every few hours). Pausing now only clears `CHARGING_ENABLE_CMD`; the input stays on. RAM test: paused at 70 % on the Mac, charger online, battery current under 1 mA. `qcom_smbx.hold_mode=0` brings back the old behaviour.
 - New runtime parameters `/sys/module/qcom_smbx/parameters/charge_ma` (100-3000, default 1950) and `float_mv` (3900 up to the 4400 mV design maximum). Tested: 100 mA cap gave about 100 mA, 1950 back to the input limit (Mac port about 300-340 mA). Float voltage writes the register; its effect only shows near full.
 - Tweaks: CHARGE_LIMIT (turns on UPower's "Preserve Battery Health" through `EnableChargeThreshold`; UPower re-reads CHARGE_LIMIT only on re-enable, so the helper toggles it), thresholds now any whole percent, CHARGE_HOLD, CHARGE_CURRENT_MA, CHARGE_VOLTAGE_MV.
