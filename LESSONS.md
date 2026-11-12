@@ -1215,3 +1215,9 @@ Flashed to boot_b as build #66 (`out/boot-flash.img`, previous #53 in
   PD RX re-arm on attach), RAM-booted.
 - `pm8150b-charger` `online`/`voltage_now` read 0 even with a working
   dock: not usable as a VBUS signal.
+
+### Dock boot PD: clean detach at port start (2026-11-12, experiment A)
+- Cause confirmed: when the Type-C port starts with the dock already attached and VBUS on (reboot while docked, or a driver rebind), the dock is still in the old PD contract. TCPM waits for capabilities, the PD PHY gets nothing usable, soft reset TX fails, hard resets follow and the dock switches its power off until it is power-cycled.
+- Fix (`pmaports/kernel-src/extra-typec-boot-detach.py`): at port start, if `TYPEC_MISC_STATUS` shows CC attached and VBUS present, turn the Type-C block off (`TYPEC_DISABLE_CMD`) for `qcom_pmic_tcpm.boot_detach_ms` (500 ms). The dock sees a replug and negotiates from scratch.
+- Tested from RAM (build #67): Mac attached at boot still worked; driver rebind while docked brought PD, DP alt mode and the monitor back about 1 s after the detach. Control (boot_detach_ms=0) rebind: the test kernel was then reset by the hardware watchdog (pon_reason PBS_WD) and the flashed #66 booted docked and showed the original failure.
+- Testing tip: kexec-tools is installed; Wi-Fi SSH (`out/probes/g8xw`) works while docked. A real reboot test needs the fix in boot_b (`out/boot-pd1-flash.img`), not yet flashed.
