@@ -7,35 +7,76 @@ largest mode with at least 50 Hz, with the phone panel to its right. The
 config is applied as temporary, so on unplug Mutter falls back to the phone
 panel alone by itself. Runs in the user session (systemd --user).
 
-While docked the power key does nothing: suspending with a dock attached
-broke the resume (USB-C PHY timeout, DP stall, SLPI restart; 2026-11-12).
-The previous action is saved to a state file and restored on undock.
-If the dock's USB3 side never comes up (PHY timeout: the dock itself is
-stuck, a phone replug does not help), tell the user to power-cycle the dock.
+While docked:
+- the phone panel is dark (bl_power off; nothing usable is drawn there, it
+  only costs power and heat). Removing the panel from the Mutter config
+  instead hard-hung the phone (2026-11-12), so the output stays configured.
+- the power key does nothing: a suspend with a dock attached broke the resume
+  (USB-C PHY timeout, DP stall, wedged dock). The previous action is saved to
+  a state file and restored on undock.
+Stuck dock warnings (a phone replug does not help, only a dock power cycle):
+- pin assignment D but no SuperSpeed device after 12 s, or
+- power on the port but no Type-C partner for 15 s.
+In both cases the phone panel is kept on.
 """
 import os
 from gi.repository import Gio, GLib
 
 NAME = 'org.gnome.Mutter.DisplayConfig'
 PATH = '/org/gnome/Mutter/DisplayConfig'
+BL_POWER = '/sys/class/backlight/r66456-bl/bl_power'
 bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+POWER = Gio.Settings.new('org.gnome.settings-daemon.plugins.power')
+STATE = os.path.join(GLib.get_user_state_dir(), 'nura-dock', 'power-button-action')
+STUCK_BODY = ("Unplug the dock's power for a few seconds, plug it back in, "
+              "then reconnect the phone.")
+docked = False
+dock_stuck = False   # keep the phone panel usable after a warning
+vbus_alone = 0       # seconds with power on the port but no Type-C partner
 
 
 def log(*a):
     print('nura-dock:', *a, flush=True)
 
 
+def read(path):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return ''
+
+
 def call(method, args=None):
     return bus.call_sync(NAME, PATH, NAME, method, args, None, 0, -1, None).unpack()
 
 
-POWER = Gio.Settings.new('org.gnome.settings-daemon.plugins.power')
-STATE = os.path.join(GLib.get_user_state_dir(), 'nura-dock', 'power-button-action')
-docked = False
+def notify(title, body):
+    try:
+        bus.call_sync('org.freedesktop.Notifications', '/org/freedesktop/Notifications',
+                      'org.freedesktop.Notifications', 'Notify',
+                      GLib.Variant('(susssasa{sv}i)', (
+                          'Dock', 0, 'video-display', title, body,
+                          [], {'urgency': GLib.Variant('y', 2)}, 0)),
+                      None, 0, -1, None)
+    except GLib.Error as e:
+        log('notify failed:', e.message)
+
+
+def panel_dark(dark):
+    want = '4' if dark else '0'
+    if read(BL_POWER) in ('', want):
+        return
+    try:
+        with open(BL_POWER, 'w') as f:
+            f.write(want)
+        log('phone panel', 'off' if dark else 'on')
+    except OSError as e:
+        log('bl_power:', e)
 
 
 def set_docked(on):
-    global docked
+    global docked, dock_stuck
     if on == docked:
         return
     docked = on
@@ -49,7 +90,9 @@ def set_docked(on):
         log('power key disabled while docked')
         GLib.timeout_add_seconds(12, check_dock_usb)
     else:
+        dock_stuck = False
         restore_power_key()
+    panel_dark(on)
 
 
 def restore_power_key():
@@ -63,12 +106,12 @@ def restore_power_key():
     log('power key restored:', prev)
 
 
-def read(path):
-    try:
-        with open(path) as f:
-            return f.read().strip()
-    except OSError:
-        return ''
+def stuck(why, body):
+    global dock_stuck
+    dock_stuck = True
+    log(why, '- dock looks stuck')
+    panel_dark(False)
+    notify('Dock not responding', body)
 
 
 def check_dock_usb():
@@ -80,23 +123,29 @@ def check_dock_usb():
             for d in (os.listdir(base) if os.path.isdir(base) else [])]
     if not any('[D]' in p for p in pins):
         return False
-    hubs = [h for h in os.listdir('/sys/bus/usb/devices') if h.startswith('usb')]
-    ss = [h for h in hubs if read(f'/sys/bus/usb/devices/{h}/speed') in ('5000', '10000', '20000')]
-    if any(any(c[0].isdigit() and ':' not in c for c in os.listdir(f'/sys/bus/usb/devices/{h}')) for h in ss):
+    usb = '/sys/bus/usb/devices'
+    ss = [h for h in os.listdir(usb) if h.startswith('usb')
+          and read(f'{usb}/{h}/speed') in ('5000', '10000', '20000')]
+    if any(c[0].isdigit() and ':' not in c
+           for h in ss for c in os.listdir(f'{usb}/{h}')):
         return False
-    log('dock USB3 did not come up: dock looks stuck')
-    try:
-        bus.call_sync('org.freedesktop.Notifications', '/org/freedesktop/Notifications',
-                      'org.freedesktop.Notifications', 'Notify',
-                      GLib.Variant('(susssasa{sv}i)', (
-                          'Dock', 0, 'video-display', 'Dock not responding',
-                          'The monitor may stay blank. Unplug the dock\'s power for a few '
-                          'seconds, plug it back in, then reconnect the phone.',
-                          [], {'urgency': GLib.Variant('y', 2)}, 0)),
-                      None, 0, -1, None)
-    except GLib.Error as e:
-        log('notify failed:', e.message)
+    stuck('dock USB3 did not come up', 'The monitor may stay blank. ' + STUCK_BODY)
     return False
+
+
+def check_vbus_alone():
+    """A working dock or charger always shows up as a Type-C partner."""
+    global vbus_alone
+    vbus = read('/sys/class/power_supply/pm8150b-charger/online') == '1'
+    if vbus and not os.path.exists('/sys/class/typec/port0-partner'):
+        vbus_alone += 5
+        if vbus_alone == 15:
+            stuck('power on the port but no Type-C partner', STUCK_BODY)
+    else:
+        vbus_alone = 0
+    if docked and not dock_stuck:
+        panel_dark(True)   # GNOME's unblank may have turned it back on
+    return True
 
 
 def builtin(conn, props):
@@ -149,5 +198,7 @@ def appeared(*_):
 
 
 restore_power_key()  # a crash or reboot while docked
+panel_dark(False)
+GLib.timeout_add_seconds(5, check_vbus_alone)
 Gio.bus_watch_name_on_connection(bus, NAME, 0, appeared, None)
 GLib.MainLoop().run()

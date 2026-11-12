@@ -1,0 +1,2 @@
+# nura-dock (user session) darkens the phone panel while docked via bl_power.
+SUBSYSTEM=="backlight", KERNEL=="r66456-bl", ACTION=="add", RUN+="/bin/chgrp plugdev /sys%p/bl_power", RUN+="/bin/chmod g+w /sys%p/bl_power"

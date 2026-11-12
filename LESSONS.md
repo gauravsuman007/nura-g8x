@@ -1165,3 +1165,12 @@ Flashed to boot_b as build #66 (`out/boot-flash.img`, previous #53 in
   `qcom_glink_destroy_ept`), and a reboot then hangs in `device_shutdown`; get
   out with sysrq `s`, `u`, `b`. To test a new fastrpc.ko, blacklist the module
   in `/etc/modprobe.d`, reboot, insmod, remove the blacklist.
+- **Phone panel dark while docked:** removing DSI-1 from the Mutter config
+  (external monitor only) hard-hung the phone within seconds (watchdog
+  reset, nothing in the journal) and wedged the dock again (no Type-C partner
+  at all afterwards, only VBUS). Instead `nura-dock` keeps the panel
+  configured and writes `bl_power=4` (udev rule
+  `72-nura-dock-backlight.rules` makes it writable for `plugdev`); it
+  re-asserts this every 5 s in case GNOME's unblank turns it back on. Second
+  stuck-dock check: power on the port (`pm8150b-charger/online`) but no
+  `port0-partner` for 15 s. The DSI-disable hang is not investigated yet.

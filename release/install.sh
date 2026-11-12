@@ -49,6 +49,7 @@ inst files/gyro/nura-gyro.service /etc/systemd/system/nura-gyro.service
 inst files/keys/nura-keys.service /etc/systemd/system/nura-keys.service
 install -Dm755 files/dock/nura-dock /usr/libexec/nura-dock
 inst files/dock/nura-dock.service /usr/lib/systemd/user/nura-dock.service
+inst files/dock/72-nura-dock-backlight.rules /etc/udev/rules.d/72-nura-dock-backlight.rules
 cp -r files/ucm/* /usr/share/alsa/ucm2/
 systemctl daemon-reload; systemctl enable nura-keys.service nura-gyro.service 2>/dev/null || true
 systemctl --global enable nura-dock.service 2>/dev/null || true
