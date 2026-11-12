@@ -18,6 +18,9 @@ Stuck dock warnings (a phone replug does not help, only a dock power cycle):
 - pin assignment D but no SuperSpeed device after 12 s, or
 - power on the port but no Type-C partner for 15 s.
 In both cases the phone panel is kept on.
+Each behaviour can be turned off in LG G8x Tweaks (/etc/nura/tweaks.conf,
+read on every event: DOCK_AUTO, DOCK_PANEL_OFF, DOCK_POWER_KEY_OFF,
+DOCK_STUCK_WARN).
 """
 import os
 from gi.repository import Gio, GLib
@@ -47,6 +50,14 @@ def read(path):
         return ''
 
 
+def tweak(key, default='1'):
+    for line in read('/etc/nura/tweaks.conf').splitlines():
+        k, _, v = line.partition('=')
+        if k.strip() == key:
+            return v.split('#')[0].strip() == '1'
+    return default == '1'
+
+
 def call(method, args=None):
     return bus.call_sync(NAME, PATH, NAME, method, args, None, 0, -1, None).unpack()
 
@@ -64,6 +75,8 @@ def notify(title, body):
 
 
 def panel_dark(dark):
+    if dark and not tweak('DOCK_PANEL_OFF'):
+        dark = False
     want = '4' if dark else '0'
     if read(BL_POWER) in ('', want):
         return
@@ -80,7 +93,7 @@ def set_docked(on):
     if on == docked:
         return
     docked = on
-    if on:
+    if on and tweak('DOCK_POWER_KEY_OFF'):
         cur = POWER.get_string('power-button-action')
         if cur != 'nothing' and not os.path.exists(STATE):
             os.makedirs(os.path.dirname(STATE), exist_ok=True)
@@ -88,6 +101,7 @@ def set_docked(on):
                 f.write(cur)
         POWER.set_string('power-button-action', 'nothing')
         log('power key disabled while docked')
+    if on:
         GLib.timeout_add_seconds(12, check_dock_usb)
     else:
         dock_stuck = False
@@ -111,7 +125,8 @@ def stuck(why, body):
     dock_stuck = True
     log(why, '- dock looks stuck')
     panel_dark(False)
-    notify('Dock not responding', body)
+    if tweak('DOCK_STUCK_WARN'):
+        notify('Dock not responding', body)
 
 
 def check_dock_usb():
@@ -153,6 +168,9 @@ def builtin(conn, props):
 
 
 def apply_docked():
+    if not tweak('DOCK_AUTO'):
+        set_docked(False)
+        return
     serial, monitors, logical, _ = call('GetCurrentState')
     ext = panel = None
     for (conn, _v, _p, _s), modes, props in monitors:

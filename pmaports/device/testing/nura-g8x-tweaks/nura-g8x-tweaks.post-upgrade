@@ -1,0 +1,18 @@
+#!/bin/sh
+# enable services, apply settings, patch GNOME's SensorDaemon
+systemctl daemon-reload 2>/dev/null
+systemctl enable nura-tweaks-apply.service nura-gyro.service nura-touch-guard.service \
+	nura-sensor-check.service 2>/dev/null
+systemctl --global enable nura-dock.service 2>/dev/null
+# older hand installs (release/install.sh, /usr/local) are superseded
+rm -f /etc/systemd/system/hexagonrpcd-sdsp.service.d/*lg*.conf \
+	/etc/systemd/system/iio-sensor-proxy.service.d/*lg*.conf 2>/dev/null
+systemctl disable nura-keys.service 2>/dev/null
+glib-compile-schemas /usr/share/glib-2.0/schemas 2>/dev/null
+/usr/libexec/nura-sensordaemon-fix >/dev/null 2>&1
+udevadm control --reload 2>/dev/null
+udevadm trigger -c add -s backlight -s power_supply 2>/dev/null
+/usr/libexec/nura-tweaks-helper apply 2>/dev/null
+systemctl daemon-reload 2>/dev/null
+echo "  LG G8x Tweaks installed: open the 'LG G8x Tweaks' app. Restart the phone to start every service."
+exit 0

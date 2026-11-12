@@ -1,0 +1,63 @@
+#!/usr/bin/python3
+# Patch GNOME Mobile's SensorDaemon auto-brightness: a stale animation timer
+# (after its fields were deleted) yields NaN; _curPerceived then stays NaN and
+# every later write ends as brightness 0 (black screen). Guard both places.
+import os, shutil, subprocess, sys, tempfile
+# Packaged (nura-g8x-tweaks): run at install and by the apk trigger when
+# gnome-shell is upgraded. Skips quietly when already patched or when the
+# upstream code changed shape.
+R = '/usr/share/gnome-shell/org.gnome.Shell.SensorDaemon.src.gresource'
+if not os.path.exists(R):
+    sys.exit(0)
+W = tempfile.mkdtemp(prefix='nura-sdfix-')
+names = subprocess.check_output(['gresource', 'list', R], text=True).split()
+for n in names:
+    p = W + n
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    open(p, 'wb').write(subprocess.check_output(['gresource', 'extract', R, n]))
+f = W + '/org/gnome/Shell/SensorDaemon/js/autoBacklightBrightness.js'
+s = open(f).read()
+if 'nura: NaN guard' in s:
+    print('SensorDaemon already patched')
+    shutil.rmtree(W)
+    sys.exit(0)
+if True:
+    a = '''    _smoothUpdateStep() {
+        const timeNow = GLib.get_monotonic_time();'''
+    if a not in s:
+        print('SensorDaemon code changed upstream; NaN guard not applied')
+        shutil.rmtree(W)
+        sys.exit(0)
+    s = s.replace(a, '''    _smoothUpdateStep() {
+        // nura: NaN guard. A timer from a finished animation must not run.
+        if (this._smoothUpdateToPerceived === undefined)
+            return GLib.SOURCE_REMOVE;
+        const timeNow = GLib.get_monotonic_time();''', 1)
+    a = '''        const newNits = this._perceivedToNits(newPerceived);'''
+    if a not in s:
+        print('SensorDaemon code changed upstream; NaN guard not applied')
+        shutil.rmtree(W)
+        sys.exit(0)
+    s = s.replace(a, '''        if (!Number.isFinite(newPerceived))
+            newPerceived = this._smoothUpdateToPerceived;
+        const newNits = this._perceivedToNits(newPerceived);''', 1)
+    a = '''        // animation also happens (linearly) in perceived space
+        this._smoothUpdateFromPerceived = this._curPerceived;'''
+    if a not in s:
+        print('SensorDaemon code changed upstream; NaN guard not applied')
+        shutil.rmtree(W)
+        sys.exit(0)
+    s = s.replace(a, '''        // nura: NaN guard. Recover the current level from the backlight.
+        if (!Number.isFinite(this._curPerceived))
+            this._curPerceived = this._nitsToAbsPerceived(
+                this._pwmToNits(Math.max(this._curPwm || 0, this._minPwm)));
+
+        // animation also happens (linearly) in perceived space
+        this._smoothUpdateFromPerceived = this._curPerceived;''', 1)
+    open(f, 'w').write(s)
+x = '<?xml version="1.0" encoding="UTF-8"?>\n<gresources><gresource prefix="/">\n'
+x += ''.join(f'<file>{n.lstrip("/")}</file>\n' for n in names) + '</gresource></gresources>\n'
+open(W + '/r.xml', 'w').write(x)
+subprocess.check_call(['glib-compile-resources', '--sourcedir=' + W, '--target=' + R, W + '/r.xml'])
+shutil.rmtree(W)
+print('patched', len(names), 'resources')

@@ -1,0 +1,137 @@
+# Maintainer: Nura G8x <nura-g8x@users.noreply.github.com>
+# All LG G8x userspace tweaks in one package, configured with the
+# "LG G8x Tweaks" app (/etc/nura/tweaks.conf). Built from this repository:
+# tweaks/stage.sh packs unit/ and tweaks/ into nura-g8x-tweaks-files.tar.gz.
+pkgname=nura-g8x-tweaks
+pkgver=2026.11.12
+pkgrel=1
+_hexver=0.5.0
+_sscver=0.4.4
+pkgdesc="LG G8x ThinQ tweaks: buttons, wake, pocket and dock modes, sensors, camera, settings app"
+url="https://github.com/gauravsuman007/nura-g8x"
+arch="aarch64"
+license="GPL-3.0-or-later AND MIT"
+depends="
+	glib-dev
+	libadwaita
+	polkit
+	py3-gobject3
+	python3
+	iio-sensor-proxy
+	hexagonrpcd
+	libssc
+	qrtr-libs
+	libqmi
+	protobuf-c
+	libgudev
+	"
+makedepends="
+	eudev-dev
+	glib-dev
+	libgudev-dev
+	libqmi-dev
+	linux-headers
+	meson
+	protobuf-c-dev
+	protobuf-dev
+	python3-dev
+	py3-gobject3
+	py3-protobuf
+	qrtr-dev
+	"
+install="$pkgname.post-install $pkgname.post-upgrade $pkgname.pre-deinstall"
+triggers="$pkgname.trigger=/usr/share/gnome-shell"
+options="!check !tracedeps"
+source="
+	nura-g8x-tweaks-files.tar.gz
+	hexagonrpc-$_hexver.tar.gz::https://github.com/linux-msm/hexagonrpc/archive/refs/tags/v$_hexver.tar.gz
+	libssc-$_sscver.tar.gz::https://codeberg.org/DylanVanAssche/libssc/archive/v$_sscver.tar.gz
+	hexagonrpc-0001-close-aliased-descriptor.diff
+	hexagonrpc-0002-lg-sns-registry.diff
+	libssc-0001-proximity-nonzero-is-near.diff
+	"
+builddir="$srcdir"
+_prefix=/usr/lib/nura-g8x
+
+prepare() {
+	default_prepare
+	cd "$srcdir"/hexagonrpc-$_hexver
+	patch -p0 < "$srcdir"/hexagonrpc-0001-close-aliased-descriptor.diff
+	patch -p0 < "$srcdir"/hexagonrpc-0002-lg-sns-registry.diff
+	cd "$srcdir"/libssc
+	patch -p1 < "$srcdir"/libssc-0001-proximity-nonzero-is-near.diff
+}
+
+build() {
+	# private copies under $_prefix: the system hexagonrpcd/libssc stay untouched
+	cd "$srcdir"/hexagonrpc-$_hexver
+	meson setup --prefix=$_prefix --libdir=lib --buildtype=release -Dc_link_args=-Wl,-rpath,$_prefix/lib output
+	meson compile -C output
+	cd "$srcdir"/libssc
+	meson setup --prefix=$_prefix --libdir=lib --buildtype=release -Dc_link_args=-Wl,-rpath,$_prefix/lib output
+	meson compile -C output
+}
+
+package() {
+	DESTDIR="$srcdir"/stage meson install --no-rebuild -C "$srcdir"/hexagonrpc-$_hexver/output
+	DESTDIR="$srcdir"/stage meson install --no-rebuild -C "$srcdir"/libssc/output
+	install -Dm755 "$srcdir"/stage$_prefix/bin/hexagonrpcd "$pkgdir"$_prefix/bin/hexagonrpcd
+	cp -a "$srcdir"/stage$_prefix/lib/libhexagonrpc.so.* "$srcdir"/stage$_prefix/lib/libssc.so.* \
+		"$pkgdir"$_prefix/lib/ 2>/dev/null || {
+		mkdir -p "$pkgdir"$_prefix/lib
+		cp -a "$srcdir"/stage$_prefix/lib/libhexagonrpc.so.* "$srcdir"/stage$_prefix/lib/libssc.so.* \
+			"$pkgdir"$_prefix/lib/
+	}
+
+	local f="$srcdir"/files
+	# settings app, helper, defaults
+	install -Dm755 $f/tweaks/nura-tweaks "$pkgdir"/usr/bin/nura-tweaks
+	install -Dm755 $f/tweaks/nura-tweaks-helper "$pkgdir"/usr/libexec/nura-tweaks-helper
+	install -Dm644 $f/tweaks/tweaks.conf "$pkgdir"/usr/share/nura-g8x-tweaks/tweaks.conf
+	install -Dm644 $f/tweaks/org.nura.G8xTweaks.desktop -t "$pkgdir"/usr/share/applications/
+	install -Dm644 $f/tweaks/org.nura.g8x-tweaks.policy -t "$pkgdir"/usr/share/polkit-1/actions/
+	install -Dm644 $f/tweaks/nura-tweaks-apply.service -t "$pkgdir"/usr/lib/systemd/system/
+	install -Dm644 $f/tweaks/80-nura-g8x.preset "$pkgdir"/usr/lib/systemd/system-preset/80-nura-g8x.preset
+	install -Dm644 $f/tweaks/80-nura-g8x-user.preset "$pkgdir"/usr/lib/systemd/user-preset/80-nura-g8x.preset
+	install -Dm755 $f/tweaks/nura-sensordaemon-fix "$pkgdir"/usr/libexec/nura-sensordaemon-fix
+
+	# sensors: packaged hexagonrpcd/libssc, start check, gyroscope
+	install -Dm644 $f/tweaks/sensors/hexagonrpcd-sdsp.conf \
+		"$pkgdir"/usr/lib/systemd/system/hexagonrpcd-sdsp.service.d/50-nura-g8x.conf
+	install -Dm644 $f/tweaks/sensors/iio-sensor-proxy.conf \
+		"$pkgdir"/usr/lib/systemd/system/iio-sensor-proxy.service.d/50-nura-g8x.conf
+	install -Dm755 $f/unit/sensors/nura-sensor-check -t "$pkgdir"/usr/libexec/
+	install -Dm644 $f/unit/sensors/nura-sensor-check.service -t "$pkgdir"/usr/lib/systemd/system/
+	install -Dm755 $f/unit/gyro/nura-gyro -t "$pkgdir"/usr/libexec/
+	install -Dm644 $f/unit/gyro/nura-gyro.service -t "$pkgdir"/usr/lib/systemd/system/
+	install -Dm644 $f/unit/gyro/61-nura-gyro.rules -t "$pkgdir"/usr/lib/udev/rules.d/
+
+	# screen: touch and pocket guard, GNOME defaults
+	install -Dm755 $f/unit/screen/nura-touch-guard "$pkgdir"/usr/bin/nura-touch-guard
+	install -Dm644 $f/unit/screen/nura-touch-guard.service -t "$pkgdir"/usr/lib/systemd/system/
+	install -Dm644 $f/unit/screen/90_nura-g8x.gschema.override -t "$pkgdir"/usr/share/glib-2.0/schemas/
+
+	# dock
+	install -Dm755 $f/unit/dock/nura-dock -t "$pkgdir"/usr/libexec/
+	install -Dm644 $f/unit/dock/nura-dock.service -t "$pkgdir"/usr/lib/systemd/user/
+	install -Dm644 $f/unit/dock/72-nura-dock-backlight.rules -t "$pkgdir"/usr/lib/udev/rules.d/
+
+	# battery default (the helper writes /etc/udev/rules.d/ with your values)
+	install -Dm644 $f/unit/battery/61-nura-charge-limit.rules -t "$pkgdir"/usr/lib/udev/rules.d/
+
+	# camera: PipeWire names, softISP tuning
+	install -Dm644 $f/unit/camera/51-nura-cameras.conf -t "$pkgdir"/usr/share/wireplumber/wireplumber.conf.d/
+	# /etc is searched before /usr/share (libcamera-ipa owns files there)
+	install -Dm644 $f/unit/camera/tuning/*.yaml -t "$pkgdir"/etc/libcamera/ipa/softisp/
+
+	# suspend: Wi-Fi off around s2idle (ath10k crash)
+	install -Dm755 $f/unit/suspend/nura-wifi-sleep -t "$pkgdir"/usr/lib/systemd/system-sleep/
+}
+sha512sums="
+a2a40ab563c98f377fa8c2ef29d1e2b9d106e083ff38f2e9859964626b1f03b49ef4c6759b2af62e4620500dea0b2b6563e69319a5092d75bdc5ce0621c2a1c6  nura-g8x-tweaks-files.tar.gz
+919146c9018e4b0cc271237c7200af0b7abcd4500227e0140e1e44fd2b412d29c1519ffe29ed06a5119b3a0218a3ef016af21a5be3c5898b0f0d35b44ac78b1b  hexagonrpc-0.5.0.tar.gz
+9240970f6a70f4900ef2d8fad337dac815ea2602b3b395943326fb086f59d24dcf59b76bdbc6014ebd3c450eaad5393465ca038c165845ffe99bf8e282a5c170  libssc-0.4.4.tar.gz
+385817bc2b8f4bfd2a06d67b63f420bb610092758f43391887eb8335c01d68aa1590301f8e060902c95ed20cd9075d6ef38ee71edac30f20008b44eddc3f51ce  hexagonrpc-0001-close-aliased-descriptor.diff
+0d339d00076615ed3c7e450b6a59cd9d4308a64a76c6d8414c6d09171ef011219e1ade08db68a12785473d8ce66ad8c941816b5bf465f998011786e7d4f41b9b  hexagonrpc-0002-lg-sns-registry.diff
+b711ff442b7cce48af4ffb7b265fdfdfdca32dda374a7ef0349ec86e26f019bd7f633774100a3c30b190ab22b1e5b9f1381b089935bd1ffb87716e64197e9fc5  libssc-0001-proximity-nonzero-is-near.diff
+"

@@ -1,0 +1,5 @@
+# nura-g8x-tweaks: postmarketOS applies presets after installs; keep ours on.
+enable nura-tweaks-apply.service
+enable nura-gyro.service
+enable nura-touch-guard.service
+enable nura-sensor-check.service

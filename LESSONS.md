@@ -1174,3 +1174,44 @@ Flashed to boot_b as build #66 (`out/boot-flash.img`, previous #53 in
   re-asserts this every 5 s in case GNOME's unblank turns it back on. Second
   stuck-dock check: power on the port (`pm8150b-charger/online`) but no
   `port0-partner` for 15 s. The DSI-disable hang is not investigated yet.
+
+## LG G8x Tweaks package, 2026-11-12
+
+- One apk, `nura-g8x-tweaks`, carries every userspace tweak: settings app
+  ("LG G8x Tweaks", libadwaita; GNOME Settings cannot host third-party
+  panels), root helper `nura-tweaks-helper` (pkexec, validates, applies),
+  `/etc/nura/tweaks.conf`, patched hexagonrpcd 0.5.0 and libssc 0.4.4 under
+  `/usr/lib/nura-g8x` (system packages untouched), gyro, touch and pocket
+  guard, nura-dock, Wi-Fi sleep hook, camera tuning, GNOME defaults, and the
+  SensorDaemon NaN guard (re-applied by an apk trigger when gnome-shell
+  changes). Built in an official Alpine edge container, signed with a
+  persistent key kept in `out/apk-key/` (never published).
+- Traps: postmarketOS applies systemd presets after every install and
+  disabled the units that post-install had enabled, so ship
+  `system-preset`/`user-preset` files. `default_prepare` applies every
+  `*.patch` with -p1 (hexagonrpc patches are -p0: renamed to `.diff`).
+  Private libraries outside the search path break abuild's dependency
+  tracing (`!tracedeps`, rpath). libcamera-ipa owns
+  `/usr/share/libcamera/ipa/softisp/imx363.yaml`: tuning goes to
+  `/etc/libcamera/ipa/softisp/` (searched first). apk wants the key file
+  named exactly like the signer.
+- Tested on the phone after a reboot: all services from the package,
+  iio-sensor-proxy maps the packaged libssc, helper validation works.
+
+## Dock lost after a reboot while docked, 2026-11-12 (open)
+
+- Reproducible: rebooting with the dock attached leaves the port without
+  PD (no DisplayPort, no charging); the dock then switches its power off
+  and only a dock power cycle brings it back. A phone replug does not help
+  and the port stops seeing attach/detach until the typec driver is rebound.
+- TCPM log at boot: port reset, re-attach at 2.4 s, then 310 ms wait for
+  Source_Capabilities, soft reset TX fails (no GoodCRC), hard resets.
+  `msg-rx-discarded` counts 16-20: the dock did talk, the PD PHY dropped
+  every message. A working attach to a powered dock logs `VBUS on` first,
+  then capabilities arrive 85 ms later; at boot there is no `VBUS on` event
+  (VBUS was already there before the driver). PD PHY registers
+  (0x1740-0x1750) are identical in both states, so it is not a stale RX
+  buffer. Next: kernel experiment (PHY reset once VBUS is known present /
+  PD RX re-arm on attach), RAM-booted.
+- `pm8150b-charger` `online`/`voltage_now` read 0 even with a working
+  dock: not usable as a VBUS signal.

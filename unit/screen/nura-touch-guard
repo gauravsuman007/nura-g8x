@@ -36,7 +36,19 @@ def panel_on():
     return True
 
 
-touch = input_of("Synaptics S3618")
+def tweak(key):
+    """LG G8x Tweaks settings (TOUCH_GUARD, POCKET_GUARD); default on."""
+    try:
+        for line in open("/etc/nura/tweaks.conf"):
+            k, _, v = line.partition("=")
+            if k.strip() == key:
+                return v.split("#")[0].strip() == "1"
+    except OSError:
+        pass
+    return True
+
+
+touch = input_of("Synaptics S3618") if tweak("TOUCH_GUARD") else None
 
 
 def assistant_is_power():
@@ -51,6 +63,8 @@ def assistant_is_power():
 keys = [input_of("pm8941_resin")]
 if not assistant_is_power():
     keys.append(input_of("gpio-keys"))
+if not tweak("POCKET_GUARD"):
+    keys = []
 bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
 
 

@@ -1,0 +1,173 @@
+#!/usr/bin/python3
+"""Root helper for LG G8x Tweaks.
+
+  nura-tweaks-helper get              print the effective settings
+  nura-tweaks-helper set KEY=VALUE..  validate, save and apply (via pkexec)
+  nura-tweaks-helper apply            apply everything (boot, after edits)
+
+Settings live in /etc/nura/tweaks.conf (KEY=VALUE, world-readable; user
+services such as nura-dock read it directly). Defaults come from
+/usr/share/nura-g8x-tweaks/tweaks.conf.
+"""
+import os
+import re
+import subprocess
+import sys
+
+CONF = '/etc/nura/tweaks.conf'
+DEFAULTS = '/usr/share/nura-g8x-tweaks/tweaks.conf'
+OLD_KEYS = '/etc/nura/keys.conf'   # before the tweaks package
+KEYS = '/sys/module/nura_keys/parameters'
+GPIO_KEYS_WAKE = '/sys/devices/platform/gpio-keys/power/wakeup'
+CHARGE_RULE = '/etc/udev/rules.d/61-nura-charge-limit.rules'
+
+BOOL = (0, 1)
+SCHEMA = {   # key: (min, max)
+    'POWER_KEY': BOOL, 'POWER_HOLD_MS': (50, 3000),
+    'RESET_COMBO': BOOL, 'RESET_HOLD_MS': (3000, 20000),
+    'WAKE_KEYS': BOOL, 'TOUCH_GUARD': BOOL, 'POCKET_GUARD': BOOL,
+    'DOCK_AUTO': BOOL, 'DOCK_PANEL_OFF': BOOL, 'DOCK_POWER_KEY_OFF': BOOL,
+    'DOCK_STUCK_WARN': BOOL,
+    'CHARGE_LIMIT_START': (20, 95), 'CHARGE_LIMIT_END': (25, 100),
+    'GYRO': BOOL, 'SENSOR_CHECK': BOOL,
+}
+
+
+def parse(path):
+    out = {}
+    try:
+        with open(path) as f:
+            for line in f:
+                m = re.match(r'\s*([A-Z_][A-Z0-9_]*)=(\S*)', line)
+                if m:
+                    out[m.group(1)] = m.group(2)
+    except OSError:
+        pass
+    return out
+
+
+def load():
+    cfg = parse(DEFAULTS)
+    if not os.path.exists(CONF):
+        cfg.update({k: v for k, v in parse(OLD_KEYS).items() if k in SCHEMA})
+    cfg.update(parse(CONF))
+    return {k: cfg[k] for k in SCHEMA if k in cfg}
+
+
+def save(cfg):
+    """Rewrite the defaults file's text with our values (keeps comments)."""
+    try:
+        text = open(CONF).read()
+    except OSError:
+        text = open(DEFAULTS).read()
+    for k, v in cfg.items():
+        pat = re.compile(r'^(\s*%s=)\S*' % k, re.M)
+        if pat.search(text):
+            text = pat.sub(lambda m: m.group(1) + v, text, count=1)
+        else:
+            text += '%s=%s\n' % (k, v)
+    os.makedirs(os.path.dirname(CONF), exist_ok=True)
+    tmp = CONF + '.new'
+    with open(tmp, 'w') as f:
+        f.write(text)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, CONF)
+
+
+def write(path, value):
+    try:
+        with open(path, 'w') as f:
+            f.write(str(value))
+    except OSError as e:
+        print('warning: %s: %s' % (path, e), file=sys.stderr)
+
+
+def unit(name, on, user=False):
+    cmd = ['systemctl'] + (['--global'] if user else [])
+    subprocess.run(cmd + ['enable' if on else 'disable', name],
+                   stderr=subprocess.DEVNULL)
+    if not user:
+        subprocess.run(['systemctl', 'restart' if on else 'stop', name],
+                       stderr=subprocess.DEVNULL)
+
+
+def apply(cfg, changed=None):
+    def want(*keys):
+        return changed is None or any(k in changed for k in keys)
+
+    b = lambda k: cfg.get(k) == '1'
+    if want('POWER_KEY', 'POWER_HOLD_MS', 'RESET_COMBO', 'RESET_HOLD_MS') \
+            and os.path.isdir(KEYS):
+        write(KEYS + '/power_key', cfg['POWER_KEY'])
+        write(KEYS + '/reset_hold_ms', cfg['RESET_HOLD_MS'])
+        if os.path.exists(KEYS + '/power_hold_ms'):
+            write(KEYS + '/power_hold_ms', cfg['POWER_HOLD_MS'])
+        write(KEYS + '/reset_combo', cfg['RESET_COMBO'])
+    if want('WAKE_KEYS') and os.path.exists(GPIO_KEYS_WAKE):
+        write(GPIO_KEYS_WAKE, 'enabled' if b('WAKE_KEYS') else 'disabled')
+    if want('TOUCH_GUARD', 'POCKET_GUARD', 'POWER_KEY') and changed is not None:
+        unit('nura-touch-guard.service', b('TOUCH_GUARD') or b('POCKET_GUARD'))
+    if want('GYRO') and changed is not None:
+        unit('nura-gyro.service', b('GYRO'))
+    if want('SENSOR_CHECK') and changed is not None:
+        unit('nura-sensor-check.service', b('SENSOR_CHECK'))
+    if want('CHARGE_LIMIT_START', 'CHARGE_LIMIT_END'):
+        rule = ('# Written by nura-tweaks-helper (LG G8x Tweaks). UPower offers\n'
+                '# "Preserve Battery Health" when CHARGE_LIMIT is set.\n'
+                'SUBSYSTEM=="power_supply", KERNEL=="qcom-battery", '
+                'ENV{CHARGE_LIMIT}="%s,%s"\n' % (cfg['CHARGE_LIMIT_START'],
+                                                 cfg['CHARGE_LIMIT_END']))
+        if parse_text(CHARGE_RULE) != rule:
+            with open(CHARGE_RULE, 'w') as f:
+                f.write(rule)
+            if changed is not None:
+                subprocess.run(['udevadm', 'control', '--reload'])
+                subprocess.run(['udevadm', 'trigger', '-c', 'change',
+                                '/sys/class/power_supply/qcom-battery'])
+                subprocess.run(['systemctl', 'try-restart', 'upower.service'])
+
+
+def parse_text(path):
+    try:
+        return open(path).read()
+    except OSError:
+        return ''
+
+
+def main(argv):
+    if not argv or argv[0] not in ('get', 'set', 'apply'):
+        print(__doc__.strip())
+        return 2
+    cfg = load()
+    if argv[0] == 'get':
+        for k in SCHEMA:
+            print('%s=%s' % (k, cfg.get(k, '')))
+        return 0
+    if os.geteuid() != 0:
+        print('must run as root', file=sys.stderr)
+        return 1
+    if argv[0] == 'apply':
+        apply(cfg)
+        return 0
+    changed = {}
+    for a in argv[1:]:
+        k, _, v = a.partition('=')
+        if k not in SCHEMA or not re.fullmatch(r'\d+', v):
+            print('invalid setting: %s' % a, file=sys.stderr)
+            return 1
+        lo, hi = SCHEMA[k]
+        if not lo <= int(v) <= hi:
+            print('%s out of range %d..%d' % (k, lo, hi), file=sys.stderr)
+            return 1
+        changed[k] = str(int(v))
+    cfg.update(changed)
+    if int(cfg['CHARGE_LIMIT_START']) >= int(cfg['CHARGE_LIMIT_END']):
+        print('CHARGE_LIMIT_START must be below CHARGE_LIMIT_END', file=sys.stderr)
+        return 1
+    save(cfg)
+    apply(cfg, changed)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

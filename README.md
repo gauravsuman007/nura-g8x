@@ -71,6 +71,7 @@ Grouped by where each part belongs (see "Scope" below).
 | `unit/battery/` | device package | udev rule that enables GNOME's Preserve Battery Health (75-80%) |
 | `unit/suspend/` | device package | systemd-sleep hook: Wi-Fi off across suspend (ath10k crash) |
 | `unit/sensors/` | this phone only | boot check: alerts if the SLPI sensor core did not start |
+| `tweaks/`, `pmaports/device/testing/nura-g8x-tweaks/` | one apk | every userspace tweak plus the "LG G8x Tweaks" settings app (`/etc/nura/tweaks.conf`); build with `sh tweaks/build-apk.sh` |
 | `unit/dock/` | device package | `nura-dock` user service: external monitor becomes the primary GNOME desktop on plug-in; power key off while docked; warns when the dock is stuck |
 | `devtools/testwd/` | development | auto-restart and watchdog for test images |
 | `devtools/bootok/` | retired | old boot slot marker, replaced by `qbootctl` on the phone |

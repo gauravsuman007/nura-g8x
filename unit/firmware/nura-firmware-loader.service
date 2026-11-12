@@ -1,0 +1,14 @@
+[Unit]
+Description=Copy LG G8x firmware from the phone's own partitions
+DefaultDependencies=no
+After=local-fs.target
+Before=systemd-udev-trigger.service hexagonrpcd-sdsp.service tqftpserv.service rmtfs.service sysinit.target
+RequiresMountsFor=/lib/firmware /usr/share
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/nura-firmware-loader
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

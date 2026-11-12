@@ -1,0 +1,5 @@
+#!/bin/sh
+systemctl disable nura-tweaks-apply.service nura-gyro.service nura-touch-guard.service \
+	nura-sensor-check.service 2>/dev/null
+systemctl --global disable nura-dock.service 2>/dev/null
+exit 0

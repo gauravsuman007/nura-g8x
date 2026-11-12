@@ -1,0 +1,68 @@
+#!/bin/sh
+# Copy the LG G8x firmware from the phone's own partitions (Nura images ship
+# no vendor firmware). Runs every boot before udev loads drivers; only copies
+# what is missing, so after the first boot it just checks and exits.
+#   modem_<slot>/image  -> remote processor + Wi-Fi DSP firmware, Wi-Fi board
+#   vendor_<slot>       -> GPU zap shader, sensor registry config
+#   dsp_<slot>          -> DSP userspace libraries (hexagonrpcd)
+#   sns                 -> sensor calibration registry
+R=${NURA_FW_ROOT:-}	# install prefix (testing only)
+FW=$R/lib/firmware/qcom/sm8150/lg-mh2lm
+WLAN=$R/lib/firmware/ath10k/WCN3990/hw1.0
+Q=$R/usr/share/qcom/sm8150/LG/mh2lm
+M=/run/nura-fw
+P=/dev/disk/by-partlabel
+log() { echo "nura-firmware-loader: $*"; }
+
+slot=$(tr ' ' '\n' < /proc/cmdline | sed -n 's/^androidboot.slot_suffix=//p')
+[ -n "$slot" ] || slot=$(qbootctl 2>/dev/null | sed -n 's/^Current slot: //p')
+for s in "$slot" _a _b; do [ -e "$P/modem$s" ] && { slot=$s; break; }; done
+log "slot $slot"
+
+mnt() { # mnt PARTLABEL DIR
+	mkdir -p "$2"
+	mount -o ro "$P/$1" "$2" 2>/dev/null || { log "cannot mount $1"; return 1; }
+}
+cpn() { # cpn SRC DST: copy if missing or different size
+	[ -f "$1" ] || return 0
+	if [ ! -f "$2" ] || [ "$(stat -c %s "$1")" != "$(stat -c %s "$2")" ]; then
+		mkdir -p "$(dirname "$2")"; cp -a "$1" "$2.tmp" && mv "$2.tmp" "$2" && log "copied $2"
+	fi
+}
+n=0
+if mnt "modem$slot" $M/modem; then
+	for f in $M/modem/image/*; do
+		b=$(basename "$f")
+		case "$b" in
+		adsp*|cdsp*|slpi*|modem*|venus*|ipa_fws*|wlanmdsp.mbn|bdwlan.[0-9]*|*.jsn|qdsp6m.qdb)
+			if [ -d "$f" ]; then
+				find "$f" -type f | while read -r g; do cpn "$g" "$FW/${g#$M/modem/image/}"; done
+			else
+				cpn "$f" "$FW/$b"
+			fi;;
+		esac
+	done
+	cpn $M/modem/image/bdwlan.bin $WLAN/board.bin
+	umount $M/modem; n=$((n+1))
+fi
+if mnt "vendor$slot" $M/vendor; then
+	for f in $M/vendor/firmware/a640_zap.*; do cpn "$f" "$FW/$(basename "$f")"; done
+	cpn $M/vendor/etc/sensors/sns_reg_config $Q/sensors/sns_reg.conf
+	umount $M/vendor; n=$((n+1))
+fi
+if mnt "dsp$slot" $M/dsp; then
+	for d in adsp cdsp sdsp; do
+		[ -d $M/dsp/$d ] && find $M/dsp/$d -type f | while read -r g; do cpn "$g" "$Q/dsp/${g#$M/dsp/}"; done
+	done
+	umount $M/dsp; n=$((n+1))
+fi
+# the DSP updates the registry at runtime: only seed it once
+if [ ! -e $Q/sensors/registry/.seeded ] && mnt sns $M/sns; then
+	mkdir -p $Q/sensors/registry
+	for f in $M/sns/sensors/registry/registry/*; do [ -f "$f" ] && cp -a "$f" $Q/sensors/registry/; done
+	find $Q/sensors/registry -name '._*' -delete
+	touch $Q/sensors/registry/.seeded; log "seeded sensor registry"
+	umount $M/sns; n=$((n+1))
+fi
+rmdir $M/* $M 2>/dev/null
+log "done ($n partitions read)"

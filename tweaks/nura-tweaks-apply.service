@@ -1,0 +1,12 @@
+[Unit]
+Description=Apply LG G8x Tweaks settings (keys, wake, charge limit)
+After=systemd-modules-load.service
+Before=upower.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/nura-tweaks-helper apply
+
+[Install]
+WantedBy=multi-user.target

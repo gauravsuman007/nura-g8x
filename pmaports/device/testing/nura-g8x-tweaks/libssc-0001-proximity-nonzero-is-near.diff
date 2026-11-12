@@ -1,0 +1,15 @@
+diff -ru a/src/libssc-sensor-proximity.c b/src/libssc-sensor-proximity.c
+--- a/src/libssc-sensor-proximity.c	2026-11-08 00:49:04
++++ b/src/libssc-sensor-proximity.c	2026-11-08 00:49:04
+@@ -95,7 +95,10 @@
+ 					near = false;
+ 					break;
+ 				default:
+-					g_assert_not_reached ();
++					/* Some vendor drivers (LG G8x apds9169) report other
++					 * non-zero event types while covered; treat as near. */
++					g_debug ("Proximity event type %d, treating as near", (int) msg->near);
++					near = true;
+ 			}
+ 
+ 			ssc_proximity_response__free_unpacked (msg, NULL);
