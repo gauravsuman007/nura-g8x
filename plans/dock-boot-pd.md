@@ -1,4 +1,4 @@
-# Plan: dock lost after a reboot while docked (saved 2026-11-12, not started)
+# Plan: dock lost after a reboot while docked (DONE 2026-11-12: clean detach at port start, build #67)
 
 ## Problem
 
