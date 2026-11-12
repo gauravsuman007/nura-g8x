@@ -71,7 +71,7 @@ Grouped by where each part belongs (see "Scope" below).
 | `unit/battery/` | device package | udev rule that enables GNOME's Preserve Battery Health (75-80%) |
 | `unit/suspend/` | device package | systemd-sleep hook: Wi-Fi off across suspend (ath10k crash) |
 | `unit/sensors/` | this phone only | boot check: alerts if the SLPI sensor core did not start |
-| `unit/dock/` | device package | `nura-dock` user service: external monitor becomes the primary GNOME desktop on plug-in |
+| `unit/dock/` | device package | `nura-dock` user service: external monitor becomes the primary GNOME desktop on plug-in; power key off while docked; warns when the dock is stuck |
 | `devtools/testwd/` | development | auto-restart and watchdog for test images |
 | `devtools/bootok/` | retired | old boot slot marker, replaced by `qbootctl` on the phone |
 | `devtools/usbmac/`, `devtools/usbreplug/` | development | USB networking fixes for a Mac host |

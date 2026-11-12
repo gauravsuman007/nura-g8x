@@ -6,8 +6,14 @@ the primary screen so GNOME switches to its desktop layout there, at the
 largest mode with at least 50 Hz, with the phone panel to its right. The
 config is applied as temporary, so on unplug Mutter falls back to the phone
 panel alone by itself. Runs in the user session (systemd --user).
+
+While docked the power key does nothing: suspending with a dock attached
+broke the resume (USB-C PHY timeout, DP stall, SLPI restart; 2026-11-12).
+The previous action is saved to a state file and restored on undock.
+If the dock's USB3 side never comes up (PHY timeout: the dock itself is
+stuck, a phone replug does not help), tell the user to power-cycle the dock.
 """
-import sys
+import os
 from gi.repository import Gio, GLib
 
 NAME = 'org.gnome.Mutter.DisplayConfig'
@@ -23,6 +29,76 @@ def call(method, args=None):
     return bus.call_sync(NAME, PATH, NAME, method, args, None, 0, -1, None).unpack()
 
 
+POWER = Gio.Settings.new('org.gnome.settings-daemon.plugins.power')
+STATE = os.path.join(GLib.get_user_state_dir(), 'nura-dock', 'power-button-action')
+docked = False
+
+
+def set_docked(on):
+    global docked
+    if on == docked:
+        return
+    docked = on
+    if on:
+        cur = POWER.get_string('power-button-action')
+        if cur != 'nothing' and not os.path.exists(STATE):
+            os.makedirs(os.path.dirname(STATE), exist_ok=True)
+            with open(STATE, 'w') as f:
+                f.write(cur)
+        POWER.set_string('power-button-action', 'nothing')
+        log('power key disabled while docked')
+        GLib.timeout_add_seconds(12, check_dock_usb)
+    else:
+        restore_power_key()
+
+
+def restore_power_key():
+    try:
+        with open(STATE) as f:
+            prev = f.read().strip()
+    except OSError:
+        return
+    POWER.set_string('power-button-action', prev or 'suspend')
+    os.unlink(STATE)
+    log('power key restored:', prev)
+
+
+def read(path):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return ''
+
+
+def check_dock_usb():
+    """Pin assignment D means the dock also runs USB3 over the same PHY."""
+    if not docked:
+        return False
+    base = '/sys/bus/typec/devices'
+    pins = [read(os.path.join(base, d, 'displayport/pin_assignment'))
+            for d in (os.listdir(base) if os.path.isdir(base) else [])]
+    if not any('[D]' in p for p in pins):
+        return False
+    hubs = [h for h in os.listdir('/sys/bus/usb/devices') if h.startswith('usb')]
+    ss = [h for h in hubs if read(f'/sys/bus/usb/devices/{h}/speed') in ('5000', '10000', '20000')]
+    if any(any(c[0].isdigit() and ':' not in c for c in os.listdir(f'/sys/bus/usb/devices/{h}')) for h in ss):
+        return False
+    log('dock USB3 did not come up: dock looks stuck')
+    try:
+        bus.call_sync('org.freedesktop.Notifications', '/org/freedesktop/Notifications',
+                      'org.freedesktop.Notifications', 'Notify',
+                      GLib.Variant('(susssasa{sv}i)', (
+                          'Dock', 0, 'video-display', 'Dock not responding',
+                          'The monitor may stay blank. Unplug the dock\'s power for a few '
+                          'seconds, plug it back in, then reconnect the phone.',
+                          [], {'urgency': GLib.Variant('y', 2)}, 0)),
+                      None, 0, -1, None)
+    except GLib.Error as e:
+        log('notify failed:', e.message)
+    return False
+
+
 def builtin(conn, props):
     return props.get('is-builtin', False) or conn.startswith(('DSI', 'eDP'))
 
@@ -35,6 +111,7 @@ def apply_docked():
             panel = (conn, modes)
         elif ext is None:
             ext = (conn, modes)
+    set_docked(ext is not None)
     if not ext:
         return
     for l in logical:
@@ -71,5 +148,6 @@ def appeared(*_):
     changed()
 
 
+restore_power_key()  # a crash or reboot while docked
 Gio.bus_watch_name_on_connection(bus, NAME, 0, appeared, None)
 GLib.MainLoop().run()

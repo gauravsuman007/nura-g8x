@@ -1135,3 +1135,33 @@ Flashed to boot_b as build #66 (`out/boot-flash.img`, previous #53 in
   `/proc/cmdline` (same SHA1 header rewrite as `out/probes/recmd.py`;
   verified byte-identical on this phone and against recmd.py with other
   UUIDs). Pack bundles with `COPYFILE_DISABLE=1`.
+
+### Monitor stayed in standby after a suspend while docked, 2026-11-12
+
+- **What happened:** about 35 s after docking, a power key press made GNOME
+  suspend (power-button-action `suspend`). The resume with the dock attached
+  went wrong: `qcom-qmp-combo-phy: phy initialization timed-out`, DP link
+  training failed once, then `vblank timeout` / `frame done timeout` on the
+  DP encoder; the dock's USB3 side was dead. The dock itself stayed wedged:
+  replugging the phone and even rebooting it gave the same PHY timeout, only
+  power-cycling the dock fixed it. Turning DP off in Mutter while the encoder
+  was stalled was followed by a reboot (watchdog, probably).
+- **Why the phone got hot (67 C):** the resume also restarted the SLPI. The
+  SDSP fastrpc probe moves the reserved region from HLOS to the DSP VMs on
+  every probe; after a restart HLOS no longer owns it, SCM refuses (-22), and
+  the glink channel is offered again about 3000 times/s (900k log lines,
+  hexagonrpcd-sdsp restarted 165 times, sensors dead). Handing the region
+  back in remove is refused with -22 as well. Fix:
+  `extra-fastrpc-sdsp-once.py` assigns it only once. Tested by loading the
+  patched module and stopping/starting the SLPI: no assign failures,
+  `/dev/fastrpc-sdsp` comes back. After a mid-session SLPI restart GNOME still
+  gets no light values until reboot (separate, not fixed).
+- **Avoidance (`nura-dock`):** while docked the power key does nothing (the
+  previous action is saved in `~/.local/state/nura-dock/` and restored on
+  undock or at the next start); 12 s after docking, if the port runs pin
+  assignment D but no SuperSpeed device appeared, it shows "Dock not
+  responding: power-cycle the dock".
+- **Traps:** `rmmod fastrpc` deadlocks in glink (`device_del` in
+  `qcom_glink_destroy_ept`), and a reboot then hangs in `device_shutdown`; get
+  out with sysrq `s`, `u`, `b`. To test a new fastrpc.ko, blacklist the module
+  in `/etc/modprobe.d`, reboot, insmod, remove the blacklist.
