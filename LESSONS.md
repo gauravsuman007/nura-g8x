@@ -1222,3 +1222,18 @@ Flashed to boot_b as build #66 (`out/boot-flash.img`, previous #53 in
 - Tested from RAM (build #67): Mac attached at boot still worked; driver rebind while docked brought PD, DP alt mode and the monitor back about 1 s after the detach. Control (boot_detach_ms=0) rebind: the test kernel was then reset by the hardware watchdog (pon_reason PBS_WD) and the flashed #66 booted docked and showed the original failure.
 - **Flashed 2026-11-12** as build #67 (`out/boot-flash.img`; previous #66 in `out/boot-flash-prev.img`). Real reboot while docked: detach at 1.05 s, PD and DP-1 connected. Kernel package patch regenerated.
 - Testing tip: Wi-Fi SSH (`out/probes/g8xw`) works while docked; a driver rebind (`unbind`/`bind` of `c440000.spmi:pmic@2:typec@1500`) reproduces the reboot case without rebooting. `install-boot.sh`'s background reboot did not fire over Wi-Fi: reboot separately.
+
+### Boot log triage (2026-11-12, build #67, docked boot)
+Full list: `out/boot-warn.log`. Fixed:
+- `Driver 'i2c-qcom-cci' / 'leds-qcom-flash' is already registered`: old `.ko` files on the rootfs for drivers that are now built in, loaded again by udev. Moved to `/var/tmp/stale-ko/` on the phone, `depmod -a`. A fresh kernel package does not ship them.
+- `rtl_nic/rtl8153a-3.fw` missing (dock Ethernet): `linux-firmware-rtl_nic` installed and added to `nura-g8x-tweaks` depends (pkgrel 2). Ethernet worked without it; the firmware carries Realtek's fixes.
+Harmless or known, left as is:
+- Phone discharging while docked: the 75-80% charge limit pauses charging by suspending the charger input (charger reads online 0). Expected between 75 and 80%.
+- `phy initialization timed-out` once at 2.66 s: USB3 (5 Gbit/s hub, Ethernet) and DP come up right after. Not the old l18a or pipe-clock bug.
+- arm-smmu context faults at DPU init (SID 0xc20/0x800, iova 0x9d8xxxxx): the display engine still scanning out the bootloader splash while the SMMU takes over. One burst, display fine.
+- `pclk0 rcg didn't update`: known, pre-existing (see above).
+- ramoops `-22` on `dtbo-holder:dtbo-sink:ramoops`: second ramoops node from LG's overlay; `b0000000.ramoops` is the active one.
+- `pm8150b-charger: failed to send synthetic uevent: -11`: a property read returns -EAGAIN during the boot uevent replay; twice at boot only.
+- `QMI wait timeout` (slim-ngd) and `din-ports mismatch`: the known microphone boot race.
+- Wi-Fi `invalid MAC address; choosing random`, ext4 `mounting unchecked fs` on /boot, ath10k `chan info: invalid frequency 0`, Bluetooth `Frame reassembly failed` once, `Kernel image misaligned` (LG bootloader): cosmetic.
+- GNOME "Unknown USB mode" notification: `usb-moded-notify` (from postmarketos-usb-moded) runs, but the `usb-moded` daemon is not installed or running, so its D-Bus calls fail. Not fixed yet (user: later).
