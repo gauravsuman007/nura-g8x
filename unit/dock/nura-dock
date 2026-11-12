@@ -18,9 +18,13 @@ Stuck dock warnings (a phone replug does not help, only a dock power cycle):
 - pin assignment D but no SuperSpeed device after 12 s, or
 - power on the port but no Type-C partner for 15 s.
 In both cases the phone panel is kept on.
+- external monitors run without the color profile colord builds from their
+  EDID: Mutter's conversion made colors look washed out on a Samsung U32R59x
+  (2026-11-12). Done by holding colord's profiling inhibit on the device,
+  released on undock or when MONITOR_COLOR_PROFILE=1.
 Each behaviour can be turned off in LG G8x Tweaks (/etc/nura/tweaks.conf,
 read on every event: DOCK_AUTO, DOCK_PANEL_OFF, DOCK_POWER_KEY_OFF,
-DOCK_STUCK_WARN).
+DOCK_STUCK_WARN, MONITOR_COLOR_PROFILE).
 """
 import os
 from gi.repository import Gio, GLib
@@ -29,6 +33,9 @@ NAME = 'org.gnome.Mutter.DisplayConfig'
 PATH = '/org/gnome/Mutter/DisplayConfig'
 BL_POWER = '/sys/class/backlight/r66456-bl/bl_power'
 bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+sysbus = Gio.bus_get_sync(Gio.BusType.SYSTEM)
+CD = 'org.freedesktop.ColorManager'
+color_inhibited = set()
 POWER = Gio.Settings.new('org.gnome.settings-daemon.plugins.power')
 STATE = os.path.join(GLib.get_user_state_dir(), 'nura-dock', 'power-button-action')
 STUCK_BODY = ("Unplug the dock's power for a few seconds, plug it back in, "
@@ -86,6 +93,42 @@ def panel_dark(dark):
         log('phone panel', 'off' if dark else 'on')
     except OSError as e:
         log('bl_power:', e)
+
+
+def cd_call(path, iface, method, args=None):
+    return sysbus.call_sync(CD, path, iface, method, args, None, 0, 5000, None).unpack()
+
+
+def color_profile_off(off):
+    """Inhibit colord profiles on external monitors while docked."""
+    if off and tweak('MONITOR_COLOR_PROFILE', '0'):
+        off = False
+    try:
+        devs = cd_call('/org/freedesktop/ColorManager', CD, 'GetDevicesByKind',
+                       GLib.Variant('(s)', ('display',)))[0]
+    except GLib.Error as e:
+        log('colord:', e.message)
+        return
+    for d in devs:
+        try:
+            did = cd_call(d, 'org.freedesktop.DBus.Properties', 'Get',
+                          GLib.Variant('(ss)', (CD + '.Device', 'DeviceId')))[0]
+        except GLib.Error:
+            continue
+        if 'DSI' in did or 'eDP' in did:
+            continue
+        try:
+            if off and d not in color_inhibited:
+                cd_call(d, CD + '.Device', 'ProfilingInhibit')
+                color_inhibited.add(d)
+                log('color profile off:', did)
+            elif not off and d in color_inhibited:
+                cd_call(d, CD + '.Device', 'ProfilingUninhibit')
+                color_inhibited.discard(d)
+                log('color profile on:', did)
+        except GLib.Error as e:
+            color_inhibited.discard(d)
+            log('colord inhibit:', e.message)
 
 
 def set_docked(on):
@@ -160,6 +203,8 @@ def check_vbus_alone():
         vbus_alone = 0
     if docked and not dock_stuck:
         panel_dark(True)   # GNOME's unblank may have turned it back on
+    if docked:
+        color_profile_off(True)   # follows MONITOR_COLOR_PROFILE changes
     return True
 
 
@@ -179,6 +224,7 @@ def apply_docked():
         elif ext is None:
             ext = (conn, modes)
     set_docked(ext is not None)
+    color_profile_off(ext is not None)
     if not ext:
         return
     for l in logical:

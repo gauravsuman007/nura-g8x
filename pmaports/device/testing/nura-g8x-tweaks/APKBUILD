@@ -4,7 +4,7 @@
 # tweaks/stage.sh packs unit/ and tweaks/ into nura-g8x-tweaks-files.tar.gz.
 pkgname=nura-g8x-tweaks
 pkgver=2026.11.12
-pkgrel=2
+pkgrel=3
 _hexver=0.5.0
 _sscver=0.4.4
 pkgdesc="LG G8x ThinQ tweaks: buttons, wake, pocket and dock modes, sensors, camera, settings app"
@@ -129,7 +129,7 @@ package() {
 	install -Dm755 $f/unit/suspend/nura-wifi-sleep -t "$pkgdir"/usr/lib/systemd/system-sleep/
 }
 sha512sums="
-a2a40ab563c98f377fa8c2ef29d1e2b9d106e083ff38f2e9859964626b1f03b49ef4c6759b2af62e4620500dea0b2b6563e69319a5092d75bdc5ce0621c2a1c6  nura-g8x-tweaks-files.tar.gz
+d2f6a36ecdaa8a8dce42073d872d0ab2512e2c302b06784a1dccffccd30948c116a9b23cb23cddbcc487697a2010bcf1ef03a217c8dcabc115a385964e090653  nura-g8x-tweaks-files.tar.gz
 919146c9018e4b0cc271237c7200af0b7abcd4500227e0140e1e44fd2b412d29c1519ffe29ed06a5119b3a0218a3ef016af21a5be3c5898b0f0d35b44ac78b1b  hexagonrpc-0.5.0.tar.gz
 9240970f6a70f4900ef2d8fad337dac815ea2602b3b395943326fb086f59d24dcf59b76bdbc6014ebd3c450eaad5393465ca038c165845ffe99bf8e282a5c170  libssc-0.4.4.tar.gz
 385817bc2b8f4bfd2a06d67b63f420bb610092758f43391887eb8335c01d68aa1590301f8e060902c95ed20cd9075d6ef38ee71edac30f20008b44eddc3f51ce  hexagonrpc-0001-close-aliased-descriptor.diff

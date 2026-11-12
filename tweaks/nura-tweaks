@@ -42,10 +42,22 @@ PAGES = [
         ('DOCK_POWER_KEY_OFF', 'switch', 'Power key off while docked',
          'Suspending while docked can leave the dock unresponsive'),
         ('DOCK_STUCK_WARN', 'switch', 'Warn when the dock stops responding', None),
+        ('MONITOR_COLOR_PROFILE', 'switch', 'Monitor color profile',
+         'Off: colors as the monitor shows them (GNOME\'s EDID profile looked washed out)'),
     ]),
-    ('Battery', 'Turn the limit on in Settings, Power, "Preserve Battery Health"', [
-        ('CHARGE_LIMIT_START', 'spin', 'Resume charging below', 'Percent', 20, 95, 5),
-        ('CHARGE_LIMIT_END', 'spin', 'Stop charging at', 'Percent', 25, 100, 5),
+    ('Battery', 'For a phone that stays plugged in, 50/55 % with hold on, 4200 mV '
+     'and 1000 mA keep the battery healthiest', [
+        ('CHARGE_LIMIT', 'switch', 'Charge limit',
+         'Same as "Preserve Battery Health" in Settings, Power, with the values below'),
+        ('CHARGE_LIMIT_START', 'spin', 'Resume charging below', 'Percent', 20, 95, 1),
+        ('CHARGE_LIMIT_END', 'spin', 'Stop charging at', 'Percent', 25, 100, 1),
+        ('CHARGE_HOLD', 'switch', 'Hold at the limit',
+         'Run from the charger and leave the battery idle, no charge loops'),
+        ('CHARGE_CURRENT_MA', 'spin', 'Charging current',
+         'Milliamps. Slower charging is gentler and cooler', 100, 3000, 50),
+        ('CHARGE_VOLTAGE_MV', 'spin', 'Charging voltage',
+         'Millivolts. 4400 is full capacity, 4200 is about 85 % and lasts much longer',
+         3900, 4400, 50),
     ]),
     ('Sensors', None, [
         ('GYRO', 'switch', 'Gyroscope', 'Motion input for games and apps'),

@@ -8,7 +8,7 @@ wrong, and how to recover a phone with both boot slots marked unbootable.
 
 ## Status
 
-Flashed to boot_b on 2026-11-12 as build #67: the dock now survives a reboot while docked (clean Type-C detach at boot; previous #66 in `out/boot-flash-prev.img`). Before that, build #66 with USB-C dock support (`out/boot-flash.img`, previous #53 in `out/boot-flash-prev.img`). Flashed 2026-11-10 with hardware H.264/HEVC decode. Earlier: flashed on 2026-11-08 (`out/boot-flash.img`, built with
+Build #68 (RAM-tested, not flashed yet): battery hold at the charge limit, charge current/voltage settings. Flashed to boot_b on 2026-11-12 as build #67: the dock now survives a reboot while docked (clean Type-C detach at boot; previous #66 in `out/boot-flash-prev.img`). Before that, build #66 with USB-C dock support (`out/boot-flash.img`, previous #53 in `out/boot-flash-prev.img`). Flashed 2026-11-10 with hardware H.264/HEVC decode. Earlier: flashed on 2026-11-08 (`out/boot-flash.img`, built with
 `TEST=0 OUT=out/boot-flash.img python3 build-dtb.py`; previous image kept as
 `out/boot-nura-good.img`).
 

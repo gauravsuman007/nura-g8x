@@ -20,6 +20,8 @@ OLD_KEYS = '/etc/nura/keys.conf'   # before the tweaks package
 KEYS = '/sys/module/nura_keys/parameters'
 GPIO_KEYS_WAKE = '/sys/devices/platform/gpio-keys/power/wakeup'
 CHARGE_RULE = '/etc/udev/rules.d/61-nura-charge-limit.rules'
+SMBX = '/sys/module/qcom_smbx/parameters'
+UPOWER_BAT = '/org/freedesktop/UPower/devices/battery_qcom_battery'
 
 BOOL = (0, 1)
 SCHEMA = {   # key: (min, max)
@@ -27,8 +29,11 @@ SCHEMA = {   # key: (min, max)
     'RESET_COMBO': BOOL, 'RESET_HOLD_MS': (3000, 20000),
     'WAKE_KEYS': BOOL, 'TOUCH_GUARD': BOOL, 'POCKET_GUARD': BOOL,
     'DOCK_AUTO': BOOL, 'DOCK_PANEL_OFF': BOOL, 'DOCK_POWER_KEY_OFF': BOOL,
-    'DOCK_STUCK_WARN': BOOL,
+    'DOCK_STUCK_WARN': BOOL, 'MONITOR_COLOR_PROFILE': BOOL,
+    'CHARGE_LIMIT': BOOL,
     'CHARGE_LIMIT_START': (20, 95), 'CHARGE_LIMIT_END': (25, 100),
+    'CHARGE_HOLD': BOOL, 'CHARGE_CURRENT_MA': (100, 3000),
+    'CHARGE_VOLTAGE_MV': (3900, 4400),
     'GYRO': BOOL, 'SENSOR_CHECK': BOOL,
 }
 
@@ -111,6 +116,18 @@ def apply(cfg, changed=None):
         unit('nura-gyro.service', b('GYRO'))
     if want('SENSOR_CHECK') and changed is not None:
         unit('nura-sensor-check.service', b('SENSOR_CHECK'))
+    if want('CHARGE_HOLD', 'CHARGE_CURRENT_MA', 'CHARGE_VOLTAGE_MV') \
+            and os.path.isdir(SMBX):
+        write(SMBX + '/hold_mode', 'Y' if b('CHARGE_HOLD') else 'N')
+        write(SMBX + '/charge_ma', cfg['CHARGE_CURRENT_MA'])
+        write(SMBX + '/float_mv', cfg['CHARGE_VOLTAGE_MV'])
+    if want('CHARGE_LIMIT', 'CHARGE_LIMIT_START', 'CHARGE_LIMIT_END'):
+        # UPower re-reads the thresholds only when the limit is (re)enabled
+        def upower(on):
+            subprocess.run(['busctl', 'call', 'org.freedesktop.UPower', UPOWER_BAT,
+                            'org.freedesktop.UPower.Device', 'EnableChargeThreshold',
+                            'b', 'true' if on else 'false'],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if want('CHARGE_LIMIT_START', 'CHARGE_LIMIT_END'):
         rule = ('# Written by nura-tweaks-helper (LG G8x Tweaks). UPower offers\n'
                 '# "Preserve Battery Health" when CHARGE_LIMIT is set.\n'
@@ -125,6 +142,11 @@ def apply(cfg, changed=None):
                 subprocess.run(['udevadm', 'trigger', '-c', 'change',
                                 '/sys/class/power_supply/qcom-battery'])
                 subprocess.run(['systemctl', 'try-restart', 'upower.service'])
+                subprocess.run(['sleep', '2'])
+    if want('CHARGE_LIMIT', 'CHARGE_LIMIT_START', 'CHARGE_LIMIT_END') and changed is not None:
+        if b('CHARGE_LIMIT'):
+            upower(False)
+        upower(b('CHARGE_LIMIT'))
 
 
 def parse_text(path):
