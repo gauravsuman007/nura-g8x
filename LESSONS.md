@@ -1127,3 +1127,11 @@ Flashed to boot_b as build #66 (`out/boot-flash.img`, previous #53 in
   `out/probes/*.disabled`; with the power fragment it stalled UFS.
 - Full suite on the release kernel: 53 pass (after restoring GNOME idle-delay
   300, which the dock tests had set to 0), 0 GPU faults, 0 hangs.
+- **Release v2026.11.12** (GitHub): bundle with boot.img, the 824 modules,
+  services (now incl. nura-dock and the idle-aware nura-gyro) and UCM. The
+  v2026.11.09 boot.img carried this phone's `pmos_boot_uuid`/`pmos_root_uuid`,
+  so it could not find the root filesystem on any other phone. `install.sh`
+  now writes `boot-local.img` with the UUIDs from the running phone's
+  `/proc/cmdline` (same SHA1 header rewrite as `out/probes/recmd.py`;
+  verified byte-identical on this phone and against recmd.py with other
+  UUIDs). Pack bundles with `COPYFILE_DISABLE=1`.
