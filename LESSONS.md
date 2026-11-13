@@ -1286,3 +1286,12 @@ Harmless or known, left as is:
 - Remote processors release their XO proxy votes (handover IRQs fire).
 - **Don't run systemd-sleep from an SSH shell**: it freezes user.slice,
   including itself, and never suspends. Run it with `systemd-run`.
+- **Hang bisect (2026-11-14, 60 s RTC suspends, USB unbound over Wi-Fi,
+  `out/probes/offusb.sh`):** camera fix only: wakes, counters 0. Plus all
+  interconnect boot votes released: wakes, counters 0. Plus WCD934x and
+  hci_uart blacklisted (`ln_bb_clk2` and BT UART clock off): **hangs again**,
+  reproducibly, no ping, needs a side-key reset. So the hang appears only once
+  the last apps-side crystal holders are gone, i.e. when the SoC can
+  actually try XO shutdown / AOSS sleep: entering deep sleep may work and
+  resuming from it fails (wake path: PDC/RTC, AOSS QMP, DDR). Next: split
+  WCD934x vs hci_uart, then look at resume (ramoops/pstore after the reset).
