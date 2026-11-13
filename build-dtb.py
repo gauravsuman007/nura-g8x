@@ -41,6 +41,7 @@ c=h[64:576].rstrip(b'\0')
 if DSI: c=c.replace(b' msm.separate_gpu_kms=1',b'')
 for X in ((b'',) if DSI else (b' msm.separate_gpu_kms=1',))+((b' nura.testwd panic=10 softlockup_panic=1 hung_task_panic=1',) if TEST else ()):
     c=c if X in c else c+X
+c+=os.environ.get('EXTRA','').encode()
 assert len(c)<512; h[64:576]=c.ljust(512,b'\0')
 i=hashlib.sha1()
 for b in (nk,rd,b''): i.update(b); i.update(struct.pack('<I',len(b)))

@@ -1253,3 +1253,36 @@ Harmless or known, left as is:
 - `unit/suspend/nura-sensors-sleep` (systemd-sleep hook, in the tweaks package) stops iio-sensor-proxy and hexagonrpcd-sdsp before suspend and starts them after, so the DSP session is closed cleanly.
 - Test without logind (sshd holds a block inhibitor): `out/probes/suspcycle.sh N SECS` runs `/usr/lib/systemd/systemd-sleep suspend` (hooks included) with an RTC alarm. 3 x 90 s cycles: all resumed, sensors up.
 - Drain: about 3.4 %/h during the 3.8 h s2idle (73 % -> 48 % over 6 h incl. about 2 h awake at about 6 %/h). aosd/cxsd stay 0: no SoC-wide sleep (see the deep sleep passes above).
+
+### Deep sleep, fourth pass (2026-11-13)
+- **Standby run 2026-11-13** (logs in `out/logs/`): unplugging the cable woke
+  the phone from s2idle after 4 min (a Type-C change is a wake source), then
+  GNOME never suspended again (`sleep-inactive-battery-type` = nothing). Awake
+  with the screen off it drained 28 % -> 15 % in 3 h 18 min (3.9 %/h), about the
+  same as s2idle (3.4 %/h): suspend saves almost nothing while aosd/cxsd/ddr
+  stay 0. Wi-Fi uses a random MAC, so the DHCP address changes (.119/.120/.121);
+  `out/probes/g8xw` now uses `g8x.local`.
+- **CCI leaked every camera clock on each system resume** (mainline bug,
+  `kernel-src/extra-cci-pm-leak.py`): `cci_suspend()` only disables clocks if
+  the device is runtime-active, `cci_resume()` always enables them. The CCI is
+  normally runtime-suspended, so every suspend/resume added one reference to
+  camnoc_axi, slow_ahb, cpas_ahb, cci and the MCLKs in the node: camcc, MMCX
+  and the crystal stayed on for the rest of the boot. Measured +1 per suspend
+  (+2 on the shared camnoc_axi). Fix: `pm_runtime_force_suspend/resume`.
+  Verified on a RAM test: all camera clocks stay 0 across suspends. Upstream
+  candidate. `cci_remove()` leaks one more reference (autosuspend cancelled by
+  `pm_runtime_disable` while active); only matters on unbind.
+- **Compute NoC can drop its boot vote** with the BCM keepalive on CO0/CO1
+  (`out/probes/extra-icc-sm8150-sync.py.disabled` minus sync_state, staged as
+  `kernel-src/extra-zz-icc-keepalive.py` with the reset knob for tests only):
+  all 10 providers released, phone alive, cDSP/ADSP/SLPI/modem running.
+- With votes released, USB unbound over Wi-Fi, the camera fix, and WCD934x +
+  hci_uart blacklisted (`EXTRA=" modprobe.blacklist=..."` for build-dtb.py),
+  `ln_bb_clk2` and the BT UART clock were 0, bi_tcxo 9. A 180 s RTC suspend
+  then **hung the phone**: no ping on USB or Wi-Fi, gadget still enumerated,
+  no watchdog reset. Likely the "UFS stall" seen before with released votes
+  (device->DDR paths) once the SoC really entered a deeper state. Next time:
+  shorter suspend with USB bound first, and ask before off-USB suspends.
+- Remote processors release their XO proxy votes (handover IRQs fire).
+- **Don't run systemd-sleep from an SSH shell**: it freezes user.slice,
+  including itself, and never suspends. Run it with `systemd-run`.
