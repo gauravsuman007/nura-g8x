@@ -1,0 +1,17 @@
+#!/bin/sh
+# systemd-sleep hook: close the sensor DSP session before suspend.
+# 2026-11-12: on resume the SLPI sensor process crashed (hexagonrpcd: "Could
+# not fetch next FastRPC message: Broken pipe", PDM sensor_process crash),
+# the SLPI restarted, and the next suspend reset the phone. Stopping the
+# sensor stack first lets it close its FastRPC session cleanly; it is started
+# again after resume (GNOME reconnects to iio-sensor-proxy by itself).
+# Installed as /usr/lib/systemd/system-sleep/nura-sensors-sleep.
+case "$1" in
+pre)
+	timeout 10 systemctl stop iio-sensor-proxy.service hexagonrpcd-sdsp.service
+	;;
+post)
+	systemctl --no-block start hexagonrpcd-sdsp.service iio-sensor-proxy.service
+	;;
+esac
+exit 0

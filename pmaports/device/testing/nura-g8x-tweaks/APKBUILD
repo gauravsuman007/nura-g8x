@@ -127,6 +127,7 @@ package() {
 
 	# suspend: Wi-Fi off around s2idle (ath10k crash)
 	install -Dm755 $f/unit/suspend/nura-wifi-sleep -t "$pkgdir"/usr/lib/systemd/system-sleep/
+	install -Dm755 $f/unit/suspend/nura-sensors-sleep -t "$pkgdir"/usr/lib/systemd/system-sleep/
 }
 sha512sums="
 d2f6a36ecdaa8a8dce42073d872d0ab2512e2c302b06784a1dccffccd30948c116a9b23cb23cddbcc487697a2010bcf1ef03a217c8dcabc115a385964e090653  nura-g8x-tweaks-files.tar.gz
