@@ -1295,3 +1295,11 @@ Harmless or known, left as is:
   actually try XO shutdown / AOSS sleep: entering deep sleep may work and
   resuming from it fails (wake path: PDC/RTC, AOSS QMP, DDR). Next: split
   WCD934x vs hci_uart, then look at resume (ramoops/pstore after the reset).
+- **Split (2026-11-14):** codec only blacklisted (`ln_bb_clk2` 0, BT UART on):
+  wakes. hci_uart only blacklisted (BT UART 0, `ln_bb_clk2` on): wakes.
+  Both off: hangs. Neither driver is the cause; the hang needs *no*
+  apps-side crystal holder left, so it is the SoC's first real XO-shutdown
+  attempt failing to resume (or entering it badly). Look at the wake path
+  next (PDC/RTC wake IRQ in XO shutdown, AOSS, DDR self-refresh, the
+  power-fragment sleep-set votes). Recover a hang with Google Assistant key +
+  Volume down.
