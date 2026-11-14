@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
+#include <linux/workqueue.h>
 #include <media/v4l2-cci.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
@@ -26,16 +27,28 @@ struct lc898123 {
 	struct v4l2_ctrl_handler ctrls;
 	struct v4l2_ctrl *focus;
 	struct regulator *vdd;
+	struct regulator *sensor;	/* the image sensor's analog rail */
+	struct delayed_work idle;
+	struct notifier_block nb;
 	struct mutex lock;
-	int users;		/* open file handles */
 	bool on;
 };
 
 /*
  * Power: the controller and its lens servo draw current whenever vdd is on
- * (the servo actively holds the lens). Keep it off unless a client has the
- * subdev open, and always off in system sleep (standby drain, 2026-11-14).
+ * (the servo actively holds the lens). wireplumber's libcamera monitor keeps
+ * every subdev open, so open/close can't be used. The lens follows the image
+ * sensor instead: it powers up when a focus value is set while the sensor's
+ * analog rail is on (the sensor is streaming), and powers down once that
+ * rail is off (checked every 2 s while on) and always in system sleep
+ * (standby drain, 2026-11-14).
  */
+#define LC898123_IDLE_CHECK	msecs_to_jiffies(2000)
+
+static bool lc898123_sensor_on(struct lc898123 *lc)
+{
+	return !lc->sensor || regulator_is_enabled(lc->sensor) > 0;
+}
 static int lc898123_power(struct lc898123 *lc, bool on)
 {
 	int ret = 0;
@@ -52,8 +65,8 @@ static int lc898123_power(struct lc898123 *lc, bool on)
 		lc->on = true;
 		cci_write(lc->regmap, LC898123_REG_OIS_CTRL, 0, &ret);
 		cci_write(lc->regmap, LC898123_REG_SERVO, 1, &ret);
-		if (!ret && lc->sd.ctrl_handler)
-			ret = v4l2_ctrl_handler_setup(&lc->ctrls);
+		if (lc->sensor)
+			schedule_delayed_work(&lc->idle, LC898123_IDLE_CHECK);
 	} else {
 		cci_write(lc->regmap, LC898123_REG_SERVO, 0, NULL);
 		if (lc->vdd)
@@ -69,47 +82,57 @@ static int lc898123_set_ctrl(struct v4l2_ctrl *ctrl)
 
 	if (ctrl->id != V4L2_CID_FOCUS_ABSOLUTE)
 		return -EINVAL;
-	if (!lc->on)
-		return 0;	/* applied by lc898123_power() on the next open */
+	if (!lc->on) {
+		int ret;
+
+		if (!lc898123_sensor_on(lc))
+			return 0;	/* sensor off: nothing to focus */
+		mutex_lock(&lc->lock);
+		ret = lc898123_power(lc, true);
+		mutex_unlock(&lc->lock);
+		if (ret)
+			return ret;
+	}
 	return cci_write(lc->regmap, LC898123_REG_AF_POS, ctrl->val, NULL);
 }
 
 static const struct v4l2_ctrl_ops lc898123_ctrl_ops = { .s_ctrl = lc898123_set_ctrl };
 
-static int lc898123_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
+static void lc898123_idle_work(struct work_struct *work)
 {
-	struct lc898123 *lc = container_of(sd, struct lc898123, sd);
-	int ret;
+	struct lc898123 *lc = container_of(to_delayed_work(work), struct lc898123, idle);
+
+	bool restore = false;
 
 	mutex_lock(&lc->lock);
-	ret = lc898123_power(lc, true);
-	if (!ret)
-		lc->users++;
+	if (lc->on) {
+		if (lc898123_sensor_on(lc))
+			schedule_delayed_work(&lc->idle, LC898123_IDLE_CHECK);
+		else
+			lc898123_power(lc, false);
+	} else if (lc898123_sensor_on(lc)) {
+		restore = !lc898123_power(lc, true);
+	}
 	mutex_unlock(&lc->lock);
-	return ret;
+	if (restore)
+		v4l2_ctrl_handler_setup(&lc->ctrls);	/* last focus value */
 }
 
-static int lc898123_close(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
+static int lc898123_sensor_event(struct notifier_block *nb, unsigned long event, void *data)
 {
-	struct lc898123 *lc = container_of(sd, struct lc898123, sd);
+	struct lc898123 *lc = container_of(nb, struct lc898123, nb);
 
-	mutex_lock(&lc->lock);
-	if (lc->users && !--lc->users)
-		lc898123_power(lc, false);
-	mutex_unlock(&lc->lock);
-	return 0;
+	if (event & REGULATOR_EVENT_ENABLE)
+		mod_delayed_work(system_wq, &lc->idle, msecs_to_jiffies(20));
+	return NOTIFY_OK;
 }
-
-static const struct v4l2_subdev_internal_ops lc898123_internal_ops = {
-	.open = lc898123_open,
-	.close = lc898123_close,
-};
 
 static int lc898123_suspend(struct device *dev)
 {
 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
 	struct lc898123 *lc = container_of(sd, struct lc898123, sd);
 
+	cancel_delayed_work_sync(&lc->idle);
 	mutex_lock(&lc->lock);
 	lc898123_power(lc, false);
 	mutex_unlock(&lc->lock);
@@ -118,17 +141,10 @@ static int lc898123_suspend(struct device *dev)
 
 static int lc898123_resume(struct device *dev)
 {
-	struct v4l2_subdev *sd = dev_get_drvdata(dev);
-	struct lc898123 *lc = container_of(sd, struct lc898123, sd);
 	int ret = 0;
 
-	mutex_lock(&lc->lock);
-	if (lc->users)
-		ret = lc898123_power(lc, true);
-	mutex_unlock(&lc->lock);
-	if (ret)
-		dev_warn(dev, "power on after resume failed: %d\n", ret);
-	return 0;
+	/* powered again by the next focus write while the sensor streams */
+	return ret;
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(lc898123_pm, lc898123_suspend, lc898123_resume);
@@ -145,6 +161,13 @@ static int lc898123_probe(struct i2c_client *client)
 	if (!lc)
 		return -ENOMEM;
 	mutex_init(&lc->lock);
+	INIT_DELAYED_WORK(&lc->idle, lc898123_idle_work);
+	lc->sensor = devm_regulator_get_optional(&client->dev, "sensor");
+	if (IS_ERR(lc->sensor)) {
+		if (PTR_ERR(lc->sensor) != -ENODEV)
+			return dev_err_probe(&client->dev, PTR_ERR(lc->sensor), "sensor supply\n");
+		lc->sensor = NULL;	/* no hint: stay on once used, off in sleep */
+	}
 	lc->vdd = devm_regulator_get_optional(&client->dev, "vdd");
 	if (IS_ERR(lc->vdd)) {
 		if (PTR_ERR(lc->vdd) != -ENODEV)
@@ -170,7 +193,6 @@ static int lc898123_probe(struct i2c_client *client)
 
 	v4l2_i2c_subdev_init(&lc->sd, client, &lc898123_ops);
 	lc->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
-	lc->sd.internal_ops = &lc898123_internal_ops;
 	lc->sd.entity.function = MEDIA_ENT_F_LENS;
 
 	v4l2_ctrl_handler_init(&lc->ctrls, 1);
@@ -185,6 +207,12 @@ static int lc898123_probe(struct i2c_client *client)
 	ret = media_entity_pads_init(&lc->sd.entity, 0, NULL);
 	if (ret)
 		goto err;
+	if (lc->sensor) {
+		lc->nb.notifier_call = lc898123_sensor_event;
+		ret = devm_regulator_register_notifier(lc->sensor, &lc->nb);
+		if (ret)
+			goto err_entity;
+	}
 	ret = v4l2_async_register_subdev(&lc->sd);
 	if (ret)
 		goto err_entity;
@@ -205,6 +233,7 @@ static void lc898123_remove(struct i2c_client *client)
 	v4l2_async_unregister_subdev(sd);
 	media_entity_cleanup(&sd->entity);
 	v4l2_ctrl_handler_free(&lc->ctrls);
+	cancel_delayed_work_sync(&lc->idle);
 	lc898123_power(lc, false);
 }
 

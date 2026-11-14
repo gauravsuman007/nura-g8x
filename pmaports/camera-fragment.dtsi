@@ -321,6 +321,8 @@
 		compatible = "onnn,lc898123f40";
 		reg = <0x3e>;
 		vdd-supply = <&cam_rn_afvdd>;
+		/* nura: lens powered only while the IMX363 analog rail is on */
+		sensor-supply = <&cam_rn_avdd>;
 	};
 
 	imx363: camera@10 {

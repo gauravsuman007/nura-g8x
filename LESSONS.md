@@ -1448,3 +1448,24 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
   so a kernel-side hang becomes a warm reset that keeps the log.
 - WCN3990 WoWLAN: disconnect, magic packet, 22 patterns, net-detect. It is
   disabled now, so Wi-Fi drops in every suspend (no Android-like push).
+- Lens power v2 (build #78, flashed): wireplumber's libcamera monitor keeps
+  every camera subdev open, so open/close-based power never turned the lens
+  off. The lens now follows the IMX363 analog rail (`sensor-supply =
+  <&cam_rn_avdd>` in the DT): a regulator notifier powers it up when the
+  sensor starts (restoring the last focus value), a 2 s check powers it off
+  once the rail is off, system sleep always powers it off. Checked: rail on
+  while `cam -c 3` streams at 30 fps, off a few seconds later; suite 56 pass.
+- `/lib/modules/*/updates/` holds the real (Nov 12) module set and
+  overrides `kernel/`, which is an older, incomplete copy (no camera
+  sensors, no v4l2-cci, sleep blockers back). Moving `updates/` away broke
+  cameras and deep sleep; it was restored. Replace single modules there,
+  with a backup; the kernel package should own one clean tree (open item).
+- Wake-on-Wi-Fi: WCN3990 supports WoWLAN, but `nura-wifi-sleep` rfkills
+  Wi-Fi before every suspend because ath10k_snoc crashed the phone when
+  suspending with Wi-Fi up. Android-like standby needs that crash fixed
+  first; every attempt can hang the phone, so do it with the user present.
+  Unicast-only patterns are not enough: ARP requests are broadcast (add an
+  ARP-for-our-IP pattern).
+- A USB host that is talking to the gadget aborts s2idle immediately
+  (`dwc3-qcom-legacy: port-1 HS-PHY not in L2`). Suspend tests on USB must
+  detach the gadget first (`out/probes/wowtest.sh`).
