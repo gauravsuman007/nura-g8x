@@ -59,9 +59,11 @@ fi
 # the DSP updates the registry at runtime: only seed it once
 if [ ! -e $Q/sensors/registry/.seeded ] && mnt sns $M/sns; then
 	mkdir -p $Q/sensors/registry
-	for f in $M/sns/sensors/registry/registry/*; do [ -f "$f" ] && cp -a "$f" $Q/sensors/registry/; done
+	for f in $M/sns/sensors/registry/registry/*; do [ -f "$f" ] && cp "$f" $Q/sensors/registry/; done
 	find $Q/sensors/registry -name '._*' -delete
-	touch $Q/sensors/registry/.seeded; log "seeded sensor registry"
+	touch $Q/sensors/registry/.seeded
+	chown -R fastrpc:fastrpc $Q/sensors 2>/dev/null; chmod 0644 $Q/sensors/registry/* 2>/dev/null
+	log "seeded sensor registry"
 	umount $M/sns; n=$((n+1))
 fi
 rmdir $M/* $M 2>/dev/null

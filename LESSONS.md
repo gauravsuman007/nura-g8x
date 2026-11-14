@@ -1396,3 +1396,26 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
   qbootctl and mount, WantedBy multi-user. Recovery: `out/boot-recovery.img`
   (cmdline `systemd.mask=nura-firmware-loader.service`) and
   `out/probes/recover-watch.sh`. Lesson: RAM-test any new early-boot unit.
+
+## Boot hang and dead sensors from the early firmware loader (2026-11-14)
+
+- The r7 `nura-firmware-loader` ran in early boot (`DefaultDependencies=no`,
+  `WantedBy=sysinit.target`) as a oneshot with no start timeout. It blocked
+  the boot forever. Slot b was already marked successful, so the bootloader
+  never fell back. Recovery: hold Volume Down through the restart until
+  fastboot appears, `fastboot boot` an image with
+  `systemd.mask=nura-firmware-loader.service`, delete the
+  `sysinit.target.wants` link, install r8. Rule: never enable an early-boot
+  unit that was not first run by hand on a RAM-booted image.
+- The same run seeded the sensor registry with `cp -a`, which kept LG's
+  uid 1000 and mode 0600. hexagonrpcd runs as `fastrpc` and could not read
+  the registry, so the SDSP started no sensors: no auto-brightness, no
+  rotation, no proximity. Fix (r9): plain `cp`, then
+  `chown -R fastrpc:fastrpc`; post-install/upgrade repairs existing installs.
+  Restarting hexagonrpcd-sdsp mid-boot does not re-attach the sensors; a
+  reboot is needed.
+- A stale hand-copied `slim-qcom-ngd-ctrl.ko` in
+  `/lib/modules/*/updates/` (no owning package) overrode the packaged #77
+  driver; the QMI wait timed out and the sound card never appeared. Check
+  with `apk info -W $(modinfo -n <mod>)`; never leave test modules in
+  `updates/`.

@@ -9,6 +9,9 @@ systemctl --global disable usb-moded-notify.service 2>/dev/null
 rm -f /etc/systemd/system/hexagonrpcd-sdsp.service.d/*lg*.conf \
 	/etc/systemd/system/iio-sensor-proxy.service.d/*lg*.conf 2>/dev/null
 systemctl disable nura-keys.service 2>/dev/null
+# r9: the r7 loader copied the LG sensor registry as uid 1000, mode 0600: hexagonrpcd (fastrpc) could not read it and no sensors started
+chown -R fastrpc:fastrpc /usr/share/qcom/sm8150/LG/mh2lm/sensors 2>/dev/null
+chmod 0644 /usr/share/qcom/sm8150/LG/mh2lm/sensors/registry/* 2>/dev/null
 glib-compile-schemas /usr/share/glib-2.0/schemas 2>/dev/null
 /usr/libexec/nura-sensordaemon-fix >/dev/null 2>&1
 udevadm control --reload 2>/dev/null
