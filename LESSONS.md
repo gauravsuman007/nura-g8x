@@ -1378,3 +1378,9 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
   slim_qcom_ngd_ctrl and snd_soc_wcd934x installed in updates/ and kernel/
   (old ones in /var/lib/nura-mods-prev-77/). Tests: libssc path updated to
   the package location.
+- **No sound on 1 boot in 5 (fixed, `extra-slim-ngd-qmi-wait.py`):**
+  `qcom_slim_ngd_up_worker()` waited only 1 s for the ADSP's SLIMbus QMI
+  service and never retried, so a late service meant no SLIMbus, no WCD934x,
+  no sound card for that boot. Now 15 s. 5 of 5 boots good after installing
+  the module (old one in /var/lib/nura-mods-prev-78/). The one "QMI wait
+  timeout" left per boot is a second, redundant worker run.

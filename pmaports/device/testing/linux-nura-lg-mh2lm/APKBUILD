@@ -6,7 +6,7 @@
 _flavor="nura-lg-mh2lm"
 pkgname=linux-$_flavor
 pkgver=7.0.0
-pkgrel=0
+pkgrel=1
 pkgdesc="Mainline kernel for the LG G8x ThinQ (SM8150) with Nura G8x drivers"
 arch="aarch64"
 _carch="arm64"
@@ -66,6 +66,6 @@ package() {
 
 sha512sums="
 c1bdb11a9ad8be826ec5781e239c60ad92d6bb3a2d6b0adff8ef1f1e334bc6889ab91683257691ba3155f976011cd37969be379d509c9f928f4f85753e95635e  linux-v7.0.0-sm8150.tar.gz
-e95e26db0cdc3ecddc79fb5e64dfeedb778496e4aa6326b275ef99d08b29661dce375e0fa49f85a710d6830e47fd15a1a809df2200e25fab437c0ba7f813c03a  0001-nura-lg-mh2lm.patch
+d4244618f1087d7b50df9296b0c4169b78e9ac1cbf3992483c410ceb53c87d948561f8f6a3f187f1f821c78ea74a59f2221d0a4949c6612ee07f98aacde71128  0001-nura-lg-mh2lm.patch
 49effaaa88cb389de54434fc98b9820d71a5dca880df6ad16a558476c41f96c051b63eaea5a24e452d4d3106b90e7df59cfdcc4fe73a56c83e821011b128c539  config-nura-lg-mh2lm.aarch64
 "
