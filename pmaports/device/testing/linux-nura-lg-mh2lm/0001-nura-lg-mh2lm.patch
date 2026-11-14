@@ -1,6 +1,6 @@
 diff -ruN '--exclude=.config' a/drivers/clk/qcom/videocc-sm8150.c b/drivers/clk/qcom/videocc-sm8150.c
 --- a/drivers/clk/qcom/videocc-sm8150.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/clk/qcom/videocc-sm8150.c	2026-11-14 03:42:55.621546617 +0000
++++ b/drivers/clk/qcom/videocc-sm8150.c	2026-11-14 19:34:05.871958153 +0000
 @@ -170,7 +170,7 @@
  	.pd = {
  		.name = "venus_gdsc",
@@ -12,7 +12,7 @@ diff -ruN '--exclude=.config' a/drivers/clk/qcom/videocc-sm8150.c b/drivers/clk/
  
 diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/adreno/adreno_gpu.c b/drivers/gpu/drm/msm/adreno/adreno_gpu.c
 --- a/drivers/gpu/drm/msm/adreno/adreno_gpu.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/gpu/drm/msm/adreno/adreno_gpu.c	2026-11-14 03:42:55.652337702 +0000
++++ b/drivers/gpu/drm/msm/adreno/adreno_gpu.c	2026-11-14 19:34:05.902358520 +0000
 @@ -263,7 +263,7 @@
  	 * collect a crashdump to re-enable stall-on-fault.
  	 */
@@ -24,7 +24,7 @@ diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/adreno/adreno_gpu.c b/driver
  		struct msm_mmu *mmu = to_msm_vm(gpu->vm)->mmu;
 diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c b/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c
 --- a/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c	2026-11-14 03:42:55.513477188 +0000
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c	2026-11-14 19:34:05.764935843 +0000
 @@ -836,6 +836,7 @@
  	/* Create the planes, keeping track of one primary/cursor per crtc */
  	for (i = 0; i < catalog->sspp_count; i++) {
@@ -65,7 +65,7 @@ diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c b/driver
  	if (IS_ERR(dpu_kms->hw_intr)) {
 diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/disp/dpu1/dpu_plane.c b/drivers/gpu/drm/msm/disp/dpu1/dpu_plane.c
 --- a/drivers/gpu/drm/msm/disp/dpu1/dpu_plane.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_plane.c	2026-11-14 03:42:55.513706068 +0000
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_plane.c	2026-11-14 19:34:05.765145136 +0000
 @@ -1772,7 +1772,7 @@
  	int ret;
  
@@ -77,7 +77,7 @@ diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/disp/dpu1/dpu_plane.c b/driv
  	if (IS_ERR(pdpu))
 diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/disp/msm_disp_snapshot_util.c b/drivers/gpu/drm/msm/disp/msm_disp_snapshot_util.c
 --- a/drivers/gpu/drm/msm/disp/msm_disp_snapshot_util.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/gpu/drm/msm/disp/msm_disp_snapshot_util.c	2026-11-14 03:42:55.660163559 +0000
++++ b/drivers/gpu/drm/msm/disp/msm_disp_snapshot_util.c	2026-11-14 19:34:05.909884330 +0000
 @@ -143,7 +143,8 @@
  	if (kms->funcs->snapshot)
  		kms->funcs->snapshot(disp_state, kms);
@@ -90,7 +90,7 @@ diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/disp/msm_disp_snapshot_util.
  void msm_disp_state_free(void *data)
 diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
 --- a/drivers/gpu/drm/msm/dp/dp_display.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/gpu/drm/msm/dp/dp_display.c	2026-11-14 03:42:55.504507435 +0000
++++ b/drivers/gpu/drm/msm/dp/dp_display.c	2026-11-14 19:34:05.756174690 +0000
 @@ -151,6 +151,11 @@
  	{}
  };
@@ -113,7 +113,7 @@ diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gp
  	{ .compatible = "qcom,x1e80100-dp", .data = &msm_dp_desc_x1e80100 },
 diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/dsi/phy/dsi_phy.c b/drivers/gpu/drm/msm/dsi/phy/dsi_phy.c
 --- a/drivers/gpu/drm/msm/dsi/phy/dsi_phy.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/gpu/drm/msm/dsi/phy/dsi_phy.c	2026-11-14 03:42:55.521485341 +0000
++++ b/drivers/gpu/drm/msm/dsi/phy/dsi_phy.c	2026-11-14 19:34:05.772651321 +0000
 @@ -684,13 +684,11 @@
  	if (ret)
  		return ret;
@@ -160,7 +160,7 @@ diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/dsi/phy/dsi_phy.c b/drivers/
  static struct platform_driver dsi_phy_platform_driver = {
 diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/dsi/phy/dsi_phy.h b/drivers/gpu/drm/msm/dsi/phy/dsi_phy.h
 --- a/drivers/gpu/drm/msm/dsi/phy/dsi_phy.h	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/gpu/drm/msm/dsi/phy/dsi_phy.h	2026-11-14 03:42:55.521673261 +0000
++++ b/drivers/gpu/drm/msm/dsi/phy/dsi_phy.h	2026-11-14 19:34:05.772789989 +0000
 @@ -95,6 +95,7 @@
  
  struct msm_dsi_phy {
@@ -171,7 +171,7 @@ diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/dsi/phy/dsi_phy.h b/drivers/
  	void __iomem *reg_base;
 diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/msm_drv.c b/drivers/gpu/drm/msm/msm_drv.c
 --- a/drivers/gpu/drm/msm/msm_drv.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/gpu/drm/msm/msm_drv.c	2026-11-14 03:42:55.652061113 +0000
++++ b/drivers/gpu/drm/msm/msm_drv.c	2026-11-14 19:34:05.902098477 +0000
 @@ -50,6 +50,10 @@
  MODULE_PARM_DESC(dumpstate, "Dump KMS state on errors");
  module_param(dumpstate, bool, 0600);
@@ -194,7 +194,7 @@ diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/msm_drv.c b/drivers/gpu/drm/
  	fs_reclaim_acquire(GFP_KERNEL);
 diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/msm_drv.h b/drivers/gpu/drm/msm/msm_drv.h
 --- a/drivers/gpu/drm/msm/msm_drv.h	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/gpu/drm/msm/msm_drv.h	2026-11-14 03:42:55.652166282 +0000
++++ b/drivers/gpu/drm/msm/msm_drv.h	2026-11-14 19:34:05.902211353 +0000
 @@ -70,6 +70,8 @@
  
  #define MSM_GPU_MAX_RINGS 4
@@ -206,7 +206,7 @@ diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/msm_drv.h b/drivers/gpu/drm/
  	struct drm_device *dev;
 diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/msm_gem_vma.c b/drivers/gpu/drm/msm/msm_gem_vma.c
 --- a/drivers/gpu/drm/msm/msm_gem_vma.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/gpu/drm/msm/msm_gem_vma.c	2026-11-14 03:42:55.667279152 +0000
++++ b/drivers/gpu/drm/msm/msm_gem_vma.c	2026-11-14 19:34:05.917194264 +0000
 @@ -382,7 +382,16 @@
  	if (vm->managed) {
  		BUG_ON(offset != 0);
@@ -226,7 +226,7 @@ diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/msm_gem_vma.c b/drivers/gpu/
  
 diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/msm_iommu.c b/drivers/gpu/drm/msm/msm_iommu.c
 --- a/drivers/gpu/drm/msm/msm_iommu.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/gpu/drm/msm/msm_iommu.c	2026-11-14 03:42:55.652489163 +0000
++++ b/drivers/gpu/drm/msm/msm_iommu.c	2026-11-14 19:34:05.902474313 +0000
 @@ -793,7 +793,7 @@
  
  	/* Enable stall on iommu fault: */
@@ -238,7 +238,7 @@ diff -ruN '--exclude=.config' a/drivers/gpu/drm/msm/msm_iommu.c b/drivers/gpu/dr
  }
 diff -ruN '--exclude=.config' a/drivers/gpu/drm/panel/Kconfig b/drivers/gpu/drm/panel/Kconfig
 --- a/drivers/gpu/drm/panel/Kconfig	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/gpu/drm/panel/Kconfig	2026-11-14 03:42:55.694602380 +0000
++++ b/drivers/gpu/drm/panel/Kconfig	2026-11-14 19:34:05.944529565 +0000
 @@ -1255,4 +1255,9 @@
  	  Say Y here if you want to enable support for the Xinpeng
  	  XPP055C272 controller for 720x1280 LCD panels with MIPI/RGB/SPI
@@ -251,7 +251,7 @@ diff -ruN '--exclude=.config' a/drivers/gpu/drm/panel/Kconfig b/drivers/gpu/drm/
  endmenu
 diff -ruN '--exclude=.config' a/drivers/gpu/drm/panel/Makefile b/drivers/gpu/drm/panel/Makefile
 --- a/drivers/gpu/drm/panel/Makefile	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/gpu/drm/panel/Makefile	2026-11-14 03:42:55.694732132 +0000
++++ b/drivers/gpu/drm/panel/Makefile	2026-11-14 19:34:05.944636565 +0000
 @@ -124,3 +124,4 @@
  obj-$(CONFIG_DRM_PANEL_VISIONOX_R66451) += panel-visionox-r66451.o
  obj-$(CONFIG_DRM_PANEL_WIDECHIPS_WS2401) += panel-widechips-ws2401.o
@@ -259,7 +259,7 @@ diff -ruN '--exclude=.config' a/drivers/gpu/drm/panel/Makefile b/drivers/gpu/drm
 +obj-$(CONFIG_DRM_PANEL_LG_R66456) += panel-lg-r66456.o
 diff -ruN '--exclude=.config' a/drivers/gpu/drm/panel/panel-lg-r66456.c b/drivers/gpu/drm/panel/panel-lg-r66456.c
 --- a/drivers/gpu/drm/panel/panel-lg-r66456.c	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/gpu/drm/panel/panel-lg-r66456.c	2026-11-14 03:42:55.693059101 +0000
++++ b/drivers/gpu/drm/panel/panel-lg-r66456.c	2026-11-14 19:34:05.944046019 +0000
 @@ -0,0 +1,223 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/* LG G8X ThinQ Tianma R66456 1080x2340 AMOLED command mode panel */
@@ -486,7 +486,7 @@ diff -ruN '--exclude=.config' a/drivers/gpu/drm/panel/panel-lg-r66456.c b/driver
 +MODULE_LICENSE("GPL");
 diff -ruN '--exclude=.config' a/drivers/gpu/drm/panel/panel-r66456-seq.h b/drivers/gpu/drm/panel/panel-r66456-seq.h
 --- a/drivers/gpu/drm/panel/panel-r66456-seq.h	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/gpu/drm/panel/panel-r66456-seq.h	2026-11-14 03:42:55.694359917 +0000
++++ b/drivers/gpu/drm/panel/panel-r66456-seq.h	2026-11-14 19:34:05.944324646 +0000
 @@ -0,0 +1,20 @@
 +/* generated from LG dtbo: r66456 tianmamd pv on-command */
 +static const u8 r66456_on[] = {
@@ -510,7 +510,7 @@ diff -ruN '--exclude=.config' a/drivers/gpu/drm/panel/panel-r66456-seq.h b/drive
 +};
 diff -ruN '--exclude=.config' a/drivers/i2c/busses/i2c-qcom-cci.c b/drivers/i2c/busses/i2c-qcom-cci.c
 --- a/drivers/i2c/busses/i2c-qcom-cci.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/i2c/busses/i2c-qcom-cci.c	2026-11-14 03:42:55.496088316 +0000
++++ b/drivers/i2c/busses/i2c-qcom-cci.c	2026-11-14 19:34:05.748570880 +0000
 @@ -513,7 +513,8 @@
  }
  
@@ -523,7 +523,7 @@ diff -ruN '--exclude=.config' a/drivers/i2c/busses/i2c-qcom-cci.c b/drivers/i2c/
  
 diff -ruN '--exclude=.config' a/drivers/i2c/busses/i2c-qcom-geni.c b/drivers/i2c/busses/i2c-qcom-geni.c
 --- a/drivers/i2c/busses/i2c-qcom-geni.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/i2c/busses/i2c-qcom-geni.c	2026-11-14 03:42:55.573993297 +0000
++++ b/drivers/i2c/busses/i2c-qcom-geni.c	2026-11-14 19:34:05.825335949 +0000
 @@ -118,6 +118,7 @@
  	struct dma_chan *rx_c;
  	bool no_dma;
@@ -589,7 +589,7 @@ diff -ruN '--exclude=.config' a/drivers/i2c/busses/i2c-qcom-geni.c b/drivers/i2c
  		else if (tx_multi_xfer->unmap_msg_cnt != tx_multi_xfer->irq_cnt)
 diff -ruN '--exclude=.config' a/drivers/input/misc/Kconfig b/drivers/input/misc/Kconfig
 --- a/drivers/input/misc/Kconfig	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/input/misc/Kconfig	2026-11-14 03:42:55.680189564 +0000
++++ b/drivers/input/misc/Kconfig	2026-11-14 19:34:05.930239242 +0000
 @@ -1003,4 +1003,12 @@
  	  To compile this driver as a module, choose M here: the
  	  module will be called stpmic1_onkey.
@@ -605,7 +605,7 @@ diff -ruN '--exclude=.config' a/drivers/input/misc/Kconfig b/drivers/input/misc/
  endif
 diff -ruN '--exclude=.config' a/drivers/input/misc/Makefile b/drivers/input/misc/Makefile
 --- a/drivers/input/misc/Makefile	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/input/misc/Makefile	2026-11-14 03:42:55.680300442 +0000
++++ b/drivers/input/misc/Makefile	2026-11-14 19:34:05.930362160 +0000
 @@ -96,3 +96,5 @@
  obj-$(CONFIG_INPUT_XEN_KBDDEV_FRONTEND)	+= xen-kbdfront.o
  obj-$(CONFIG_INPUT_YEALINK)		+= yealink.o
@@ -614,7 +614,7 @@ diff -ruN '--exclude=.config' a/drivers/input/misc/Makefile b/drivers/input/misc
 +obj-$(CONFIG_INPUT_NURA_KEYS) += nura-keys.o
 diff -ruN '--exclude=.config' a/drivers/input/misc/dw7800-haptics.c b/drivers/input/misc/dw7800-haptics.c
 --- a/drivers/input/misc/dw7800-haptics.c	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/input/misc/dw7800-haptics.c	2026-11-14 03:42:55.535056098 +0000
++++ b/drivers/input/misc/dw7800-haptics.c	2026-11-14 19:34:05.785826301 +0000
 @@ -0,0 +1,157 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
@@ -775,7 +775,7 @@ diff -ruN '--exclude=.config' a/drivers/input/misc/dw7800-haptics.c b/drivers/in
 +MODULE_LICENSE("GPL");
 diff -ruN '--exclude=.config' a/drivers/input/misc/nura-keys.c b/drivers/input/misc/nura-keys.c
 --- a/drivers/input/misc/nura-keys.c	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/input/misc/nura-keys.c	2026-11-14 03:42:55.679058835 +0000
++++ b/drivers/input/misc/nura-keys.c	2026-11-14 19:34:05.930095658 +0000
 @@ -0,0 +1,198 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
@@ -977,7 +977,7 @@ diff -ruN '--exclude=.config' a/drivers/input/misc/nura-keys.c b/drivers/input/m
 +MODULE_LICENSE("GPL");
 diff -ruN '--exclude=.config' a/drivers/input/touchscreen/Kconfig b/drivers/input/touchscreen/Kconfig
 --- a/drivers/input/touchscreen/Kconfig	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/input/touchscreen/Kconfig	2026-11-14 03:42:55.403352971 +0000
++++ b/drivers/input/touchscreen/Kconfig	2026-11-14 19:34:05.656441354 +0000
 @@ -1443,4 +1443,10 @@
  	  To compile this driver as a module, choose M here: the
  	  module will be called himax_hx83112b.
@@ -991,7 +991,7 @@ diff -ruN '--exclude=.config' a/drivers/input/touchscreen/Kconfig b/drivers/inpu
  endif
 diff -ruN '--exclude=.config' a/drivers/input/touchscreen/Makefile b/drivers/input/touchscreen/Makefile
 --- a/drivers/input/touchscreen/Makefile	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/input/touchscreen/Makefile	2026-11-14 03:42:55.403473307 +0000
++++ b/drivers/input/touchscreen/Makefile	2026-11-14 19:34:05.656543314 +0000
 @@ -123,4 +123,5 @@
  obj-$(CONFIG_TOUCHSCREEN_HIMAX_HX83112B)	+= himax_hx83112b.o
  obj-$(CONFIG_TOUCHSCREEN_NT36523_SPI) += nt36523/
@@ -1002,7 +1002,7 @@ diff -ruN '--exclude=.config' a/drivers/input/touchscreen/Makefile b/drivers/inp
 +obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_TCM)	+= synaptics_tcm_s3618.o
 diff -ruN '--exclude=.config' a/drivers/input/touchscreen/synaptics_tcm_s3618.c b/drivers/input/touchscreen/synaptics_tcm_s3618.c
 --- a/drivers/input/touchscreen/synaptics_tcm_s3618.c	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/input/touchscreen/synaptics_tcm_s3618.c	2026-11-14 03:42:55.334052279 +0000
++++ b/drivers/input/touchscreen/synaptics_tcm_s3618.c	2026-11-14 19:34:05.567824566 +0000
 @@ -0,0 +1,362 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
@@ -1368,7 +1368,7 @@ diff -ruN '--exclude=.config' a/drivers/input/touchscreen/synaptics_tcm_s3618.c 
 +MODULE_LICENSE("GPL");
 diff -ruN '--exclude=.config' a/drivers/interconnect/qcom/sm8150.c b/drivers/interconnect/qcom/sm8150.c
 --- a/drivers/interconnect/qcom/sm8150.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/interconnect/qcom/sm8150.c	2026-11-14 03:42:55.581306352 +0000
++++ b/drivers/interconnect/qcom/sm8150.c	2026-11-14 19:34:05.832766175 +0000
 @@ -1358,7 +1358,7 @@
  
  static struct qcom_icc_bcm bcm_co0 = {
@@ -1397,7 +1397,7 @@ diff -ruN '--exclude=.config' a/drivers/interconnect/qcom/sm8150.c b/drivers/int
  module_platform_driver(qnoc_driver);
 diff -ruN '--exclude=.config' a/drivers/media/i2c/Kconfig b/drivers/media/i2c/Kconfig
 --- a/drivers/media/i2c/Kconfig	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/media/i2c/Kconfig	2026-11-14 03:42:55.741234266 +0000
++++ b/drivers/media/i2c/Kconfig	2026-11-14 19:34:05.988452039 +0000
 @@ -257,6 +257,30 @@
  	  To compile this driver as a module, choose M here: the
  	  module will be called imx335.
@@ -1431,7 +1431,7 @@ diff -ruN '--exclude=.config' a/drivers/media/i2c/Kconfig b/drivers/media/i2c/Kc
  	help
 diff -ruN '--exclude=.config' a/drivers/media/i2c/Makefile b/drivers/media/i2c/Makefile
 --- a/drivers/media/i2c/Makefile	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/media/i2c/Makefile	2026-11-14 03:42:55.741234266 +0000
++++ b/drivers/media/i2c/Makefile	2026-11-14 19:34:05.988452039 +0000
 @@ -169,3 +169,7 @@
  obj-$(CONFIG_VIDEO_VPX3220) += vpx3220.o
  obj-$(CONFIG_VIDEO_WM8739) += wm8739.o
@@ -1442,7 +1442,7 @@ diff -ruN '--exclude=.config' a/drivers/media/i2c/Makefile b/drivers/media/i2c/M
 +obj-$(CONFIG_VIDEO_S5KGD1) += s5kgd1.o
 diff -ruN '--exclude=.config' a/drivers/media/i2c/imx363.c b/drivers/media/i2c/imx363.c
 --- a/drivers/media/i2c/imx363.c	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/media/i2c/imx363.c	2026-11-14 03:42:55.593057201 +0000
++++ b/drivers/media/i2c/imx363.c	2026-11-14 19:34:05.845826779 +0000
 @@ -0,0 +1,1474 @@
 +// SPDX-License-Identifier: GPL-2.0
 +// Copyright (C) 2018 Intel Corporation
@@ -2920,8 +2920,8 @@ diff -ruN '--exclude=.config' a/drivers/media/i2c/imx363.c b/drivers/media/i2c/i
 +MODULE_LICENSE("GPL v2");
 diff -ruN '--exclude=.config' a/drivers/media/i2c/lc898123.c b/drivers/media/i2c/lc898123.c
 --- a/drivers/media/i2c/lc898123.c	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/media/i2c/lc898123.c	2026-11-14 03:42:55.643131277 +0000
-@@ -0,0 +1,138 @@
++++ b/drivers/media/i2c/lc898123.c	2026-11-14 19:34:05.893281198 +0000
+@@ -0,0 +1,258 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * ON Semiconductor LC898123F40 OIS/AF controller, autofocus part only
@@ -2934,6 +2934,7 @@ diff -ruN '--exclude=.config' a/drivers/media/i2c/lc898123.c b/drivers/media/i2c
 +#include <linux/module.h>
 +#include <linux/pm_runtime.h>
 +#include <linux/regulator/consumer.h>
++#include <linux/workqueue.h>
 +#include <media/v4l2-cci.h>
 +#include <media/v4l2-ctrls.h>
 +#include <media/v4l2-device.h>
@@ -2949,7 +2950,55 @@ diff -ruN '--exclude=.config' a/drivers/media/i2c/lc898123.c b/drivers/media/i2c
 +	struct v4l2_subdev sd;
 +	struct v4l2_ctrl_handler ctrls;
 +	struct v4l2_ctrl *focus;
++	struct regulator *vdd;
++	struct regulator *sensor;	/* the image sensor's analog rail */
++	struct delayed_work idle;
++	struct notifier_block nb;
++	struct mutex lock;
++	bool on;
 +};
++
++/*
++ * Power: the controller and its lens servo draw current whenever vdd is on
++ * (the servo actively holds the lens). wireplumber's libcamera monitor keeps
++ * every subdev open, so open/close can't be used. The lens follows the image
++ * sensor instead: it powers up when a focus value is set while the sensor's
++ * analog rail is on (the sensor is streaming), and powers down once that
++ * rail is off (checked every 2 s while on) and always in system sleep
++ * (standby drain, 2026-11-14).
++ */
++#define LC898123_IDLE_CHECK	msecs_to_jiffies(2000)
++
++static bool lc898123_sensor_on(struct lc898123 *lc)
++{
++	return !lc->sensor || regulator_is_enabled(lc->sensor) > 0;
++}
++static int lc898123_power(struct lc898123 *lc, bool on)
++{
++	int ret = 0;
++
++	if (lc->on == on)
++		return 0;
++	if (on) {
++		if (lc->vdd) {
++			ret = regulator_enable(lc->vdd);
++			if (ret)
++				return ret;
++			usleep_range(10000, 12000);	/* controller boot from flash */
++		}
++		lc->on = true;
++		cci_write(lc->regmap, LC898123_REG_OIS_CTRL, 0, &ret);
++		cci_write(lc->regmap, LC898123_REG_SERVO, 1, &ret);
++		if (lc->sensor)
++			schedule_delayed_work(&lc->idle, LC898123_IDLE_CHECK);
++	} else {
++		cci_write(lc->regmap, LC898123_REG_SERVO, 0, NULL);
++		if (lc->vdd)
++			regulator_disable(lc->vdd);
++		lc->on = false;
++	}
++	return ret;
++}
 +
 +static int lc898123_set_ctrl(struct v4l2_ctrl *ctrl)
 +{
@@ -2957,26 +3006,72 @@ diff -ruN '--exclude=.config' a/drivers/media/i2c/lc898123.c b/drivers/media/i2c
 +
 +	if (ctrl->id != V4L2_CID_FOCUS_ABSOLUTE)
 +		return -EINVAL;
++	if (!lc->on) {
++		int ret;
++
++		if (!lc898123_sensor_on(lc))
++			return 0;	/* sensor off: nothing to focus */
++		mutex_lock(&lc->lock);
++		ret = lc898123_power(lc, true);
++		mutex_unlock(&lc->lock);
++		if (ret)
++			return ret;
++	}
 +	return cci_write(lc->regmap, LC898123_REG_AF_POS, ctrl->val, NULL);
 +}
 +
 +static const struct v4l2_ctrl_ops lc898123_ctrl_ops = { .s_ctrl = lc898123_set_ctrl };
 +
-+static int lc898123_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
++static void lc898123_idle_work(struct work_struct *work)
 +{
++	struct lc898123 *lc = container_of(to_delayed_work(work), struct lc898123, idle);
++
++	bool restore = false;
++
++	mutex_lock(&lc->lock);
++	if (lc->on) {
++		if (lc898123_sensor_on(lc))
++			schedule_delayed_work(&lc->idle, LC898123_IDLE_CHECK);
++		else
++			lc898123_power(lc, false);
++	} else if (lc898123_sensor_on(lc)) {
++		restore = !lc898123_power(lc, true);
++	}
++	mutex_unlock(&lc->lock);
++	if (restore)
++		v4l2_ctrl_handler_setup(&lc->ctrls);	/* last focus value */
++}
++
++static int lc898123_sensor_event(struct notifier_block *nb, unsigned long event, void *data)
++{
++	struct lc898123 *lc = container_of(nb, struct lc898123, nb);
++
++	if (event & REGULATOR_EVENT_ENABLE)
++		mod_delayed_work(system_wq, &lc->idle, msecs_to_jiffies(20));
++	return NOTIFY_OK;
++}
++
++static int lc898123_suspend(struct device *dev)
++{
++	struct v4l2_subdev *sd = dev_get_drvdata(dev);
 +	struct lc898123 *lc = container_of(sd, struct lc898123, sd);
++
++	cancel_delayed_work_sync(&lc->idle);
++	mutex_lock(&lc->lock);
++	lc898123_power(lc, false);
++	mutex_unlock(&lc->lock);
++	return 0;
++}
++
++static int lc898123_resume(struct device *dev)
++{
 +	int ret = 0;
 +
-+	cci_write(lc->regmap, LC898123_REG_OIS_CTRL, 0, &ret);
-+	cci_write(lc->regmap, LC898123_REG_SERVO, 1, &ret);
-+	if (!ret)
-+		ret = __v4l2_ctrl_handler_setup(&lc->ctrls);
++	/* powered again by the next focus write while the sensor streams */
 +	return ret;
 +}
 +
-+static const struct v4l2_subdev_internal_ops lc898123_internal_ops = {
-+	.open = lc898123_open,
-+};
++static DEFINE_SIMPLE_DEV_PM_OPS(lc898123_pm, lc898123_suspend, lc898123_resume);
 +
 +static const struct v4l2_subdev_ops lc898123_ops = { };
 +
@@ -2989,23 +3084,39 @@ diff -ruN '--exclude=.config' a/drivers/media/i2c/lc898123.c b/drivers/media/i2c
 +	lc = devm_kzalloc(&client->dev, sizeof(*lc), GFP_KERNEL);
 +	if (!lc)
 +		return -ENOMEM;
-+	ret = devm_regulator_get_enable_optional(&client->dev, "vdd");
-+	if (ret && ret != -ENODEV)
-+		return dev_err_probe(&client->dev, ret, "vdd supply\n");
-+	if (!ret)
-+		usleep_range(10000, 12000);	/* controller boot from flash */
++	mutex_init(&lc->lock);
++	INIT_DELAYED_WORK(&lc->idle, lc898123_idle_work);
++	lc->sensor = devm_regulator_get_optional(&client->dev, "sensor");
++	if (IS_ERR(lc->sensor)) {
++		if (PTR_ERR(lc->sensor) != -ENODEV)
++			return dev_err_probe(&client->dev, PTR_ERR(lc->sensor), "sensor supply\n");
++		lc->sensor = NULL;	/* no hint: stay on once used, off in sleep */
++	}
++	lc->vdd = devm_regulator_get_optional(&client->dev, "vdd");
++	if (IS_ERR(lc->vdd)) {
++		if (PTR_ERR(lc->vdd) != -ENODEV)
++			return dev_err_probe(&client->dev, PTR_ERR(lc->vdd), "vdd supply\n");
++		lc->vdd = NULL;
++	}
 +
 +	lc->regmap = devm_cci_regmap_init_i2c(client, 16);
 +	if (IS_ERR(lc->regmap))
 +		return PTR_ERR(lc->regmap);
++	/* probe the controller once, then leave it unpowered until opened */
++	if (lc->vdd) {
++		ret = regulator_enable(lc->vdd);
++		if (ret)
++			return ret;
++		usleep_range(10000, 12000);
++	}
 +	ret = cci_read(lc->regmap, LC898123_REG_AF_POS, &val, NULL);
++	if (lc->vdd)
++		regulator_disable(lc->vdd);
 +	if (ret)
 +		return dev_err_probe(&client->dev, ret, "no response\n");
-+	cci_write(lc->regmap, LC898123_REG_SERVO, 1, NULL);
 +
 +	v4l2_i2c_subdev_init(&lc->sd, client, &lc898123_ops);
 +	lc->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
-+	lc->sd.internal_ops = &lc898123_internal_ops;
 +	lc->sd.entity.function = MEDIA_ENT_F_LENS;
 +
 +	v4l2_ctrl_handler_init(&lc->ctrls, 1);
@@ -3020,6 +3131,12 @@ diff -ruN '--exclude=.config' a/drivers/media/i2c/lc898123.c b/drivers/media/i2c
 +	ret = media_entity_pads_init(&lc->sd.entity, 0, NULL);
 +	if (ret)
 +		goto err;
++	if (lc->sensor) {
++		lc->nb.notifier_call = lc898123_sensor_event;
++		ret = devm_regulator_register_notifier(lc->sensor, &lc->nb);
++		if (ret)
++			goto err_entity;
++	}
 +	ret = v4l2_async_register_subdev(&lc->sd);
 +	if (ret)
 +		goto err_entity;
@@ -3040,6 +3157,8 @@ diff -ruN '--exclude=.config' a/drivers/media/i2c/lc898123.c b/drivers/media/i2c
 +	v4l2_async_unregister_subdev(sd);
 +	media_entity_cleanup(&sd->entity);
 +	v4l2_ctrl_handler_free(&lc->ctrls);
++	cancel_delayed_work_sync(&lc->idle);
++	lc898123_power(lc, false);
 +}
 +
 +static const struct of_device_id lc898123_of_match[] = {
@@ -3052,6 +3171,7 @@ diff -ruN '--exclude=.config' a/drivers/media/i2c/lc898123.c b/drivers/media/i2c
 +	.driver = {
 +		.name = "lc898123",
 +		.of_match_table = lc898123_of_match,
++		.pm = pm_sleep_ptr(&lc898123_pm),
 +	},
 +	.probe = lc898123_probe,
 +	.remove = lc898123_remove,
@@ -3062,7 +3182,7 @@ diff -ruN '--exclude=.config' a/drivers/media/i2c/lc898123.c b/drivers/media/i2c
 +MODULE_LICENSE("GPL");
 diff -ruN '--exclude=.config' a/drivers/media/i2c/s5k3m3-regs.h b/drivers/media/i2c/s5k3m3-regs.h
 --- a/drivers/media/i2c/s5k3m3-regs.h	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/media/i2c/s5k3m3-regs.h	2026-11-14 03:42:55.726717573 +0000
++++ b/drivers/media/i2c/s5k3m3-regs.h	2026-11-14 19:34:05.973849298 +0000
 @@ -0,0 +1,71 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/*
@@ -3137,7 +3257,7 @@ diff -ruN '--exclude=.config' a/drivers/media/i2c/s5k3m3-regs.h b/drivers/media/
 +};
 diff -ruN '--exclude=.config' a/drivers/media/i2c/s5k3m3.c b/drivers/media/i2c/s5k3m3.c
 --- a/drivers/media/i2c/s5k3m3.c	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/media/i2c/s5k3m3.c	2026-11-14 03:42:55.726059728 +0000
++++ b/drivers/media/i2c/s5k3m3.c	2026-11-14 19:34:05.972827790 +0000
 @@ -0,0 +1,451 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
@@ -3592,7 +3712,7 @@ diff -ruN '--exclude=.config' a/drivers/media/i2c/s5k3m3.c b/drivers/media/i2c/s
 +MODULE_LICENSE("GPL");
 diff -ruN '--exclude=.config' a/drivers/media/i2c/s5kgd1-regs.h b/drivers/media/i2c/s5kgd1-regs.h
 --- a/drivers/media/i2c/s5kgd1-regs.h	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/media/i2c/s5kgd1-regs.h	2026-11-14 03:42:55.740765007 +0000
++++ b/drivers/media/i2c/s5kgd1-regs.h	2026-11-14 19:34:05.988096245 +0000
 @@ -0,0 +1,6137 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/*
@@ -9733,7 +9853,7 @@ diff -ruN '--exclude=.config' a/drivers/media/i2c/s5kgd1-regs.h b/drivers/media/
 +};
 diff -ruN '--exclude=.config' a/drivers/media/i2c/s5kgd1.c b/drivers/media/i2c/s5kgd1.c
 --- a/drivers/media/i2c/s5kgd1.c	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/media/i2c/s5kgd1.c	2026-11-14 03:42:55.740332249 +0000
++++ b/drivers/media/i2c/s5kgd1.c	2026-11-14 19:34:05.987707075 +0000
 @@ -0,0 +1,451 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
@@ -10188,7 +10308,7 @@ diff -ruN '--exclude=.config' a/drivers/media/i2c/s5kgd1.c b/drivers/media/i2c/s
 +MODULE_LICENSE("GPL");
 diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
 --- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-11-14 03:42:55.470756918 +0000
++++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-11-14 19:34:05.724602897 +0000
 @@ -144,6 +144,81 @@
  	{0x0664, 0x7F, 0x00, CSIPHY_DEFAULT_PARAMS},
  };
@@ -10292,7 +10412,7 @@ diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/camss/camss-csiphy-3
  		regs->lane_regs = &lane_regs_qcm2290[0];
 diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/camss/camss-vfe.c b/drivers/media/platform/qcom/camss/camss-vfe.c
 --- a/drivers/media/platform/qcom/camss/camss-vfe.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/media/platform/qcom/camss/camss-vfe.c	2026-11-14 03:42:55.470414454 +0000
++++ b/drivers/media/platform/qcom/camss/camss-vfe.c	2026-11-14 19:34:05.724285145 +0000
 @@ -343,6 +343,7 @@
  	case CAMSS_660:
  	case CAMSS_2290:
@@ -10311,7 +10431,7 @@ diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/camss/camss-vfe.c b/
  	case CAMSS_8280XP:
 diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
 --- a/drivers/media/platform/qcom/camss/camss.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/media/platform/qcom/camss/camss.c	2026-11-14 03:42:55.487622656 +0000
++++ b/drivers/media/platform/qcom/camss/camss.c	2026-11-14 19:34:05.740476982 +0000
 @@ -5220,6 +5220,255 @@
  	.vfe_num = ARRAY_SIZE(vfe_res_845),
  };
@@ -10578,7 +10698,7 @@ diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/camss/camss.c b/driv
  	{ .compatible = "qcom,sm8650-camss", .data = &sm8650_resources },
 diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/camss/camss.h b/drivers/media/platform/qcom/camss/camss.h
 --- a/drivers/media/platform/qcom/camss/camss.h	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/media/platform/qcom/camss/camss.h	2026-11-14 03:42:55.470233658 +0000
++++ b/drivers/media/platform/qcom/camss/camss.h	2026-11-14 19:34:05.724110726 +0000
 @@ -86,6 +86,7 @@
  	CAMSS_8x39,
  	CAMSS_8x53,
@@ -10589,7 +10709,7 @@ diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/camss/camss.h b/driv
  	CAMSS_8300,
 diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/iris/.nura-sm8150 b/drivers/media/platform/qcom/iris/.nura-sm8150
 --- a/drivers/media/platform/qcom/iris/.nura-sm8150	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/media/platform/qcom/iris/.nura-sm8150	2026-11-14 03:42:55.621424365 +0000
++++ b/drivers/media/platform/qcom/iris/.nura-sm8150	2026-11-14 19:34:05.871686026 +0000
 @@ -0,0 +1 @@
 +nabu-iris 6323e31
 diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/iris/Makefile b/drivers/media/platform/qcom/iris/Makefile
@@ -11395,7 +11515,7 @@ diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/iris/iris_core.c b/d
  	iris_fw_unload(core);
 diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/iris/iris_core.h b/drivers/media/platform/qcom/iris/iris_core.h
 --- a/drivers/media/platform/qcom/iris/iris_core.h	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/media/platform/qcom/iris/iris_core.h	2026-11-14 03:42:55.620962022 +0000
++++ b/drivers/media/platform/qcom/iris/iris_core.h	2026-11-14 19:34:05.871339774 +0000
 @@ -16,6 +16,8 @@
  #include "iris_resources.h"
  #include "iris_state.h"
@@ -11895,7 +12015,7 @@ diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/iris/iris_firmware.c
  
 diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/iris/iris_hfi_common.c b/drivers/media/platform/qcom/iris/iris_hfi_common.c
 --- a/drivers/media/platform/qcom/iris/iris_hfi_common.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/media/platform/qcom/iris/iris_hfi_common.c	2026-11-14 03:42:55.630183948 +0000
++++ b/drivers/media/platform/qcom/iris/iris_hfi_common.c	2026-11-14 19:34:05.880488596 +0000
 @@ -3,6 +3,7 @@
   * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
   */
@@ -17170,7 +17290,7 @@ diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/iris/iris_power.h b/
  #endif
 diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/iris/iris_probe.c b/drivers/media/platform/qcom/iris/iris_probe.c
 --- a/drivers/media/platform/qcom/iris/iris_probe.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/media/platform/qcom/iris/iris_probe.c	2026-11-14 03:42:55.621171193 +0000
++++ b/drivers/media/platform/qcom/iris/iris_probe.c	2026-11-14 19:34:05.871484816 +0000
 @@ -40,6 +40,8 @@
  
  static int iris_init_power_domains(struct iris_core *core)
@@ -17902,7 +18022,7 @@ diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/iris/iris_vb2.h b/dr
  #endif
 diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/iris/iris_vdec.c b/drivers/media/platform/qcom/iris/iris_vdec.c
 --- a/drivers/media/platform/qcom/iris/iris_vdec.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/media/platform/qcom/iris/iris_vdec.c	2026-11-14 03:42:55.621325196 +0000
++++ b/drivers/media/platform/qcom/iris/iris_vdec.c	2026-11-14 19:34:05.871618817 +0000
 @@ -3,28 +3,145 @@
   * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
   */
@@ -18885,7 +19005,7 @@ diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/iris/iris_venc.c b/d
  }
 diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/iris/iris_vidc.c b/drivers/media/platform/qcom/iris/iris_vidc.c
 --- a/drivers/media/platform/qcom/iris/iris_vidc.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/media/platform/qcom/iris/iris_vidc.c	2026-11-14 03:42:55.620824311 +0000
++++ b/drivers/media/platform/qcom/iris/iris_vidc.c	2026-11-14 19:34:05.871218314 +0000
 @@ -3,12 +3,16 @@
   * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
   */
@@ -22471,7 +22591,7 @@ diff -ruN '--exclude=.config' a/drivers/media/platform/qcom/iris/iris_vpu_regist
  #endif
 diff -ruN '--exclude=.config' a/drivers/misc/fastrpc.c b/drivers/misc/fastrpc.c
 --- a/drivers/misc/fastrpc.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/misc/fastrpc.c	2026-11-14 03:42:55.551853459 +0000
++++ b/drivers/misc/fastrpc.c	2026-11-14 19:34:05.802676935 +0000
 @@ -1005,7 +1005,7 @@
  
  	ctx->msg_sz = pkt_size;
@@ -22519,7 +22639,7 @@ diff -ruN '--exclude=.config' a/drivers/misc/fastrpc.c b/drivers/misc/fastrpc.c
  	}
 diff -ruN '--exclude=.config' a/drivers/net/wireless/ath/ath10k/core.c b/drivers/net/wireless/ath/ath10k/core.c
 --- a/drivers/net/wireless/ath/ath10k/core.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/net/wireless/ath/ath10k/core.c	2026-11-14 03:42:55.411908967 +0000
++++ b/drivers/net/wireless/ath/ath10k/core.c	2026-11-14 19:34:05.664906005 +0000
 @@ -746,6 +746,7 @@
  		.use_fw_tx_credits = false,
  		.delay_unmap_buffer = true,
@@ -22530,7 +22650,7 @@ diff -ruN '--exclude=.config' a/drivers/net/wireless/ath/ath10k/core.c b/drivers
  
 diff -ruN '--exclude=.config' a/drivers/net/wireless/ath/ath10k/core.h b/drivers/net/wireless/ath/ath10k/core.h
 --- a/drivers/net/wireless/ath/ath10k/core.h	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/net/wireless/ath/ath10k/core.h	2026-11-14 03:42:55.412950028 +0000
++++ b/drivers/net/wireless/ath/ath10k/core.h	2026-11-14 19:34:05.665842138 +0000
 @@ -605,6 +605,8 @@
  	union {
  		struct {
@@ -22542,7 +22662,7 @@ diff -ruN '--exclude=.config' a/drivers/net/wireless/ath/ath10k/core.h b/drivers
  			/* 512 stations */
 diff -ruN '--exclude=.config' a/drivers/net/wireless/ath/ath10k/hw.h b/drivers/net/wireless/ath/ath10k/hw.h
 --- a/drivers/net/wireless/ath/ath10k/hw.h	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/net/wireless/ath/ath10k/hw.h	2026-11-14 03:42:55.412162180 +0000
++++ b/drivers/net/wireless/ath/ath10k/hw.h	2026-11-14 19:34:05.665113798 +0000
 @@ -638,6 +638,10 @@
  
  	/* The hardware support multicast frame registrations */
@@ -22556,7 +22676,7 @@ diff -ruN '--exclude=.config' a/drivers/net/wireless/ath/ath10k/hw.h b/drivers/n
  struct htt_resp;
 diff -ruN '--exclude=.config' a/drivers/net/wireless/ath/ath10k/mac.c b/drivers/net/wireless/ath/ath10k/mac.c
 --- a/drivers/net/wireless/ath/ath10k/mac.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/net/wireless/ath/ath10k/mac.c	2026-11-14 03:42:55.414093800 +0000
++++ b/drivers/net/wireless/ath/ath10k/mac.c	2026-11-14 19:34:05.666914271 +0000
 @@ -2254,8 +2254,9 @@
  	}
  
@@ -22635,7 +22755,7 @@ diff -ruN '--exclude=.config' a/drivers/net/wireless/ath/ath10k/mac.c b/drivers/
  	mutex_unlock(&ar->conf_mutex);
 diff -ruN '--exclude=.config' a/drivers/phy/qualcomm/phy-qcom-qmp-combo.c b/drivers/phy/qualcomm/phy-qcom-qmp-combo.c
 --- a/drivers/phy/qualcomm/phy-qcom-qmp-combo.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/phy/qualcomm/phy-qcom-qmp-combo.c	2026-11-14 03:42:55.703257044 +0000
++++ b/drivers/phy/qualcomm/phy-qcom-qmp-combo.c	2026-11-14 19:34:05.953240467 +0000
 @@ -3691,6 +3691,14 @@
  	if (ret)
  		goto err_assert_reset;
@@ -22700,7 +22820,7 @@ diff -ruN '--exclude=.config' a/drivers/phy/qualcomm/phy-qcom-qmp-combo.c b/driv
  
 diff -ruN '--exclude=.config' a/drivers/pmdomain/qcom/rpmhpd.c b/drivers/pmdomain/qcom/rpmhpd.c
 --- a/drivers/pmdomain/qcom/rpmhpd.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/pmdomain/qcom/rpmhpd.c	2026-11-14 03:42:55.710853980 +0000
++++ b/drivers/pmdomain/qcom/rpmhpd.c	2026-11-14 19:34:05.960799277 +0000
 @@ -127,6 +127,7 @@
  	.pd = { .name = "mmcx", },
  	.peer = &mmcx_ao,
@@ -22719,7 +22839,7 @@ diff -ruN '--exclude=.config' a/drivers/pmdomain/qcom/rpmhpd.c b/drivers/pmdomai
  static struct rpmhpd mmcx_ao_w_cx_parent;
 diff -ruN '--exclude=.config' a/drivers/power/supply/qcom_fg.c b/drivers/power/supply/qcom_fg.c
 --- a/drivers/power/supply/qcom_fg.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/power/supply/qcom_fg.c	2026-11-14 03:42:55.559289142 +0000
++++ b/drivers/power/supply/qcom_fg.c	2026-11-14 19:34:05.810466289 +0000
 @@ -6,6 +6,7 @@
  #include <linux/kernel.h>
  #include <linux/math64.h>
@@ -22936,7 +23056,7 @@ diff -ruN '--exclude=.config' a/drivers/power/supply/qcom_fg.c b/drivers/power/s
  		.of_match_table = fg_match_id_table,
 diff -ruN '--exclude=.config' a/drivers/power/supply/qcom_smbx.c b/drivers/power/supply/qcom_smbx.c
 --- a/drivers/power/supply/qcom_smbx.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/power/supply/qcom_smbx.c	2026-11-14 03:42:55.782054167 +0000
++++ b/drivers/power/supply/qcom_smbx.c	2026-11-14 19:34:06.029269072 +0000
 @@ -631,6 +631,79 @@
  	}
  }
@@ -23053,7 +23173,7 @@ diff -ruN '--exclude=.config' a/drivers/power/supply/qcom_smbx.c b/drivers/power
  	 * to be used for setting limits based on temperature. We set some
 diff -ruN '--exclude=.config' a/drivers/slimbus/qcom-ngd-ctrl.c b/drivers/slimbus/qcom-ngd-ctrl.c
 --- a/drivers/slimbus/qcom-ngd-ctrl.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/slimbus/qcom-ngd-ctrl.c	2026-11-14 03:42:55.757763788 +0000
++++ b/drivers/slimbus/qcom-ngd-ctrl.c	2026-11-14 19:34:06.004387666 +0000
 @@ -1086,6 +1086,65 @@
  	return ret;
  }
@@ -23142,7 +23262,7 @@ diff -ruN '--exclude=.config' a/drivers/slimbus/qcom-ngd-ctrl.c b/drivers/slimbu
  	ctrl->state = QCOM_SLIM_NGD_CTRL_DOWN;
 diff -ruN '--exclude=.config' a/drivers/slimbus/stream.c b/drivers/slimbus/stream.c
 --- a/drivers/slimbus/stream.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/slimbus/stream.c	2026-11-14 03:42:55.766376952 +0000
++++ b/drivers/slimbus/stream.c	2026-11-14 19:34:06.012643648 +0000
 @@ -6,6 +6,7 @@
  #include <linux/slab.h>
  #include <linux/list.h>
@@ -23198,7 +23318,7 @@ diff -ruN '--exclude=.config' a/drivers/slimbus/stream.c b/drivers/slimbus/strea
  
 diff -ruN '--exclude=.config' a/drivers/tty/serial/qcom_geni_serial.c b/drivers/tty/serial/qcom_geni_serial.c
 --- a/drivers/tty/serial/qcom_geni_serial.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/tty/serial/qcom_geni_serial.c	2026-11-14 03:42:55.566716533 +0000
++++ b/drivers/tty/serial/qcom_geni_serial.c	2026-11-14 19:34:05.817976182 +0000
 @@ -1954,6 +1954,7 @@
  	struct qcom_geni_serial_port *port = dev_get_drvdata(dev);
  	struct uart_port *uport = &port->uport;
@@ -23234,7 +23354,7 @@ diff -ruN '--exclude=.config' a/drivers/tty/serial/qcom_geni_serial.c b/drivers/
  		geni_icc_set_tag(&port->se, QCOM_ICC_TAG_ALWAYS);
 diff -ruN '--exclude=.config' a/drivers/ufs/host/ufs-qcom.c b/drivers/ufs/host/ufs-qcom.c
 --- a/drivers/ufs/host/ufs-qcom.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/ufs/host/ufs-qcom.c	2026-11-14 03:42:55.812927670 +0000
++++ b/drivers/ufs/host/ufs-qcom.c	2026-11-14 19:34:06.062707297 +0000
 @@ -356,6 +356,9 @@
  {
  	int err;
@@ -23247,7 +23367,7 @@ diff -ruN '--exclude=.config' a/drivers/ufs/host/ufs-qcom.c b/drivers/ufs/host/u
  		return err;
 diff -ruN '--exclude=.config' a/drivers/usb/typec/altmodes/displayport.c b/drivers/usb/typec/altmodes/displayport.c
 --- a/drivers/usb/typec/altmodes/displayport.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/usb/typec/altmodes/displayport.c	2026-11-14 03:42:55.797408792 +0000
++++ b/drivers/usb/typec/altmodes/displayport.c	2026-11-14 19:34:06.045622994 +0000
 @@ -96,6 +96,11 @@
  	return typec_altmode_notify(dp->alt, conf, &dp->data);
  }
@@ -23270,7 +23390,7 @@ diff -ruN '--exclude=.config' a/drivers/usb/typec/altmodes/displayport.c b/drive
  		else if (pin_assign & DP_PIN_ASSIGN_DP_ONLY_MASK) {
 diff -ruN '--exclude=.config' a/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_port.c b/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_port.c
 --- a/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_port.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_port.c	2026-11-14 03:42:55.789772397 +0000
++++ b/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_port.c	2026-11-14 19:34:06.037365012 +0000
 @@ -635,14 +635,36 @@
  	(TYPEC_STATE_MACHINE_CHANGE_INT_EN | TYPEC_VBUS_ERROR_INT_EN | \
  	 TYPEC_DEBOUNCE_DONE_INT_EN)
@@ -23310,7 +23430,7 @@ diff -ruN '--exclude=.config' a/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_port
  			   pmic_typec_port->base + TYPEC_INTERRUPT_EN_CFG_1_REG,
 diff -ruN '--exclude=.config' a/sound/soc/codecs/wcd934x.c b/sound/soc/codecs/wcd934x.c
 --- a/sound/soc/codecs/wcd934x.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/sound/soc/codecs/wcd934x.c	2026-11-14 03:42:55.836480867 +0000
++++ b/sound/soc/codecs/wcd934x.c	2026-11-14 19:34:06.086620696 +0000
 @@ -523,6 +523,9 @@
  	struct device *dev;
  	struct clk_hw hw;
@@ -23440,7 +23560,7 @@ diff -ruN '--exclude=.config' a/sound/soc/codecs/wcd934x.c b/sound/soc/codecs/wc
  
 diff -ruN '--exclude=.config' a/sound/soc/qcom/sm8150.c b/sound/soc/qcom/sm8150.c
 --- a/sound/soc/qcom/sm8150.c	2026-06-26 07:51:31.000000000 +0000
-+++ b/sound/soc/qcom/sm8150.c	2026-11-14 03:42:55.773982055 +0000
++++ b/sound/soc/qcom/sm8150.c	2026-11-14 19:34:06.020820797 +0000
 @@ -202,6 +202,25 @@
  	switch (cpu_dai->id) {
  	case QUATERNARY_MI2S_RX:
