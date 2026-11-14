@@ -11,7 +11,7 @@ import sys
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Adw, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 HELPER = '/usr/libexec/nura-tweaks-helper'
 
@@ -59,12 +59,31 @@ PAGES = [
          'Millivolts. 4400 is full capacity, 4200 is about 85 % and lasts much longer',
          3900, 4400, 50),
     ]),
+    ('Standby', 'Deep sleep works in suspend: about 1 % per hour or less, '
+     'but the phone is offline while asleep', [
+        ('AUTO_SUSPEND_MIN', 'spin', 'Suspend on battery after',
+         'Idle minutes, 0 = never. With "Hold at the limit" GNOME may count a '
+         'plugged-in phone as on battery, so keep 0 for server use', 0, 240, 5),
+        ('WIFI_STABLE_MAC', 'switch', 'Stable Wi-Fi address',
+         'Same MAC (and so the same DHCP address) on every boot'),
+    ]),
     ('Sensors', None, [
         ('GYRO', 'switch', 'Gyroscope', 'Motion input for games and apps'),
         ('SENSOR_CHECK', 'switch', 'Sensor start check',
          'Alert at boot when auto-brightness, rotation and proximity failed to start'),
     ]),
 ]
+
+
+def apply_user(values):
+    """Settings that live in the user's GNOME session, not in the helper."""
+    if 'AUTO_SUSPEND_MIN' in values:
+        m = int(values['AUTO_SUSPEND_MIN'] or 0)
+        g = Gio.Settings.new('org.gnome.settings-daemon.plugins.power')
+        g.set_string('sleep-inactive-battery-type', 'suspend' if m else 'nothing')
+        if m:
+            g.set_int('sleep-inactive-battery-timeout', m * 60)
+        Gio.Settings.sync()
 
 
 def read_settings():
@@ -133,6 +152,7 @@ class Window(Adw.ApplicationWindow):
         r = subprocess.run(['pkexec', HELPER, 'set'] + args,
                            capture_output=True, text=True)
         if r.returncode == 0:
+            apply_user(dict(a.split('=', 1) for a in args))
             self.toasts.add_toast(Adw.Toast(title='Saved', timeout=1))
         else:
             msg = r.stderr.strip().splitlines()[-1] if r.stderr.strip() else 'Not saved'
@@ -162,4 +182,7 @@ class App(Adw.Application):
 
 
 if __name__ == '__main__':
+    if sys.argv[1:] == ['--apply-user']:   # nura-tweaks-user.service, at login
+        apply_user(read_settings())
+        sys.exit(0)
     sys.exit(App().run(sys.argv))

@@ -827,14 +827,16 @@ def sensor_services():
     missing = [k for k, v in have.items() if v != "true"]
     assert_(not missing, "sensor proxy lacks " + ", ".join(missing))
     lib = sh("grep -m1 libssc /proc/$(systemctl show -p MainPID --value iio-sensor-proxy)/maps | awk '{print $6}'")
-    assert_(lib.startswith("/usr/local/lib"), f"patched libssc not loaded ({lib})")
+    # patched libssc: nura-g8x-tweaks package (older hand installs: /usr/local/lib)
+    assert_(lib.startswith(("/usr/lib/nura-g8x/lib", "/usr/local/lib")),
+            f"patched libssc not loaded ({lib})")
     if restarts not in ("0", ""):
         raise Warn(f"iio-sensor-proxy restarted {restarts} times")
     return "accelerometer, light, proximity, compass available; patched libssc loaded"
 
 
 def ssccli(sensor, secs):
-    return sh(f"LD_LIBRARY_PATH=/usr/local/lib timeout {secs + 5} ssccli --sensor {sensor} --timeout {secs} 2>&1",
+    return sh(f"LD_LIBRARY_PATH=/usr/lib/nura-g8x/lib:/usr/local/lib timeout {secs + 5} ssccli --sensor {sensor} --timeout {secs} 2>&1",
               timeout=secs + 10)
 
 

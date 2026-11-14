@@ -117,3 +117,25 @@
 	/delete-property/ interrupts;
 	interrupts-extended = <&pdc 1 IRQ_TYPE_LEVEL_HIGH>;
 };
+
+/* GPU DDR bandwidth (2026-11-14). The A640 GMU table in a6xx_hfi.c is a
+ * single "off" level (no bus scaling), and sm8150.dtsi gives the GPU no
+ * interconnect path, so the GPU only had memory bandwidth from the boot
+ * vote. With interconnect sync_state the boot vote goes away and glmark2
+ * dropped from 534 to 238. a6xx calls dev_pm_opp_set_opp() on every
+ * frequency change (and with NULL when the GPU suspends), so a gfx-mem path
+ * plus opp-peak-kBps votes DDR per GPU level, as sc7180/sc7280 do. */
+&gpu {
+	interconnects = <&gem_noc MASTER_GRAPHICS_3D QCOM_ICC_TAG_ALWAYS
+			 &mc_virt SLAVE_EBI_CH0 QCOM_ICC_TAG_ALWAYS>;
+	interconnect-names = "gfx-mem";
+};
+
+&gpu_opp_table {
+	opp-675000000 { opp-peak-kBps = <12000000>; };
+	opp-585000000 { opp-peak-kBps = <10000000>; };
+	opp-499200000 { opp-peak-kBps = <8500000>; };
+	opp-427000000 { opp-peak-kBps = <7200000>; };
+	opp-345000000 { opp-peak-kBps = <5400000>; };
+	opp-257000000 { opp-peak-kBps = <4000000>; };
+};

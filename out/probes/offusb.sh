@@ -1,6 +1,7 @@
 #!/bin/zsh
 # run /var/tmp/s2.sh <secs> on the phone over Wi-Fi, keep a Wi-Fi session for the test watchdog, print the log
-W() { ssh -i /Users/hellonfire/Coding/nura/out/sshkey/g8x -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=6 -o BatchMode=yes nura@192.168.2.121 "$@"; }
+W() { ssh -i /Users/hellonfire/Coding/nura/out/sshkey/g8x -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=6 -o BatchMode=yes nura@$IP "$@"; }
+IP=$(/Users/hellonfire/Coding/nura/out/probes/g8x "ip -4 -o addr show wlan0" | awk '{print $4}' | cut -d/ -f1); echo "wifi $IP"
 PW=$(cat /Users/hellonfire/Coding/nura/test-image-password.txt)
 W 'exec sleep 900' >/dev/null 2>&1 &
 W "echo '$PW' | sudo -S -p '' systemd-run --unit=nura-off-$RANDOM sh /var/tmp/s2.sh $1" 2>&1

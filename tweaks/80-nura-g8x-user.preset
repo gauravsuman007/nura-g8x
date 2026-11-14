@@ -1,5 +1,6 @@
 # nura-g8x-tweaks user units
 enable nura-dock.service
+enable nura-tweaks-user.service
 # usb-moded-notify asks usb-signaller for the USB mode, which never runs here
 # (Nura sets up USB networking itself): it can only show "Unknown USB mode".
 disable usb-moded-notify.service

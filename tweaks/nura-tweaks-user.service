@@ -1,0 +1,10 @@
+[Unit]
+Description=LG G8x Tweaks: apply session settings (auto-suspend)
+After=gnome-session-initialized.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/nura-tweaks --apply-user
+
+[Install]
+WantedBy=gnome-session-initialized.target

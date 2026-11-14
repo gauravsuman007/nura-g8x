@@ -3,7 +3,7 @@
 systemctl daemon-reload 2>/dev/null
 systemctl enable nura-tweaks-apply.service nura-gyro.service nura-touch-guard.service \
 	nura-sensor-check.service 2>/dev/null
-systemctl --global enable nura-dock.service 2>/dev/null
+systemctl --global enable nura-dock.service nura-tweaks-user.service 2>/dev/null
 systemctl --global disable usb-moded-notify.service 2>/dev/null
 # older hand installs (release/install.sh, /usr/local) are superseded
 rm -f /etc/systemd/system/hexagonrpcd-sdsp.service.d/*lg*.conf \

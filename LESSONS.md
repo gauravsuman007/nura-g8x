@@ -1345,3 +1345,29 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
   suspend, hang detection), `clktrace.sh`, `kpsusp.sh`; `build-dtb.py
   EXTRA=` appends to the command line (blacklist a module, insmod the test
   build from /var/tmp; never install it).
+- **Real interconnect sync_state** (`extra-icc-sm8150-sync.py`, now in
+  kernel-src; debug knob removed from the tree): with the power fragment and
+  the CO0/CO1 keepalive, every boot vote is released at boot, all DSPs run,
+  UFS stress (3 x 400 MB write+read with idle gaps) clean. The earlier "UFS
+  stall" did not come back.
+- **GPU had no DDR vote** once the boot votes went: the A640 GMU bandwidth
+  table is a single "off" level, sm8150.dtsi has no GPU interconnect, glmark2
+  fell 534 -> 238. power-fragment adds `gfx-mem` and `opp-peak-kBps` per GPU
+  OPP (a6xx votes through dev_pm_opp_set_opp, NULL on GPU suspend): 528.
+- **Light sensor stops after a suspend or an iio-sensor-proxy restart** -- on
+  #68 too, so not caused by deep sleep. Proximity, accel, compass, gyro keep
+  working; ssccli gets no light reports until reboot. Open.
+- Boot race seen once in 5 boots of #77: the NGD never got "master
+  capability" (QMI wait timeout, no sound card). Same family as the known
+  microphone boot race; a reboot fixes it.
+- Tweaks r4: Standby group with AUTO_SUSPEND_MIN (0 = never, default; applied
+  by the app through gsettings and `nura-tweaks-user.service` at login) and
+  WIFI_STABLE_MAC (NetworkManager `wifi.cloned-mac-address=stable`).
+- Unplugging the cable still wakes the phone (VBUS change is a PMIC wake
+  source, now routed through the PDC); Android behaves the same.
+- **Final image #77** (`out/boot-flash-new.img`, TEST=0): RAM-tested, 53 PASS
+  0 FAIL, glmark2 528, three 60 s off-USB suspends with audio/BT/PipeWire/
+  Wi-Fi up all reached aosd/cxsd/ddr (~57 s each). New
+  slim_qcom_ngd_ctrl and snd_soc_wcd934x installed in updates/ and kernel/
+  (old ones in /var/lib/nura-mods-prev-77/). Tests: libssc path updated to
+  the package location.
