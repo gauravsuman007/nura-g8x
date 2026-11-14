@@ -28,7 +28,10 @@ touch errors, pocket guard state), audio (card, UCM, speaker playback, mic
 capture level, jack control), network (USB gadget, Wi-Fi link, both-band
 scan, ping and download speed, Bluetooth scan), modem (ModemManager, GPS),
 sensors (services, patched libssc, accelerometer gravity, compass,
-proximity, light), desktop (GNOME settings, remote desktop port).
+proximity, light), desktop (GNOME settings, remote desktop port), sleep
+(runs last: no deep-sleep blockers left, ADSP idle, and a 20 s RTC suspend
+that must reach whole-SoC sleep with Wi-Fi, audio, Bluetooth and sensors
+back afterwards).
 
 Needs a person, so not covered: hearing the speaker or headphones, touching
 the screen, covering the proximity sensor, a GPS fix outdoors.

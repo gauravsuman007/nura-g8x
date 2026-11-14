@@ -1032,5 +1032,85 @@ def main():
         results.append(rec)
 
 
+# ---------------------------------------------------------------- sleep (last: a
+# suspend currently stops the light sensor until reboot, LESSONS.md)
+STATS = "/sys/kernel/debug/qcom_stats"
+
+
+def qstat(name):
+    """(count, accumulated ticks at 19.2 MHz) of a qcom_stats sleep counter."""
+    t = rd(f"{STATS}/{name}", "")
+    c = re.search(r"Count: (\d+)", t)
+    d = re.search(r"Accumulated Duration: (\d+)", t)
+    return (int(c.group(1)) if c else 0, int(d.group(1)) if d else 0)
+
+
+@test("sleep")
+def sleep_blockers():
+    # Things that kept the SoC out of deep sleep before 2026-11-14 (LESSONS.md
+    # "Deep sleep works"): leaked camera clocks, interconnect boot votes, the
+    # sound routing loop (speaker amps on with no stream), a stuck ADSP.
+    if not os.path.isdir(STATS):
+        raise Skip("no qcom_stats (debugfs)")
+    clk = "/sys/kernel/debug/clk"
+    cam = {c: rd(f"{clk}/{c}/clk_enable_count", "0") for c in
+           ("cam_cc_mclk0_clk", "cam_cc_mclk1_clk", "cam_cc_mclk2_clk", "cam_cc_camnoc_axi_clk")}
+    on = [c for c, v in cam.items() if v not in ("0", "")]
+    assert_(not on, f"camera clocks left on: {on}")
+    summ = rd("/sys/kernel/debug/interconnect/interconnect_summary", "")
+    boot = [l.split()[0] for l in summ.splitlines()[2:]
+            if l and not l.startswith(" ") and len(l.split()) >= 3
+            and l.split()[2].isdigit() and int(l.split()[2]) >= 2000000000]
+    assert_(not boot, f"interconnect boot votes still active: {boot[:4]}")
+    amp = glob.glob("/sys/kernel/debug/asoc/*/cs35l41.0-0040/dapm/L Main AMP")
+    if amp:
+        assert_(": Off" in rd(amp[0], ""), "speaker amp powered with no stream (routing loop?)")
+    a = qstat("adsp")[1]
+    time.sleep(10)
+    pct = (qstat("adsp")[1] - a) * 100 / (10 * 19200000)
+    m = {"adsp_idle_asleep_pct": pct}
+    if pct < 50:
+        raise Warn(f"ADSP asleep only {pct:.0f}% while idle (audio stream open?)", m)
+    return f"camera clocks off, no boot votes, amps off, ADSP asleep {pct:.0f}%", m
+
+
+@test("sleep")
+def deep_sleep():
+    # 20 s RTC suspend through systemd-sleep (as a separate unit: run from this
+    # session it would freeze its own user.slice). Whole-SoC sleep shows as
+    # aosd/cxsd/ddr counters going up.
+    if not os.path.isdir(STATS):
+        raise Skip("no qcom_stats (debugfs)")
+    before = {k: qstat(k) for k in ("aosd", "cxsd", "ddr")}
+    with open("/sys/class/rtc/rtc0/wakealarm", "w") as f:
+        f.write("0")
+    with open("/sys/class/rtc/rtc0/wakealarm", "w") as f:
+        f.write("+20")
+    t0 = time.time()
+    sh("systemd-run --wait --quiet --unit=hwtest-deep-sleep /usr/lib/systemd/systemd-sleep suspend",
+       timeout=60)
+    took = time.time() - t0
+    after = {k: qstat(k) for k in before}
+    secs = {k: (after[k][1] - before[k][1]) / 19200000 for k in before}
+    m = {"deep_sleep_s": secs["aosd"], "suspend_wall_s": took}
+    missed = [k for k in before if after[k][0] <= before[k][0]]
+    assert_(not missed, f"no {'/'.join(missed)} sleep in a {took:.0f} s suspend")
+    # nura-wifi-sleep blocks Wi-Fi for suspend: rejoining and DHCP take
+    # 5-20 s after resume, so poll for up to 30 s
+    for _ in range(30):
+        time.sleep(1)
+        back = {
+            "wifi": bool(sh("ip -4 -o addr show wlan0")),
+            "sound card": "ThinQ" in rd("/proc/asound/cards", ""),
+            "bluetooth": "Powered: yes" in sh("bluetoothctl show 2>/dev/null"),
+            "sensor dsp": os.path.exists("/dev/fastrpc-sdsp"),
+        }
+        if all(back.values()):
+            break
+    lost = [k for k, v in back.items() if not v]
+    assert_(not lost, f"after resume: {', '.join(lost)} missing", )
+    return f"aosd {secs['aosd']:.0f} s of a {took:.0f} s suspend; Wi-Fi, audio, BT, sensors back", m
+
+
 if __name__ == "__main__":
     main()
