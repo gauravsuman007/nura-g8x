@@ -1354,9 +1354,16 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
   table is a single "off" level, sm8150.dtsi has no GPU interconnect, glmark2
   fell 534 -> 238. power-fragment adds `gfx-mem` and `opp-peak-kBps` per GPU
   OPP (a6xx votes through dev_pm_opp_set_opp, NULL on GPU suspend): 528.
-- **Light sensor stops after a suspend or an iio-sensor-proxy restart** -- on
-  #68 too, so not caused by deep sleep. Proximity, accel, compass, gyro keep
-  working; ssccli gets no light reports until reboot. Open.
+- **Light sensor silent after the last client goes away** (on #68 too, not
+  deep sleep): libssc enables light as an *on-change* stream. LG's driver
+  sends a first sample only on the first enable after boot. While
+  iio-sensor-proxy holds it, extra ssccli clients work any number of times;
+  once the last client disables it (proxy stop, suspend), every later enable
+  is silent in a dark room. Varying panel brightness gave one sample once,
+  then nothing. Not verified whether a real ambient change wakes it (needs
+  a person and a lamp). Test: WARN instead of FAIL after a proxy restart.
+  Ideas: flush request after enable, keep a permanent client, find LG's
+  display-state input to the ALS.
 - Boot race seen once in 5 boots of #77: the NGD never got "master
   capability" (QMI wait timeout, no sound card). Same family as the known
   microphone boot race; a reboot fixes it.

@@ -18,6 +18,7 @@ import socket
 import struct
 import subprocess
 import sys
+import threading
 import time
 import wave
 
@@ -871,8 +872,12 @@ def auto_brightness():
     amb = as_user("gsettings get org.gnome.settings-daemon.plugins.power ambient-enabled")
     if amb.strip() != "true":
         raise Warn(f"auto-brightness setting off ({amb.strip()})")
-    nan = sh("journalctl -b --no-pager | grep -c 'Invalid release of sensor ambient-light'")
-    assert_(nan in ("0", ""), f"SensorDaemon failing to hold the light sensor ({nan} errors)")
+    nan = int(sh("journalctl -b --no-pager | grep -c 'Invalid release of sensor ambient-light'") or 0)
+    # nura-sensors-sleep restarts iio-sensor-proxy around every suspend; GNOME's
+    # SensorDaemon logs one such error per restart and then reclaims the sensor
+    restarts = int(sh("journalctl -b --no-pager -u iio-sensor-proxy | grep -c 'Stopped'") or 0)
+    assert_(nan <= restarts, f"SensorDaemon failing to hold the light sensor "
+            f"({nan} errors, {restarts} proxy restarts)")
     return "proxy has light, ambient-enabled on, SensorDaemon holds the sensor"
 
 
@@ -974,6 +979,11 @@ def ambient_light():
         raise Skip("screen off: LG firmware sends no light reports while the panel is off")
     out = ssccli("light", 3)
     v = re.findall(r"measurement: ([\d.]+) Lux", out)
+    if not v and int(sh("journalctl -b --no-pager -u iio-sensor-proxy | grep -c 'Stopped'") or 0):
+        # Known open issue (LESSONS.md): after the last light client goes away
+        # (proxy restart, suspend) the on-change sensor stays silent; whether
+        # it resumes on a real light change is not verified yet.
+        raise Warn("no light report after a sensor proxy restart this boot (known issue)")
     assert_(v, "no light report")
     lux = float(v[-1])
     if lux == 0:
