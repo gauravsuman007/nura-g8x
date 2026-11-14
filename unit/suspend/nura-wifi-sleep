@@ -1,17 +1,94 @@
 #!/bin/sh
-# systemd-sleep hook: ath10k_snoc crashes the G8x when the system suspends
-# with Wi-Fi up (s2idle, devices stage). Taking Wi-Fi down first avoids it.
+# systemd-sleep hook: Wi-Fi in standby, like Android (WIFI_STANDBY in
+# LG G8x Tweaks).
+#
+# The WCN3990 firmware keeps the link (beacons, keys) and wakes the SoC when a
+# packet for the phone arrives, so TCP/UDP connections (push notifications,
+# chat, SSH, a server) work while the phone is suspended and the SoC is in
+# deep sleep. Only traffic that matters wakes it: data arriving on TCP
+# connections the phone holds open (push messages, chat), plus the ARP / IPv6
+# neighbour probes that keep it reachable. Anything broader woke the phone
+# within seconds on a normal home LAN (devices sending stray TCP SYNs to its
+# address, UDP and ICMPv6 chatter). WIFI_STANDBY=2 also wakes on new incoming
+# TCP connections (SSH, a server), 3 on UDP and ping too.
+# WIFI_STANDBY=0 is the old behaviour: Wi-Fi off in suspend.
+#
+# Before 2026-11-14 this hook always rfkilled Wi-Fi: suspending with ath10k up
+# and no WoWLAN configuration powers the chip down inside mac80211, and
+# resuming from a wake-up frame left htt->rx_confused set (all rx dropped,
+# link associated but deaf). Fixed by kernel-src/extra-ath10k-wow-rx.py.
 # Installed as /usr/lib/systemd/system-sleep/nura-wifi-sleep.
+
+IF=wlan0
+PHY=phy0
+
+conf() { # key default
+	v=$(sed -n "s/^$1=\([^ #	]*\).*/\1/p" /etc/nura/tweaks.conf /usr/share/nura-g8x-tweaks/tweaks.conf 2>/dev/null | head -n 1)
+	echo "${v:-$2}"
+}
+
+W6=-:-:-:-:-:-
+W9=-:-:-:-:-:-:-:-:-
+
+# wild N: N wildcard bytes, as "-:-:...:" (trailing colon)
+wild() { n=$1; w=; while [ "$n" -gt 0 ]; do w="$w-:"; n=$((n-1)); done; printf %s "$w"; }
+
+arm_wowlan() {
+	mode=$1
+	m=$(cat /sys/class/net/$IF/address 2>/dev/null) || return 1
+	[ -n "$m" ] || return 1
+	# mode 1 (push): TCP data (PSH+ACK) on connections the phone opened, unicast
+	# ARP. Mode 2 adds new incoming TCP connections (SYN: SSH, RDP, a server),
+	# mode 3 also UDP, ping and all unicast ICMPv6.
+	# TCP flags sit at byte 47 (IPv4, no options) and byte 67 (IPv6).
+	set -- "$m:$W6:08:00:45:$(wild 8)06:$(wild 23)18" \
+	       "$m:$W6:86:dd:$W6:06:$(wild 46)18" \
+	       "$m:$W6:08:06:$W6:00:01"
+	if [ "$mode" -ge 2 ]; then
+		set -- "$@" "$m:$W6:08:00:45:$(wild 8)06:$(wild 23)02" \
+		       "$m:$W6:86:dd:$W6:06:$(wild 46)02"
+	fi
+	if [ "$mode" -ge 3 ]; then
+		set -- "$@" "$m:$W6:08:00:$W9:11" "$m:$W6:86:dd:$W6:11" \
+		       "$m:$W6:08:00:$W9:01" "$m:$W6:86:dd:$W6:3a"
+	fi
+	# ARP request for our IPv4 address (broadcast)
+	ip4=$(ip -4 -o addr show dev $IF scope global 2>/dev/null | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -n 1)
+	if [ -n "$ip4" ]; then
+		h=$(echo "$ip4" | awk -F. '{printf "%02x:%02x:%02x:%02x", $1,$2,$3,$4}')
+		set -- "$@" "ff:ff:ff:ff:ff:ff:$W6:08:06:$W6:00:01:-:-:-:-:-:-:-:-:-:-:-:-:-:-:-:-:$h"
+	fi
+	# neighbour solicitations for our IPv6 addresses (solicited-node multicast)
+	for a in $(ip -6 -o addr show dev $IF 2>/dev/null | sed -n 's/.*inet6 \([0-9a-f:]*\)\/.*/\1/p' | head -n 4); do
+		t=$(python3 -c "import ipaddress,sys; b=ipaddress.IPv6Address(sys.argv[1]).packed; print('33:33:ff:%02x:%02x:%02x' % (b[13],b[14],b[15]))" "$a" 2>/dev/null) || continue
+		set -- "$@" "$t:$W6:86:dd:$W6:3a"
+	done
+	iw phy $PHY wowlan enable disconnect patterns "$@" >/dev/null 2>&1
+}
+
 case "$1" in
 pre)
-	rfkill block wlan
-	# wait until mac80211 has stopped the radio
-	for i in 1 2 3 4 5 6 7 8 9 10; do
-		ip link show wlan0 2>/dev/null | grep -q "state UP" || break
-		sleep 0.3
-	done
+	mode=$(conf WIFI_STANDBY 1)
+	if [ "$mode" != 0 ] && iw dev $IF link 2>/dev/null | grep -q Connected && arm_wowlan "$mode"; then
+		:	# link stays up, the firmware watches for packets
+	else
+		rfkill block wlan
+		# wait until mac80211 has stopped the radio
+		for i in 1 2 3 4 5 6 7 8 9 10; do
+			ip link show $IF 2>/dev/null | grep -q "state UP" || break
+			sleep 0.3
+		done
+	fi
 	;;
 post)
+	# Keep the baseline NetworkManager sets ("disconnect"): NM only leaves a
+	# device up over suspend while WoWLAN is enabled on it, so disabling it
+	# here made every second suspend tear the link down.
+	if [ "$(conf WIFI_STANDBY 1)" != 0 ]; then
+		iw phy $PHY wowlan enable disconnect >/dev/null 2>&1
+	else
+		iw phy $PHY wowlan disable >/dev/null 2>&1
+	fi
 	rfkill unblock wlan
 	;;
 esac

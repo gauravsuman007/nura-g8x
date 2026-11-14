@@ -1469,3 +1469,44 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
 - A USB host that is talking to the gadget aborts s2idle immediately
   (`dwc3-qcom-legacy: port-1 HS-PHY not in L2`). Suspend tests on USB must
   detach the gadget first (`out/probes/wowtest.sh`).
+
+## Wi-Fi in standby (Android-like), 2026-11-14 (work in progress)
+
+- **ath10k rx path died after a WoWLAN wake** (`failed to extract amsdu:
+  -11`, then every later rx indication dropped, link "up" but deaf, beacon
+  loss minutes later). The frame that matched the wake pattern arrives with
+  an rx descriptor lacking LAST_MSDU; `ath10k_htt_rx_in_ord_ind()` then sets
+  `htt->rx_confused` for good. Fix `extra-ath10k-wow-rx.py`: drop that one
+  A-MSDU. After it: 12/12 pattern wakes recovered, link always up. RAM-tested
+  with `modprobe.blacklist=ath10k_snoc` + insmod from /tmp, then installed in
+  `/lib/modules/*/updates/` (backup `/var/lib/nura-modbak/`).
+- **Suspend with Wi-Fi up works with WoWLAN armed** (`iw phy phy0 wowlan
+  enable disconnect patterns ...`): the SoC reached aosd/cxsd/ddr sleep
+  (23 s of 26 s in one run). Without a WoWLAN config mac80211 shuts the chip
+  down in suspend. `iw ... wowlan enable any` fails (-EINVAL) on ath10k.
+- **NetworkManager tears Wi-Fi down on suspend** (logind PrepareForSleep) unless
+  `wifi.wake-on-wlan` is set and WoWLAN is currently enabled on the phy.
+  `unit/standby/90-nura-wifi-standby.conf` sets it (4 = disconnect); the hook's
+  post step must leave WoWLAN enabled (disabling it made every second suspend
+  drop the link).
+- **Pattern choice matters on a real LAN.** Single-pattern bisect (sensors
+  stopped, Mac idle, 25 s suspends): only "any IPv4 TCP to the phone" woke it
+  early; IPv6 TCP, unicast/broadcast ARP, NS multicast and no-pattern slept
+  26-29 s. Something on the home LAN sends stray TCP to the phone's address.
+  Default is now TCP data (PSH+ACK, flags byte 47/67) on connections the
+  phone opened + ARP; mode 2 adds SYN, mode 3 UDP/ping/ICMPv6.
+- **Test pitfalls:** open SSH sessions hold block inhibitors (stale
+  waiters from earlier loops made `systemctl suspend` fail with "Operation
+  denied due to active block inhibitor", looking like 0 s sleeps);
+  `systemctl suspend` returns before the sleep, so wall-clock around it
+  lies; rtcwake direct (no hooks) leaves the SLPI sensor DSP waking the
+  phone every ~22 s (`2400000.remoteproc` wakeup source) - stop
+  nura-gyro/iio-sensor-proxy/hexagonrpcd first; a talking USB host aborts
+  s2idle (`HS-PHY not in L2`), detach the gadget.
+- **Modem watchdog crash in suspend (hang).** The previous boot's journal
+  ended with `remoteproc1: crash detected in modem: type watchdog` 3.5 s into
+  a suspend, `ipa: GSI command timed out ... error -5 resuming channel`, then
+  nothing: the phone hung until the apps watchdog reset it (PS_HOLD). Same
+  signature as the unexplained 30 min suspend failure of the drain run. About
+  1 in 55 suspends. Standby stays off by default (STANDBY_DELAY_S=0) until
+  the rate is known with/without Wi-Fi (loops A/B, `out/probes/suspendloop.sh`).

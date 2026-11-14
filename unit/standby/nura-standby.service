@@ -1,0 +1,12 @@
+[Unit]
+Description=Nura standby: suspend after the screen goes off (Wi-Fi stays up)
+After=multi-user.target NetworkManager.service
+
+[Service]
+ExecStart=/usr/libexec/nura-standby
+Restart=always
+RestartSec=5
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

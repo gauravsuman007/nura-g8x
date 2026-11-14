@@ -4,7 +4,7 @@
 # tweaks/stage.sh packs unit/ and tweaks/ into nura-g8x-tweaks-files.tar.gz.
 pkgname=nura-g8x-tweaks
 pkgver=2026.11.12
-pkgrel=9
+pkgrel=10
 _hexver=0.5.0
 _sscver=0.4.4
 pkgdesc="LG G8x ThinQ tweaks: buttons, wake, pocket and dock modes, sensors, camera, settings app"
@@ -17,6 +17,7 @@ depends="
 	polkit
 	py3-gobject3
 	python3
+	iw
 	iio-sensor-proxy
 	linux-firmware-rtl_nic
 	hexagonrpcd
@@ -126,9 +127,12 @@ package() {
 	# /etc is searched before /usr/share (libcamera-ipa owns files there)
 	install -Dm644 $f/unit/camera/tuning/*.yaml -t "$pkgdir"/etc/libcamera/ipa/softisp/
 
-	# suspend: Wi-Fi off around s2idle (ath10k crash)
+	# suspend: Wi-Fi stays up in s2idle (WoWLAN), standby after screen off
 	install -Dm755 $f/unit/suspend/nura-wifi-sleep -t "$pkgdir"/usr/lib/systemd/system-sleep/
 	install -Dm755 $f/unit/suspend/nura-sensors-sleep -t "$pkgdir"/usr/lib/systemd/system-sleep/
+	install -Dm755 $f/unit/standby/nura-standby -t "$pkgdir"/usr/libexec/
+	install -Dm644 $f/unit/standby/90-nura-wifi-standby.conf -t "$pkgdir"/usr/lib/NetworkManager/conf.d/
+	install -Dm644 $f/unit/standby/nura-standby.service -t "$pkgdir"/usr/lib/systemd/system/
 	# first boot of a release image: LG firmware from the phone's partitions
 	install -Dm755 $f/unit/firmware/nura-firmware-loader -t "$pkgdir"/usr/libexec/
 	install -Dm644 $f/unit/firmware/nura-firmware-loader.service -t "$pkgdir"/usr/lib/systemd/system/

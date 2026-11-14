@@ -38,6 +38,7 @@ SCHEMA = {   # key: (min, max)
     'CHARGE_VOLTAGE_MV': (3900, 4400),
     'GYRO': BOOL, 'SENSOR_CHECK': BOOL,
     'AUTO_SUSPEND_MIN': (0, 240), 'WIFI_STABLE_MAC': BOOL,
+    'STANDBY_DELAY_S': (0, 3600), 'STANDBY_WAKE_GRACE_S': (5, 600), 'WIFI_STANDBY': (0, 3),
 }
 
 

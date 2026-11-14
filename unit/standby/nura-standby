@@ -1,0 +1,119 @@
+#!/usr/bin/python3
+"""Android-style standby: suspend a few seconds after the screen goes off.
+
+With Wi-Fi kept up in suspend (unit/suspend/nura-wifi-sleep) the phone can
+sleep like Android does and still be reached: a packet for it wakes the SoC.
+After such a wake the screen is still off, so this daemon lets the system run
+for STANDBY_WAKE_GRACE_S (apps handle the message, show the notification) and
+suspends again.
+
+It does not suspend while:
+  - STANDBY_DELAY_S is 0 (feature off),
+  - the screen is on (user active; GNOME's own idle handling applies),
+  - audio is playing or recording (kernel PCM stream running),
+  - an external display is connected (dock/desktop mode),
+  - a USB host is talking to the phone (usb0 up: development, tethering),
+  - something holds a sleep block inhibitor (SSH sessions, package manager,
+    players that ask for it): logind refuses and we retry later.
+Settings: /etc/nura/tweaks.conf (LG G8x Tweaks > Standby).
+"""
+import glob
+import os
+import subprocess
+import time
+
+CONF = '/etc/nura/tweaks.conf'
+DEFAULTS = '/usr/share/nura-g8x-tweaks/tweaks.conf'
+POLL = 2.0
+
+
+def conf():
+    c = {}
+    for path in (DEFAULTS, CONF):
+        try:
+            for line in open(path):
+                line = line.split('#', 1)[0].strip()
+                if '=' in line:
+                    k, v = line.split('=', 1)
+                    c[k.strip()] = v.strip()
+        except OSError:
+            pass
+    return c
+
+
+def num(c, key, default, lo, hi):
+    try:
+        return max(lo, min(hi, int(c.get(key, default))))
+    except ValueError:
+        return default
+
+
+def rd(path):
+    try:
+        return open(path).read().strip()
+    except OSError:
+        return ''
+
+
+def screen_off():
+    p = glob.glob('/sys/class/drm/card*-DSI-1/dpms')
+    return bool(p) and rd(p[0]) == 'Off'
+
+
+def external_display():
+    for p in glob.glob('/sys/class/drm/card*-*/status'):
+        if '-DSI-' not in p and rd(p) == 'connected':
+            return True
+    return False
+
+
+def audio_running():
+    for p in glob.glob('/proc/asound/card*/pcm*/sub*/status'):
+        if rd(p).startswith('state: RUNNING'):
+            return True
+    return False
+
+
+def usb_host():
+    return rd('/sys/class/net/usb0/carrier') == '1'
+
+
+def boottime():
+    return time.clock_gettime(time.CLOCK_BOOTTIME)
+
+
+def main():
+    off_since = None
+    resumed = time.monotonic()
+    retry_at = 0.0
+    last_m, last_b = time.monotonic(), boottime()
+    while True:
+        time.sleep(POLL)
+        m, b = time.monotonic(), boottime()
+        if (b - last_b) - (m - last_m) > 1.0:
+            resumed = m			# the system slept in between
+            retry_at = 0.0
+        last_m, last_b = m, b
+
+        c = conf()
+        delay = num(c, 'STANDBY_DELAY_S', 0, 0, 3600)
+        grace = num(c, 'STANDBY_WAKE_GRACE_S', 20, 5, 600)
+        if not screen_off():
+            off_since = None
+            continue
+        if off_since is None:
+            off_since = m
+        if not delay or m - off_since < delay or m - resumed < grace or m < retry_at:
+            continue
+        if external_display() or usb_host() or audio_running():
+            continue
+        r = subprocess.run(['systemctl', 'suspend'], capture_output=True, text=True)
+        if r.returncode != 0:
+            retry_at = time.monotonic() + 30	# inhibited: look again later
+        else:
+            resumed = time.monotonic()
+        last_m, last_b = time.monotonic(), boottime()
+
+
+if __name__ == '__main__':
+    main()

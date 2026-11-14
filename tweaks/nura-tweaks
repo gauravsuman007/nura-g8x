@@ -61,11 +61,23 @@ PAGES = [
          'Millivolts. 4400 is full capacity, 4200 is about 85 % and lasts much longer',
          3900, 4400, 50),
     ]),
-    ('Standby', 'Deep sleep works in suspend: about 1 % per hour or less, '
-     'but the phone is offline while asleep', [
-        ('AUTO_SUSPEND_MIN', 'spin', 'Suspend on battery after',
-         'Idle minutes, 0 = never. With "Hold at the limit" GNOME may count a '
-         'plugged-in phone as on battery, so keep 0 for server use', 0, 240, 5),
+    ('Standby', 'Like Android: suspend a few seconds after the screen goes '
+     'off, with Wi-Fi up so apps still get messages. A packet for the phone '
+     'wakes it, other traffic does not', [
+        ('STANDBY_DELAY_S', 'spin', 'Suspend after screen off',
+         'Seconds, 0 = never (always-on server use). Not while audio plays, a '
+         'monitor or USB host is connected, or an SSH session is open',
+         0, 3600, 5),
+        ('STANDBY_WAKE_GRACE_S', 'spin', 'Stay awake after a network wake',
+         'Seconds for apps to handle the message before going back to sleep',
+         5, 600, 5),
+        ('WIFI_STANDBY', 'spin', 'Wi-Fi in standby',
+         '0 = Wi-Fi off while suspended (offline), 1 = wake on pushed TCP data '
+         '(messages, push), 2 = also on new incoming connections (SSH, a '
+         'server), 3 = also on UDP and ping', 0, 3, 1),
+        ('AUTO_SUSPEND_MIN', 'spin', 'Also suspend on battery after',
+         'Idle minutes with the screen on, 0 = never. With "Hold at the limit" '
+         'GNOME may count a plugged-in phone as on battery', 0, 240, 5),
         ('WIFI_STABLE_MAC', 'switch', 'Stable Wi-Fi address',
          'Same MAC (and so the same DHCP address) on every boot'),
     ]),

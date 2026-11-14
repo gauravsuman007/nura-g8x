@@ -1105,8 +1105,9 @@ def deep_sleep():
     m = {"deep_sleep_s": secs["aosd"], "suspend_wall_s": took}
     missed = [k for k in before if after[k][0] <= before[k][0]]
     assert_(not missed, f"no {'/'.join(missed)} sleep in a {took:.0f} s suspend")
-    # nura-wifi-sleep blocks Wi-Fi for suspend: rejoining and DHCP take
-    # 5-20 s after resume, so poll for up to 30 s
+    # WIFI_STANDBY=0: nura-wifi-sleep blocks Wi-Fi for suspend and rejoining
+    # + DHCP take 5-20 s after resume; with standby (default) the link must
+    # simply still be there. Poll for up to 30 s either way.
     for _ in range(30):
         time.sleep(1)
         back = {
@@ -1120,6 +1121,56 @@ def deep_sleep():
     lost = [k for k, v in back.items() if not v]
     assert_(not lost, f"after resume: {', '.join(lost)} missing", )
     return f"aosd {secs['aosd']:.0f} s of a {took:.0f} s suspend; Wi-Fi, audio, BT, sensors back", m
+
+
+def conf_val(key, default):
+    for path in ("/etc/nura/tweaks.conf", "/usr/share/nura-g8x-tweaks/tweaks.conf"):
+        for line in rd(path, "").splitlines():
+            line = line.split("#", 1)[0].strip()
+            if line.startswith(key + "="):
+                return line.split("=", 1)[1].strip()
+    return default
+
+
+@test("sleep")
+def wifi_standby():
+    # Wi-Fi stays associated through suspend (WoWLAN armed by
+    # nura-wifi-sleep) and keeps passing traffic afterwards. Regression:
+    # the packet that wakes the SoC used to leave ath10k's rx path dead
+    # ("failed to extract amsdu", link up but nothing received).
+    mode = int(conf_val("WIFI_STANDBY", "1"))
+    if mode == 0:
+        raise Skip("WIFI_STANDBY=0 (Wi-Fi is switched off in suspend)")
+    if "Connected" not in sh("iw dev wlan0 link"):
+        raise Skip("Wi-Fi not connected")
+    gw = sh("ip route show default dev wlan0 | awk '{print $3; exit}'")
+    assert_(gw, "no default route on wlan0")
+    k = sh("dmesg | wc -l")
+    with open("/sys/class/rtc/rtc0/wakealarm", "w") as f:
+        f.write("0")
+    with open("/sys/class/rtc/rtc0/wakealarm", "w") as f:
+        f.write("+20")
+    sh("systemd-run --wait --quiet --unit=hwtest-wifi-standby /usr/lib/systemd/systemd-sleep suspend",
+       timeout=60)
+    time.sleep(3)
+    assert_("Connected" in sh("iw dev wlan0 link"), "Wi-Fi link lost over suspend")
+    ok = False
+    for _ in range(5):
+        if " 0% packet loss" in sh(f"ping -c3 -W2 {gw} 2>&1"):
+            ok = True
+            break
+    assert_(ok, f"no traffic to {gw} after resume (rx path dead?)")
+    bad = sh(f"dmesg | tail -n +{int(k) + 1} | grep -E 'failed to extract amsdu|rx_confused|ath10k.*(failed|timed out)' | head -3")
+    assert_(not bad, f"ath10k errors after resume: {bad}")
+    return f"link kept over a 20 s suspend, {gw} reachable, no ath10k errors (WIFI_STANDBY={mode})"
+
+
+@test("sleep")
+def standby_service():
+    state = sh("systemctl is-active nura-standby.service")
+    assert_(state == "active", f"nura-standby.service is {state}")
+    d = conf_val("STANDBY_DELAY_S", "0")
+    return f"nura-standby running (suspend {d} s after screen off; 0 = never)"
 
 
 if __name__ == "__main__":
