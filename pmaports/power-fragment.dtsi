@@ -106,3 +106,14 @@
 &crypto {
 	status = "disabled";
 };
+
+/* PMIC wake through the PDC (2026-11-14). sm8150.dtsi wires the SPMI arbiter
+ * interrupt straight to the GIC (SPI 481). In XO shutdown / AOSS sleep the GIC
+ * is off and only PDC-routed interrupts wake the SoC, so the RTC alarm, the
+ * charger and USB plug events could never wake it: the first real deep sleep
+ * looked like a hang (no watchdog, no answer until a forced reset). sm8250
+ * routes it as PDC pin 1, which maps to SPI 481 (qcom,pdc-ranges <0 480 94>). */
+&spmi_bus {
+	/delete-property/ interrupts;
+	interrupts-extended = <&pdc 1 IRQ_TYPE_LEVEL_HIGH>;
+};

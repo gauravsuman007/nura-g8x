@@ -104,10 +104,13 @@
 	pinctrl-0 = <&sec_mi2s_active>;
 	pinctrl-names = "default";
 
-	/* mic bias routing from LG sm8150-mh2lm_common-sound.dtsi */
-	audio-routing = "MultiMedia1 Playback", "L SPK",
-			"MultiMedia1 Playback", "R SPK",
-			"RX_BIAS", "MCLK",
+	/* mic bias routing from LG sm8150-mh2lm_common-sound.dtsi.
+	 * No "MultiMedia1 Playback" <- "L/R SPK" pairs (removed 2026-11-14):
+	 * routes are (sink, source), so they fed the speaker outputs back into
+	 * the front-end DAI and closed a loop that DAPM kept powered with no
+	 * stream open: an AFE port running in the ADSP (no ADSP sleep, so no
+	 * SoC deep sleep) and both CS35L41 amps with their boost on. */
+	audio-routing = "RX_BIAS", "MCLK",
 			"AMIC1", "MIC BIAS1",
 			"AMIC2", "MIC BIAS2",
 			"AMIC3", "MIC BIAS3",

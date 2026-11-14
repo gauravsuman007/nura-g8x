@@ -1303,3 +1303,45 @@ Harmless or known, left as is:
   next (PDC/RTC wake IRQ in XO shutdown, AOSS, DDR self-refresh, the
   power-fragment sleep-set votes). Recover a hang with Google Assistant key +
   Volume down.
+
+### Deep sleep works (2026-11-14, RAM tests, not flashed)
+First full SoC sleep on mainline: a 60 s RTC suspend with Wi-Fi, Bluetooth,
+the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
+56 s asleep. Fixes, each found by measurement:
+- **PMIC wake was not routed through the PDC** (`power-fragment.dtsi`
+  `&spmi_bus`): sm8150.dtsi uses GIC SPI 481, sm8250 uses `<&pdc 1>`. In XO
+  shutdown only PDC interrupts wake the SoC, so the RTC alarm never woke the
+  phone: the earlier "hangs" (needed Assistant + Volume down) were the first
+  real deep sleeps, never waking.
+- **qcom_geni_serial kept an open UART's clocks in suspend**
+  (`extra-geni-serial-sleep.py`): `uart_suspend_port()` powers off through
+  `pm_runtime_put_sync()`, which the PM core blocks during system suspend.
+  The BT UART (hci_qca keeps it open) held GPLL0/XO. Fix: force runtime
+  suspend/resume around the serial core. Verified with a clk trace.
+- **WCD934x MCLK** (`extra-wcd934x-sleep.py`): our mic-race fix plus the SWR
+  master held `ln_bb_clk2` forever. Device system-sleep ops now drop every
+  MCLK reference (regmap cache-only) and restore it plus `regcache_sync` on
+  resume. Component suspend is never called: the sm8150 card has no
+  `snd_soc_pm_ops`.
+- **Sound routing loop** (`audio-fragment.dtsi`): `audio-routing` had
+  ("MultiMedia1 Playback", "L/R SPK"), i.e. speaker output feeding the FE DAI.
+  DAPM kept MM1 -> SEC_MI2S -> both CS35L41 (boost on) powered with no
+  stream: AFE port running, ADSP never idle, amps burning power. Removed.
+- **SLIMbus NGD suspended mid-stream** (`extra-slim-stream-pm.py`): the core
+  only held runtime PM per message, so the NGD sent the ADSP "SLIMbus
+  inactive" ~100 ms into every capture and nothing after it ended. Now the
+  stream holds a reference from enable to disable.
+- **NGD never removed channels** (`extra-slim-ngd-disable.py`): no
+  `.disable_stream`, and the core's remove/reconfigure messages (0x40-0x5f)
+  are dropped by the NGD xfer. After the first capture the ADSP kept the
+  SLIMbus channel active and never slept (100 % -> 0 % asleep after one 2 s
+  arecord). New disable_stream sends `SLIM_USR_MC_CHAN_CTRL`
+  [SLIM_CH_REMOVE(2)<<6 | laddr, tid, ch...] + `RECONFIG_NOW`, as in the
+  downstream slim-msm-ngd.c (LineageOS oneplus sm8150). After: ADSP 100 %
+  asleep after repeated captures, recordings non-silent.
+- Interconnect boot votes are still released with the debug knob in these
+  tests (compute NoC needs the CO0/CO1 keepalive).
+- Test helpers: `out/probes/offusb.sh` (USB unbound over Wi-Fi, 60 s RTC
+  suspend, hang detection), `clktrace.sh`, `kpsusp.sh`; `build-dtb.py
+  EXTRA=` appends to the command line (blacklist a module, insmod the test
+  build from /var/tmp; never install it).
