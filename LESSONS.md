@@ -1544,3 +1544,8 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
   (touch on the Waydroid window), then the phone was restarted (by the user). So the freeze may be the GNOME shell/Mutter touch
   gesture code, not the kernel. Hang #1 left no trace at all. Waydroid stays off at boot; retest the UI with a keyboard/mouse-free
   check (screenshots over ssh) before touching the window.
+
+### Getting into fastboot from Linux, and the Egistec trustlet (2026-11-15)
+- `systemctl reboot --reboot-argument=bootloader` hangs in userspace shutdown and ends in a normal boot. The raw syscall
+  `reboot(RESTART2, "bootloader")` (devtools/bootloader-reboot.py, run as root) reaches fastboot in about 8 s, every time.
+  ramtest.sh should use it. Details of the trustlet loading: plans/fingerprint.md.

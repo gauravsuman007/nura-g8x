@@ -59,16 +59,14 @@ EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_load);
 /* Send a command whose request and response share one buffer of @len bytes (ETS style). */
 int qcom_scm_qseecom_app_send_buf(u32 app_id, void *data, size_t len)
 {
-	void *req __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool, len, GFP_KERNEL);
-	void *rsp __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool, len, GFP_KERNEL);
+	void *buf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool, len, GFP_KERNEL);
 	int ret;
 
-	if (!req || !rsp)
+	if (!buf)
 		return -ENOMEM;
-	memcpy(req, data, len);
-	memset(rsp, 0, len);
-	ret = qcom_scm_qseecom_app_send(app_id, req, len, rsp, len);
-	memcpy(data, rsp, len);
+	memcpy(buf, data, len);
+	ret = qcom_scm_qseecom_app_send(app_id, buf, len, buf, len);
+	memcpy(data, buf, len);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_send_buf);

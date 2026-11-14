@@ -43,16 +43,20 @@ static int __init egista_load_init(void)
 	ret = qcom_scm_qseecom_app_load(img, mdt_len, total, &id);
 	pr_info("egista: load ret=%d app_id=%u\n", ret, id);
 	if (!ret) {
+		static const u32 seq[] = { 0x7f, 0, 1, 2, 0x30 };	/* init sdk, algo, sensor, sensor_hw */
 		u8 *b = kzalloc(1024, GFP_KERNEL);
-		u32 hdr[5] = { 0, 2, 0, 0, 0 };	/* ETS opm_initialize_sensor: cmd 0/2, no payload */
+		int k;
 
-		if (b) {
+		for (k = 0; b && k < ARRAY_SIZE(seq); k++) {
+			u32 hdr[5] = { 0, seq[k], 0, 0, 0 };
+
+			memset(b, 0, 1024);
 			memcpy(b, hdr, sizeof(hdr));
 			ret = qcom_scm_qseecom_app_send_buf(id, b, 1024);
-			pr_info("egista: init send ret=%d\n", ret);
-			print_hex_dump(KERN_INFO, "egista: rsp ", DUMP_PREFIX_OFFSET, 16, 4, b, 96, false);
-			kfree(b);
+			pr_info("egista: cmd 0x%x send ret=%d\n", seq[k], ret);
+			print_hex_dump(KERN_INFO, "egista: rsp ", DUMP_PREFIX_OFFSET, 16, 4, b, 48, false);
 		}
+		kfree(b);
 		pr_info("egista: unload ret=%d\n", qcom_scm_qseecom_app_unload(id));
 	}
 	vfree(img);

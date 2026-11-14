@@ -86,3 +86,14 @@ Estimate: weeks. Not started beyond this survey.
 - Reaching fastboot from Linux without the keys: `reboot(LINUX_REBOOT_CMD_RESTART2, "bootloader")` directly (python ctypes,
   `out/probes/rb.py`), about 8 s. `systemctl reboot --reboot-argument=bootloader` hangs in userspace shutdown and falls through
   to a normal boot. Test module/sources: tests/phone/tz.
+- Command round trip works: request and response share one buffer (in place). The TA echoes the sub-command in word 1 of the
+  header (0x7f, 0, 1, 2, 0x30 all return ret=0, words 0/2/3 stay 0), so the app parses our frames. Not yet known: where the
+  result code sits, and whether init_sensor really powers the sensor (the ET713 has no node in the stock DT: TZ owns its
+  SPI/GPIOs). ETS sub-command table from libRbsFlow.so: 0 init_sdk, 1 init_algo, 2 init_sensor, 3-5 uninit, 8 get_image,
+  9 enrolled count, 0xb-0xe enroll, 0xf-0x13 identify, 0x15 remove, 0x16 ids, 0x17 work mode, 0x18 group, 0x19 data path,
+  0x1a hardware info, 0x20 chk auth token, 0x22 set/get image data, 0x26 finger lost, 0x2a/0x2b open/close spi,
+  0x2d/0x2e raw/ipp image, 0x30/0x31 sensor hw init/uninit, 0x37 enroll challenge.
+- Panel side: the stock DT has `lge,use-fp-lhbm` with DSI command sequences for a local high-brightness spot (panel nodes in
+  dtbo_b), which the sensor needs while capturing.
+- Next: send 0x19/0x1a with the right payloads, then 0x2a (open spi) and 0x8 (get image) while the LHBM spot is lit; then a
+  libfprint driver over a /dev node that wraps this app_send.
