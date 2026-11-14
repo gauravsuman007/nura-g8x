@@ -91,6 +91,10 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" dist; (cd dist && sha256sum * > SHA256SUMS)
           ls -l dist
 
+      - name: Show pmbootstrap log on failure
+        if: failure()
+        run: tail -n 300 "$WORK/log.txt" || true
+
       - uses: actions/upload-artifact@v4
         with:
           name: nura-lg-mh2lm-images
