@@ -1510,3 +1510,13 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
   signature as the unexplained 30 min suspend failure of the drain run. About
   1 in 55 suspends. Standby stays off by default (STANDBY_DELAY_S=0) until
   the rate is known with/without Wi-Fi (loops A/B, `out/probes/suspendloop.sh`).
+
+### Wi-Fi standby results (2026-11-14, tweaks r11, kernel r5)
+- Suspend loop, WIFI_STANDBY=1: 50 of 50 suspends of 10 s passed, 0 modem watchdog crashes, Wi-Fi stayed
+  connected (one Not connected reading, recovered). About 1 in 5 suspends ended early by a pattern wake (LAN noise).
+- Push test with the PSH+ACK patterns: Mac pushed a TCP line to the sleeping phone after 25 s; wake reason
+  WOW_REASON_PATTERN_MATCH_FOUND, the phone acked 3.8 s after the push. The ath10k rx fix is now in the kernel patch (r5).
+- The single earlier modem crash (about 1 in 55) was not reproduced in 50 suspends, so it stays a low-rate risk.
+- Package pitfall: the postmarketOS preset trigger disables new units unless they are in
+  /usr/lib/systemd/system-preset/80-nura-g8x.preset. nura-standby.service is listed there now.
+- Not yet tested: the screen-off suspend daemon (needs USB unplugged, usb0 carrier blocks it), drain with Wi-Fi up.
