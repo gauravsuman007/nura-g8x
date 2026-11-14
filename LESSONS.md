@@ -1419,3 +1419,20 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
   driver; the QMI wait timed out and the sound card never appeared. Check
   with `apk info -W $(modinfo -n <mod>)`; never leave test modules in
   `updates/`.
+
+## Standby drain, first measurement (2026-11-14, build #77, tweaks r9)
+
+- Awake on battery, screen off, Wi-Fi up: ~90-125 mA (~0.4-0.5 W),
+  ~2.7 %/h (91 -> 85 % in 2 h 15 min).
+- Suspended in 30 min RTC cycles (devtools/power/drain-logger.sh): cxsd
+  counted 1797 s of every 1800 s cycle (~100 % SoC deep sleep), but the
+  gauge fell 85 -> 82 % in 2.5 h (~1.2 %/h, ~45 mA). With 1 % gauge steps
+  this is rough, yet far above the few mA a collapsed SoC should draw: some
+  rail/peripheral outside the SoC (display, touch, sensors, modem, Wi-Fi
+  chip) stays powered. Next: per-rail check (regulator summary in suspend,
+  modem off, Wi-Fi off) and a longer run.
+- The 6th 30-minute suspend never resumed: the RTC alarm 30 min later
+  ended in a reset (`pon_reason=ON:HR,OFF:PS_HOLD(PBS_WD)`), i.e. the
+  PMIC watchdog fired when the SoC failed to come back. 20 s suspends and
+  the first five 30-minute ones were fine. Open: no pstore/ramoops to see
+  the resume path; enable ramoops next.
