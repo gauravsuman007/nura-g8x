@@ -21,6 +21,7 @@ KEYS = '/sys/module/nura_keys/parameters'
 GPIO_KEYS_WAKE = '/sys/devices/platform/gpio-keys/power/wakeup'
 CHARGE_RULE = '/etc/udev/rules.d/61-nura-charge-limit.rules'
 SMBX = '/sys/module/qcom_smbx/parameters'
+DP_ONLY = '/sys/module/typec_displayport/parameters/prefer_dp_only'
 NM_MAC_CONF = '/etc/NetworkManager/conf.d/90-nura-wifi-mac.conf'
 UPOWER_BAT = '/org/freedesktop/UPower/devices/battery_qcom_battery'
 
@@ -30,7 +31,7 @@ SCHEMA = {   # key: (min, max)
     'RESET_COMBO': BOOL, 'RESET_HOLD_MS': (3000, 20000),
     'WAKE_KEYS': BOOL, 'TOUCH_GUARD': BOOL, 'POCKET_GUARD': BOOL,
     'DOCK_AUTO': BOOL, 'DOCK_PANEL_OFF': BOOL, 'DOCK_POWER_KEY_OFF': BOOL,
-    'DOCK_STUCK_WARN': BOOL, 'MONITOR_COLOR_PROFILE': BOOL,
+    'DOCK_STUCK_WARN': BOOL, 'MONITOR_COLOR_PROFILE': BOOL, 'DOCK_4K60': BOOL,
     'CHARGE_LIMIT': BOOL,
     'CHARGE_LIMIT_START': (20, 95), 'CHARGE_LIMIT_END': (25, 100),
     'CHARGE_HOLD': BOOL, 'CHARGE_CURRENT_MA': (100, 3000),
@@ -118,6 +119,9 @@ def apply(cfg, changed=None):
         unit('nura-gyro.service', b('GYRO'))
     if want('SENSOR_CHECK') and changed is not None:
         unit('nura-sensor-check.service', b('SENSOR_CHECK'))
+    if want('DOCK_4K60') and os.path.exists(DP_ONLY):
+        # 4 DP lanes (pin assignment C) instead of 2 + USB 3; next plug-in
+        write(DP_ONLY, 'Y' if b('DOCK_4K60') else 'N')
     if want('WIFI_STABLE_MAC'):
         # ath10k gets no MAC from the board, so every boot and every
         # connection used a random one and DHCP handed out a new address.

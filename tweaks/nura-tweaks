@@ -42,6 +42,8 @@ PAGES = [
         ('DOCK_POWER_KEY_OFF', 'switch', 'Power key off while docked',
          'Suspending while docked can leave the dock unresponsive'),
         ('DOCK_STUCK_WARN', 'switch', 'Warn when the dock stops responding', None),
+        ('DOCK_4K60', 'switch', '4K at 60 Hz (experimental)',
+         'All 4 USB-C lanes carry DisplayPort; dock USB drops to USB 2. Replug to apply'),
         ('MONITOR_COLOR_PROFILE', 'switch', 'Monitor color profile',
          'Off: colors as the monitor shows them (GNOME\'s EDID profile looked washed out)'),
     ]),
