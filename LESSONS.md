@@ -1539,3 +1539,8 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
   Option: a v4l2loopback device fed by libcamera/PipeWire and passed into the container (needs the v4l2loopback module).
 - CI speed: the kernel compile is 54 of 60 minutes. Workflow now caches ccache/distfiles/apk downloads and builds the kernel via
   `CC="ccache clang"` (linux r6); the first run after this fills the cache, later runs should skip most of the compile.
+- Waydroid hang #2 (2026-11-15 23:19): the previous boot's journal shows no kernel oops or panic. It ends with power-button and
+  screen-on events from gnome-shell, then 161 `clutter_press_gesture_get_pressed: assertion CLUTTER_IS_PRESS_GESTURE` lines in 8 s
+  (touch on the Waydroid window), then the phone was restarted (by the user). So the freeze may be the GNOME shell/Mutter touch
+  gesture code, not the kernel. Hang #1 left no trace at all. Waydroid stays off at boot; retest the UI with a keyboard/mouse-free
+  check (screenshots over ssh) before touching the window.
