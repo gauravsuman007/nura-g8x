@@ -1,14 +1,19 @@
 [Unit]
 Description=Copy LG G8x firmware from the phone's own partitions
-DefaultDependencies=no
-After=local-fs.target
-Before=systemd-udev-trigger.service hexagonrpcd-sdsp.service tqftpserv.service rmtfs.service sysinit.target
-RequiresMountsFor=/lib/firmware /usr/share
+# Runs after udev has created /dev/disk/by-partlabel. On a fresh image the
+# remote processors start before the firmware is there; reboot once after the
+# first boot (release/README.md). 2026-11-14: the earlier early-boot version
+# (DefaultDependencies=no, before udev trigger) is the suspect for a boot
+# that never reached userspace; never block boot on this.
+After=local-fs.target systemd-udev-trigger.service
+Before=hexagonrpcd-sdsp.service tqftpserv.service rmtfs.service
+ConditionPathIsDirectory=/dev/disk/by-partlabel
 
 [Service]
 Type=oneshot
 ExecStart=/usr/libexec/nura-firmware-loader
 RemainAfterExit=yes
+TimeoutStartSec=60
 
 [Install]
-WantedBy=sysinit.target
+WantedBy=multi-user.target

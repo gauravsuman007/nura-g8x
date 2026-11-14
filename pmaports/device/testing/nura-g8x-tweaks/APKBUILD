@@ -4,7 +4,7 @@
 # tweaks/stage.sh packs unit/ and tweaks/ into nura-g8x-tweaks-files.tar.gz.
 pkgname=nura-g8x-tweaks
 pkgver=2026.11.12
-pkgrel=7
+pkgrel=8
 _hexver=0.5.0
 _sscver=0.4.4
 pkgdesc="LG G8x ThinQ tweaks: buttons, wake, pocket and dock modes, sensors, camera, settings app"
@@ -135,7 +135,7 @@ package() {
 	install -Dm644 $f/unit/firmware/socinfo/* -t "$pkgdir"/usr/share/qcom/sm8150/LG/mh2lm/socinfo/
 }
 sha512sums="
-b2f2d5e2bbc2c85e7ad8c23bb6e3c9605ca4f81db2ebb63cfbf9ed912b89167cbc5834be8fb65811f58917de435d5c193366533a3dd98ac4ffe2a08ff30f7d37  nura-g8x-tweaks-files.tar.gz
+d4ca0953bc83a84b29ca94098cfe011da7a1121c22843284304dec653fc911112c8813aa0cc57e1602e9e175495ff9414c36bb006174554cc85e93b4da5fbd84  nura-g8x-tweaks-files.tar.gz
 919146c9018e4b0cc271237c7200af0b7abcd4500227e0140e1e44fd2b412d29c1519ffe29ed06a5119b3a0218a3ef016af21a5be3c5898b0f0d35b44ac78b1b  hexagonrpc-0.5.0.tar.gz
 9240970f6a70f4900ef2d8fad337dac815ea2602b3b395943326fb086f59d24dcf59b76bdbc6014ebd3c450eaad5393465ca038c165845ffe99bf8e282a5c170  libssc-0.4.4.tar.gz
 385817bc2b8f4bfd2a06d67b63f420bb610092758f43391887eb8335c01d68aa1590301f8e060902c95ed20cd9075d6ef38ee71edac30f20008b44eddc3f51ce  hexagonrpc-0001-close-aliased-descriptor.diff

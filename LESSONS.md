@@ -1386,3 +1386,13 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
   no sound card for that boot. Now 15 s. 5 of 5 boots good after installing
   the module (old one in /var/lib/nura-mods-prev-78/). The one "QMI wait
   timeout" left per boot is a second, redundant worker run.
+- **Possible boot hang from nura-firmware-loader (2026-11-14, unconfirmed):**
+  after installing tweaks r7, which enabled the loader on the flashed phone
+  (unit then ran before udev with `DefaultDependencies=no` and called
+  `qbootctl` with no timeout), the next boot never reached the network (USB
+  gadget enumerated, no DHCP, no Wi-Fi) for over 10 min. A dry run into a
+  temp root had been fine, but the early-boot ordering was never RAM-tested.
+  Fix in r8: normal dependencies after udev trigger, 60 s timeout, timeouts on
+  qbootctl and mount, WantedBy multi-user. Recovery: `out/boot-recovery.img`
+  (cmdline `systemd.mask=nura-firmware-loader.service`) and
+  `out/probes/recover-watch.sh`. Lesson: RAM-test any new early-boot unit.

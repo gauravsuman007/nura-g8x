@@ -15,13 +15,13 @@ P=/dev/disk/by-partlabel
 log() { echo "nura-firmware-loader: $*"; }
 
 slot=$(tr ' ' '\n' < /proc/cmdline | sed -n 's/^androidboot.slot_suffix=//p')
-[ -n "$slot" ] || slot=$(qbootctl 2>/dev/null | sed -n 's/^Current slot: //p')
+[ -n "$slot" ] || slot=$(timeout 10 qbootctl 2>/dev/null | sed -n 's/^Current slot: //p')
 for s in "$slot" _a _b; do [ -e "$P/modem$s" ] && { slot=$s; break; }; done
 log "slot $slot"
 
 mnt() { # mnt PARTLABEL DIR
 	mkdir -p "$2"
-	mount -o ro "$P/$1" "$2" 2>/dev/null || { log "cannot mount $1"; return 1; }
+	timeout 20 mount -o ro "$P/$1" "$2" 2>/dev/null || { log "cannot mount $1"; return 1; }
 }
 cpn() { # cpn SRC DST: copy if missing or different size
 	[ -f "$1" ] || return 0
