@@ -72,3 +72,17 @@ Estimate: weeks. Not started beyond this survey.
   userspace client. The hard parts stay the QSEE app loading and the TA
   command protocol (next: disassemble `opm_initialize_sensor` for the first
   command ID and buffer layout).
+
+## 2026-11-15: the trustlet loads (RAM-boot kernel with extra-qseecom-app-load.py)
+
+- `qcom_scm_qseecom_app_get_id("egista")` answers (-ENOENT when not loaded): SCM version 0x1400000, no hang.
+- App start works. SMC owner 50 (QSEE_OS), svc 1 (APP_MGR), cmd 1, three VAL args (mdt_len, img_len, phys), response type
+  0xEE01 with the app id. The image must be `egista.mdt` followed by **all** segment files b00..b07 (3 300 429 bytes, mdt_len
+  7260). mdt + only b02..b07 is rejected (result 0xFFFFFFFF). The buffer must be one contiguous DMA buffer (the TZ mempool
+  is too small for 3 MB, -ENOMEM). Shutdown (cmd 2, VAL app id) returns 0.
+- ETS init frame (opm_initialize_sensor -> transfer_data): 20-byte header {cmd 0, sub 2, arg 0, arg 0, len 0} in a 1 KiB buffer,
+  sent with app_send (request and response in the same buffer). TZ returned status 0 and an all-zero response, so the trustlet
+  runs. Sensor power/reset (the LG /dev/esfp0 GPIOs) is not done yet, so init likely did nothing real.
+- Reaching fastboot from Linux without the keys: `reboot(LINUX_REBOOT_CMD_RESTART2, "bootloader")` directly (python ctypes,
+  `out/probes/rb.py`), about 8 s. `systemctl reboot --reboot-argument=bootloader` hangs in userspace shutdown and falls through
+  to a normal boot. Test module/sources: tests/phone/tz.
