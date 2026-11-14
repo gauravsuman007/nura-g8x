@@ -6,7 +6,7 @@
 _flavor="nura-lg-mh2lm"
 pkgname=linux-$_flavor
 pkgver=7.0.0
-pkgrel=2
+pkgrel=3
 pkgdesc="Mainline kernel for the LG G8x ThinQ (SM8150) with Nura G8x drivers"
 arch="aarch64"
 _carch="arm64"
@@ -49,7 +49,8 @@ build() {
 	unset LDFLAGS
 	make ARCH="$_carch" LLVM=1 olddefconfig
 	make ARCH="$_carch" LLVM=1 \
-		KBUILD_BUILD_VERSION="$((pkgrel + 1 ))-$_flavor"
+		KBUILD_BUILD_VERSION="$((pkgrel + 1 ))-$_flavor" \
+		Image.gz modules
 }
 
 package() {
