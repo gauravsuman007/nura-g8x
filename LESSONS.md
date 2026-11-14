@@ -1362,8 +1362,10 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
   is silent in a dark room. Varying panel brightness gave one sample once,
   then nothing. Not verified whether a real ambient change wakes it (needs
   a person and a lamp). Test: WARN instead of FAIL after a proxy restart.
-  Ideas: flush request after enable, keep a permanent client, find LG's
-  display-state input to the ALS.
+  Tried 2026-11-14: a SEE flush request (msg 2) right after the on-change
+  enable is accepted and answered, but no light sample comes back. Next
+  ideas: keep a permanent client across suspend (stop the hook restarting
+  iio-sensor-proxy), find LG's display-state input to the ALS.
 - Boot race seen once in 5 boots of #77: the NGD never got "master
   capability" (QMI wait timeout, no sound card). Same family as the known
   microphone boot race; a reboot fixes it.
