@@ -4,7 +4,7 @@
 # tweaks/stage.sh packs unit/ and tweaks/ into nura-g8x-tweaks-files.tar.gz.
 pkgname=nura-g8x-tweaks
 pkgver=2026.11.12
-pkgrel=4
+pkgrel=5
 _hexver=0.5.0
 _sscver=0.4.4
 pkgdesc="LG G8x ThinQ tweaks: buttons, wake, pocket and dock modes, sensors, camera, settings app"
@@ -129,6 +129,10 @@ package() {
 	# suspend: Wi-Fi off around s2idle (ath10k crash)
 	install -Dm755 $f/unit/suspend/nura-wifi-sleep -t "$pkgdir"/usr/lib/systemd/system-sleep/
 	install -Dm755 $f/unit/suspend/nura-sensors-sleep -t "$pkgdir"/usr/lib/systemd/system-sleep/
+	# first boot of a release image: LG firmware from the phone's partitions
+	install -Dm755 $f/unit/firmware/nura-firmware-loader -t "$pkgdir"/usr/libexec/
+	install -Dm644 $f/unit/firmware/nura-firmware-loader.service -t "$pkgdir"/usr/lib/systemd/system/
+	install -Dm644 $f/unit/firmware/socinfo/* -t "$pkgdir"/usr/share/qcom/sm8150/LG/mh2lm/socinfo/
 }
 sha512sums="
 50a715683924ff4dbe1a93876cb41c2739ade597f05ff62ef10bdac791d7242db01e9d618b525aac91b3e0a837afc20c3e33d34816d4ff38427d0b2130d75fc3  nura-g8x-tweaks-files.tar.gz

@@ -1,0 +1,107 @@
+# Build flashable Nura images for the LG G8x (boot.img + userdata image) with
+# pmbootstrap, from the packages in pmaports/device/testing. No vendor
+# firmware is included: nura-firmware-loader copies it from the phone's own
+# partitions on first boot. See IMAGES.md.
+name: images
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      ui:
+        description: "pmbootstrap UI"
+        default: "gnome-mobile"
+
+permissions:
+  contents: write
+
+env:
+  PMB_TAG: "3.12.1"
+  PMB: python3 ${{ github.workspace }}/../pmbootstrap/pmbootstrap.py
+  WORK: ${{ github.workspace }}/../pmb-work
+  APORTS: ${{ github.workspace }}/../pmaports
+  # Default login for release images; change it on first boot (passwd).
+  IMAGE_PASSWORD: "147147"
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache /usr/local/share/boost || true
+          df -h /
+
+      - name: Get pmbootstrap and pmaports
+        run: |
+          git clone -q --depth 1 --branch "$PMB_TAG" https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git ../pmbootstrap
+          git clone -q --depth 1 https://gitlab.postmarketos.org/postmarketOS/pmaports.git ../pmaports
+          for p in device-lg-mh2lm linux-nura-lg-mh2lm nura-g8x-tweaks; do
+            rm -rf "$APORTS/device/testing/$p"
+            cp -r "pmaports/device/testing/$p" "$APORTS/device/testing/"
+          done
+          git -C "$APORTS" -c user.email=ci@local -c user.name=ci add -A
+          git -C "$APORTS" -c user.email=ci@local -c user.name=ci commit -qm "nura-g8x packages"
+
+      - name: Configure pmbootstrap
+        run: |
+          mkdir -p ~/.config "$WORK"
+          cat > ~/.config/pmbootstrap_v3.cfg <<EOF
+          [pmbootstrap]
+          aports = $APORTS
+          device = lg-mh2lm
+          ui = ${{ github.event.inputs.ui || 'gnome-mobile' }}
+          user = user
+          work = $WORK
+          hostname = lg-g8x
+          ssh_keys = False
+          extra_packages = bluez,bluez-systemd,modemmanager,modemmanager-systemd,alsa-utils
+          [providers]
+          EOF
+          printf 8 > "$WORK/version"
+          $PMB --version
+
+      - name: Build kernel
+        run: $PMB -y build --arch aarch64 linux-nura-lg-mh2lm
+
+      - name: Build device and tweaks packages
+        run: $PMB -y build --arch aarch64 device-lg-mh2lm nura-g8x-tweaks
+
+      - name: Install rootfs
+        run: $PMB -y install --password "$IMAGE_PASSWORD"
+
+      - name: Export images
+        run: |
+          mkdir -p out
+          $PMB export out
+          ls -lL out
+          sudo cp -L out/boot.img dist-boot.img
+          sudo cp -L out/lg-mh2lm.img dist-userdata.img
+          sudo chown "$(id -u):$(id -g)" dist-boot.img dist-userdata.img
+          mkdir -p dist
+          mv dist-boot.img dist/nura-lg-mh2lm-boot.img
+          xz -T0 -6 -c dist-userdata.img > dist/nura-lg-mh2lm-userdata.img.xz
+          rm dist-userdata.img
+          sudo cp $WORK/packages/*/aarch64/{linux-nura-lg-mh2lm,device-lg-mh2lm,nura-g8x-tweaks}-*.apk dist/ 2>/dev/null || true
+          sudo cp $WORK/config_abuild/*.rsa.pub dist/nura-ci.rsa.pub 2>/dev/null || true
+          sudo chown -R "$(id -u):$(id -g)" dist; (cd dist && sha256sum * > SHA256SUMS)
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nura-lg-mh2lm-images
+          path: dist/
+          retention-days: 14
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --title "Nura LG G8x $GITHUB_REF_NAME" --notes-file release/README.md
+          gh release upload "$GITHUB_REF_NAME" dist/* --clobber

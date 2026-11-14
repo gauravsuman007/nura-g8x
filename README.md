@@ -8,7 +8,7 @@ wrong, and how to recover a phone with both boot slots marked unbootable.
 
 ## Status
 
-Build #77 (`out/boot-flash-new.img`, RAM-tested, waiting for approval to flash): whole-SoC deep sleep in suspend (PMIC wake via PDC, interconnect sync_state, GENI UART, WCD MCLK, SLIMbus channel removal, sound routing loop, GPU DDR votes). Flashed to boot_b on 2026-11-12 as build #68: battery hold at the charge limit, charge current/voltage settings (previous #67 in `out/boot-flash-prev.img`). Before that, build #67: the dock now survives a reboot while docked (clean Type-C detach at boot; previous #66 in `out/boot-flash-prev.img`). Before that, build #66 with USB-C dock support (`out/boot-flash.img`, previous #53 in `out/boot-flash-prev.img`). Flashed 2026-11-10 with hardware H.264/HEVC decode. Earlier: flashed on 2026-11-08 (`out/boot-flash.img`, built with
+Flashed to boot_b on 2026-11-14 as build #77 (`out/boot-flash.img`; #68 in `out/boot-flash-prev.img`): whole-SoC deep sleep in suspend (PMIC wake via PDC, interconnect sync_state, GENI UART, WCD MCLK, SLIMbus channel removal, sound routing loop, GPU DDR votes). Flashed to boot_b on 2026-11-12 as build #68: battery hold at the charge limit, charge current/voltage settings (previous #67 in `out/boot-flash-prev.img`). Before that, build #67: the dock now survives a reboot while docked (clean Type-C detach at boot; previous #66 in `out/boot-flash-prev.img`). Before that, build #66 with USB-C dock support (`out/boot-flash.img`, previous #53 in `out/boot-flash-prev.img`). Flashed 2026-11-10 with hardware H.264/HEVC decode. Earlier: flashed on 2026-11-08 (`out/boot-flash.img`, built with
 `TEST=0 OUT=out/boot-flash.img python3 build-dtb.py`; previous image kept as
 `out/boot-nura-good.img`).
 
@@ -88,6 +88,16 @@ for other projects are the deliverable and go upstream. `unit/` holds
 workarounds for this particular phone (its power button is broken), and the
 pocket guard is OS behaviour, kept installed but no longer developed.
 `devtools/` is test and development tooling and is not packaged.
+
+## Releases and CI
+
+`.github/workflows/images.yml` builds flashable images on every `v*` tag (and
+on demand): pmbootstrap with the three packages in `pmaports/device/testing`
+(`linux-nura-lg-mh2lm`, `device-lg-mh2lm`, `nura-g8x-tweaks`) on an arm64
+GitHub runner. The release gets `boot.img`, a compressed userdata image, the
+packages and their signing key. Release notes: `release/README.md`; design:
+`IMAGES.md`. The kernel package patch is regenerated with
+`docker exec -i nura-kbd sh < out/probes/mkpatch.sh` after kernel-src changes.
 
 ## Test cycle
 

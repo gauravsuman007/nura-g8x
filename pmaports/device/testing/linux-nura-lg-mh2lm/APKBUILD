@@ -1,0 +1,71 @@
+# Nura kernel for the LG G8x ThinQ (lg-mh2lm): the postmarketOS SM8150
+# mainline fork (same source as linux-postmarketos-qcom-sm8150) plus the
+# G8x drivers and fixes generated from pmaports/kernel-src
+# (out/probes/mkpatch.sh -> 0001-nura-lg-mh2lm.patch). The device tree is
+# built by build-dtb.py and ships in device-lg-mh2lm.
+_flavor="nura-lg-mh2lm"
+pkgname=linux-$_flavor
+pkgver=7.0.0
+pkgrel=0
+pkgdesc="Mainline kernel for the LG G8x ThinQ (SM8150) with Nura G8x drivers"
+arch="aarch64"
+_carch="arm64"
+url="https://github.com/gauravsuman007/nura-g8x"
+license="GPL-2.0-only"
+options="!strip !check !tracedeps
+	pmb:cross-native
+	"
+makedepends="
+	bison
+	clang
+	elfutils-dev
+	findutils
+	flex
+	linux-headers
+	lld
+	llvm
+	openssl-dev
+	pahole
+	perl
+	postmarketos-installkernel
+	python3
+	"
+provides="linux-postmarketos-qcom-sm8150"
+
+_tag="v$pkgver-sm8150"
+source="
+	linux-$_tag.tar.gz::https://gitlab.postmarketos.org/soc/qualcomm-sm8150/linux/-/archive/$_tag/linux-$_tag.tar.gz
+	0001-nura-lg-mh2lm.patch
+	config-$_flavor.$arch
+"
+builddir="$srcdir/linux-$_tag"
+
+prepare() {
+	default_prepare
+	cp "$srcdir/config-$_flavor.$arch" .config
+}
+
+build() {
+	unset LDFLAGS
+	make ARCH="$_carch" LLVM=1 olddefconfig
+	make ARCH="$_carch" LLVM=1 \
+		KBUILD_BUILD_VERSION="$((pkgrel + 1 ))-$_flavor"
+}
+
+package() {
+	install -Dm644 "$builddir/arch/$_carch/boot/Image.gz" "$pkgdir/boot/vmlinuz"
+	make modules_install \
+		ARCH="$_carch" \
+		LLVM=1 \
+		INSTALL_MOD_PATH="$pkgdir/usr" \
+		INSTALL_MOD_STRIP=1
+	rm -f "$pkgdir"/usr/lib/modules/*/build
+	install -D "$builddir"/include/config/kernel.release \
+		"$pkgdir"/usr/share/kernel/$_flavor/kernel.release
+}
+
+sha512sums="
+c1bdb11a9ad8be826ec5781e239c60ad92d6bb3a2d6b0adff8ef1f1e334bc6889ab91683257691ba3155f976011cd37969be379d509c9f928f4f85753e95635e  linux-v7.0.0-sm8150.tar.gz
+e95e26db0cdc3ecddc79fb5e64dfeedb778496e4aa6326b275ef99d08b29661dce375e0fa49f85a710d6830e47fd15a1a809df2200e25fab437c0ba7f813c03a  0001-nura-lg-mh2lm.patch
+49effaaa88cb389de54434fc98b9820d71a5dca880df6ad16a558476c41f96c051b63eaea5a24e452d4d3106b90e7df59cfdcc4fe73a56c83e821011b128c539  config-nura-lg-mh2lm.aarch64
+"

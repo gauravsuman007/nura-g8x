@@ -1,57 +1,65 @@
-# Nura on the LG G8x ThinQ: USB-C dock update 2026-11-12
+# Nura on the LG G8x ThinQ: deep sleep release
 
-For phones already running Nura (postmarketOS edge, kernel package
-`linux-postmarketos-qcom-sm8150` 7.0.0). New in this release:
+Images and packages built by GitHub Actions from
+https://github.com/gauravsuman007/nura-g8x (`.github/workflows/images.yml`).
+No vendor firmware is included: on first boot `nura-firmware-loader` copies
+LG's firmware from the phone's own partitions (modem, vendor, dsp, sns).
 
-- **USB-C docks and monitors:** external screen over DisplayPort alt mode
-  (up to 2560x1440 at 60 Hz; 4K at 30 Hz), automatic docked mode (the
-  monitor becomes the GNOME desktop as soon as it is plugged in, the phone
-  panel stays as a second screen), dock USB at 5 Gbit/s with keyboard, mouse,
-  USB audio and Gigabit Ethernet. Tested with a Dell Thunderbolt dock (works
-  in USB-C mode) and a Samsung monitor on its DisplayPort output.
-- Gyroscope service streams only while an app reads it (about 8% less CPU)
-- Fix: the previous release's `boot.img` carried the test phone's partition
-  UUIDs; `install.sh` now writes `boot-local.img` with your phone's own.
+New in this release:
 
-Included from the 2026-11-09 release: all three cameras (main IMX363, wide
-S5K3M3, front S5KGD1) with manual focus, microphone boot fix, gyroscope,
-haptics, flash LED, panel and touch fixes, optional Assistant-key helpers
-(`/etc/nura/keys.conf`; hold Assistant + Volume Down for 8 s to restart).
+- **Deep sleep in suspend.** The whole SoC now reaches its lowest state
+  (crystal off, CX collapsed, DDR self-refresh) while suspended, with Wi-Fi,
+  Bluetooth, audio and sensors loaded. Fixed on the way: PMIC wake routed
+  through the PDC, interconnect boot votes released (`sync_state`), camera
+  bus (CCI) clock leak on resume, Bluetooth UART clocks in suspend, audio
+  codec clock, a sound routing loop that kept both speaker amps powered,
+  SLIMbus channels never removed after a recording, GPU memory bandwidth
+  votes. Details in LESSONS.md, "Deep sleep works".
+- **LG G8x Tweaks, Standby group:** suspend on battery after N idle minutes
+  (off by default, for always-on server use) and a stable Wi-Fi MAC address
+  (the same IP after every boot).
+- Kernel package `linux-nura-lg-mh2lm` (replaces
+  `linux-postmarketos-qcom-sm8150`), with all G8x drivers built in.
 
-Source, patches and notes: https://github.com/gauravsuman007/nura-g8x
-(see LESSONS.md, "USB-C dock").
+Included from earlier releases: USB-C docks with DisplayPort alt mode and
+docked desktop, all three cameras, microphone, speakers, gyroscope,
+haptics, flash LED, NFC, battery charge limit with hold, optional
+Assistant-key helpers.
 
-## Install
+## Fresh install (replaces everything in userdata)
 
-You need an unlocked bootloader and `fastboot` on a computer. Keep a backup
-of your current boot partition.
+You need an unlocked bootloader and `fastboot`. Back up the phone first.
 
-1. Copy this folder to the phone and run, on the phone:
-   `sudo sh install.sh`
-   It installs the kernel modules and services and writes `boot-local.img`.
-2. Copy `boot-local.img` back to the computer (for example
-   `scp user@phone:/path/nura-g8x-2026.11.12/boot-local.img .`).
-3. Reboot the phone into fastboot (`sudo reboot bootloader`, or Volume Down
-   while connecting USB) and on the computer:
-   `fastboot flash boot_<slot> boot-local.img` (the installer prints the
-   slot, e.g. `boot_b`) and `fastboot reboot`.
+```
+xz -d nura-lg-mh2lm-userdata.img.xz
+fastboot flash boot_b nura-lg-mh2lm-boot.img     # or boot_a: your active slot
+fastboot flash userdata nura-lg-mh2lm-userdata.img
+fastboot reboot
+```
 
-To undo: flash your old boot image and copy the files back from
-`/var/backups/nura-g8x/`.
+Log in as `user` with password `147147` and change it right away
+(`passwd`). The first boot copies the firmware and takes a little longer;
+reboot once afterwards so Wi-Fi, sensors and audio pick it up.
 
-## Docked mode
+## Upgrade an existing Nura install
 
-Plug in a USB-C dock or a USB-C to DisplayPort/HDMI adapter with a monitor:
-GNOME moves its desktop to the monitor within a few seconds; unplug and the
-phone returns to its normal layout. To turn it off:
-`systemctl --user disable --now nura-dock`.
+Copy the three `.apk` files and `nura-ci.rsa.pub` to the phone, then:
+
+```
+sudo cp nura-ci.rsa.pub /etc/apk/keys/
+sudo apk add ./linux-nura-lg-mh2lm-*.apk ./device-lg-mh2lm-*.apk ./nura-g8x-tweaks-*.apk
+```
+
+`apk` rebuilds the boot image; flash it if your setup does not do that
+itself (`/boot/boot.img` to `boot_<slot>`).
 
 ## Known limits
 
-- One external monitor (no DisplayPort MST daisy-chaining)
-- 2 DisplayPort lanes when the dock also carries USB 3, so 4K only at 30 Hz
-- Docks and adapters other than the one tested may still have issues
-- No autofocus algorithm; camera quality uses libcamera's GPU soft ISP
-- Fingerprint, modem calls/SMS are not supported
+- The ambient light sensor stops after a suspend until the next reboot
+  (auto-brightness then stays put); proximity and motion sensors keep working
+- Fingerprint, calls and SMS are not supported yet
+- One external monitor; 4K only at 30 Hz when the dock also carries USB 3
+- About one boot in five may start without sound (known SLIMbus start race);
+  a reboot fixes it
 
 This is community bring-up work, tested on one phone. Use at your own risk.
