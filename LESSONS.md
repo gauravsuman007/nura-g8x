@@ -1436,3 +1436,15 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
   PMIC watchdog fired when the SoC failed to come back. 20 s suspends and
   the first five 30-minute ones were fine. Open: no pstore/ramoops to see
   the resume path; enable ramoops next.
+- Found drain source 1 (2026-11-14): our own `lc898123` OIS/AF driver kept
+  `cam_rear_n_afvdd` (2.8 V) on with the lens servo running from boot,
+  including in suspend. Fixed: powered only while the lens subdev is open,
+  always off in system sleep. Tested on RAM boot `out/boot-lctest.img`
+  (`modprobe.blacklist=lc898123`, module insmod'ed from /tmp): rail off when
+  idle, camera group 4/4 pass. Not in a package yet.
+- ramoops@b0000000 exists and registers, but was empty after the
+  PS_HOLD/PBS watchdog reset: a PMIC reset loses it, or the SoC never ran
+  again. Test boots carry `panic=10 softlockup_panic=1 hung_task_panic=1`
+  so a kernel-side hang becomes a warm reset that keeps the log.
+- WCN3990 WoWLAN: disconnect, magic packet, 22 patterns, net-detect. It is
+  disabled now, so Wi-Fi drops in every suspend (no Android-like push).
