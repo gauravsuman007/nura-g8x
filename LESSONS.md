@@ -1529,3 +1529,13 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
 - Pitfalls: a session started from an ssh shell (nohup) dies when the shell exits; run it as a systemd user unit. `waydroid shell`
   needs root. The cause of the first hang is unknown (suspect: session started while the first container start was racing the
   desktop session); it did not repeat. waydroid-container stays disabled at boot until the UI is verified on screen.
+
+### Waydroid network and camera (2026-11-15)
+- No internet in Android: the postmarketOS nftables `inet filter` chains (input policy drop, forward policy drop) block the waydroid0
+  bridge even though waydroid adds its own accept rules (a drop in any table wins). Fix: /etc/nftables.d/52_waydroid.nft (in tweaks r12).
+  The container only gets its DHCP lease after a container restart once the rules are loaded.
+- Camera: Android uses ro.hardware.camera=v4l2 (vendor camera provider ext), which needs a plain V4L2 capture node. Our cameras are
+  CAMSS/libcamera (media-controller, no usable /dev/video capture node), so the Android camera app sees nothing. Not fixed.
+  Option: a v4l2loopback device fed by libcamera/PipeWire and passed into the container (needs the v4l2loopback module).
+- CI speed: the kernel compile is 54 of 60 minutes. Workflow now caches ccache/distfiles/apk downloads and builds the kernel via
+  `CC="ccache clang"` (linux r6); the first run after this fills the cache, later runs should skip most of the compile.

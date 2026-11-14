@@ -4,7 +4,7 @@
 # tweaks/stage.sh packs unit/ and tweaks/ into nura-g8x-tweaks-files.tar.gz.
 pkgname=nura-g8x-tweaks
 pkgver=2026.11.12
-pkgrel=11
+pkgrel=12
 _hexver=0.5.0
 _sscver=0.4.4
 pkgdesc="LG G8x ThinQ tweaks: buttons, wake, pocket and dock modes, sensors, camera, settings app"
@@ -96,6 +96,7 @@ package() {
 	install -Dm644 $f/tweaks/nura-tweaks-user.service -t "$pkgdir"/usr/lib/systemd/user/
 	install -Dm644 $f/tweaks/80-nura-g8x.preset "$pkgdir"/usr/lib/systemd/system-preset/80-nura-g8x.preset
 	install -Dm644 $f/tweaks/80-nura-g8x-user.preset "$pkgdir"/usr/lib/systemd/user-preset/80-nura-g8x.preset
+	install -Dm644 $f/tweaks/52_waydroid.nft -t "$pkgdir"/etc/nftables.d/
 	install -Dm755 $f/tweaks/nura-sensordaemon-fix "$pkgdir"/usr/libexec/nura-sensordaemon-fix
 
 	# sensors: packaged hexagonrpcd/libssc, start check, gyroscope

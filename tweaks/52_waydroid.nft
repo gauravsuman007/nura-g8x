@@ -1,0 +1,12 @@
+#!/usr/sbin/nft -f
+# Waydroid: let the Android container get DHCP/DNS from the host and be forwarded.
+table inet filter {
+	chain input {
+		iifname "waydroid0" accept comment "Waydroid container"
+	}
+
+	chain forward {
+		iifname "waydroid0" accept comment "Waydroid outgoing"
+		oifname "waydroid0" ct state { established, related } accept comment "Waydroid replies"
+	}
+}
