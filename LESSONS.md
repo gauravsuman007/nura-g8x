@@ -1521,10 +1521,11 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
   /usr/lib/systemd/system-preset/80-nura-g8x.preset. nura-standby.service is listed there now.
 - Not yet tested: the screen-off suspend daemon (needs USB unplugged, usb0 carrier blocks it), drain with Wi-Fi up.
 
-### Waydroid first attempt (2026-11-14): hard hang, self-recovered after about 15 min
-- waydroid 1.6.3 installs from the pmOS repo; `waydroid init` downloaded the official Lineage 20 images (1 GB). Binder devices exist
-  (CONFIG_ANDROID_BINDER_IPC=y, BINDERFS off). The container service started fine.
-- `waydroid session start` from an SSH shell (WAYLAND_DISPLAY=wayland-0) hung the whole phone within about 35 s; the journal ends
-  mid-boot with no panic, the PMIC watchdog reset it. Cause unknown (container start, binder, GPU or the session itself).
-- waydroid-container is now disabled at boot. Next time: RAM-boot a test image, watch dmesg over serial/ssh, start the
-  container step by step (lxc only, then session), with the user present.
+### Waydroid works (2026-11-15)
+- First attempt hung the phone (journal lost, PMIC watchdog reset after ~15 min). Second attempt, with `dmesg -w` streamed to the Mac,
+  did not hang: container (`systemctl start waydroid-container`) then `systemd-run --user --unit=wd-session -E WAYLAND_DISPLAY=wayland-0
+  waydroid session start`. Android 13 (Lineage 20) reports sys.boot_completed=1 in about 60 s; SurfaceFlinger runs GLES on freedreno FD640
+  (host Mesa), gralloc minigbm_gbm_mesa. Binder works with BINDERFS off.
+- Pitfalls: a session started from an ssh shell (nohup) dies when the shell exits; run it as a systemd user unit. `waydroid shell`
+  needs root. The cause of the first hang is unknown (suspect: session started while the first container start was racing the
+  desktop session); it did not repeat. waydroid-container stays disabled at boot until the UI is verified on screen.
