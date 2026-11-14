@@ -6,7 +6,7 @@
 _flavor="nura-lg-mh2lm"
 pkgname=linux-$_flavor
 pkgver=7.0.0
-pkgrel=5
+pkgrel=6
 pkgdesc="Mainline kernel for the LG G8x ThinQ (SM8150) with Nura G8x drivers"
 arch="aarch64"
 _carch="arm64"
@@ -17,6 +17,7 @@ options="!strip !check !tracedeps
 	"
 makedepends="
 	bison
+	ccache
 	clang
 	elfutils-dev
 	findutils
@@ -48,7 +49,7 @@ prepare() {
 build() {
 	unset LDFLAGS
 	make ARCH="$_carch" LLVM=1 olddefconfig
-	make ARCH="$_carch" LLVM=1 \
+	make ARCH="$_carch" LLVM=1 CC="ccache clang" \
 		KBUILD_BUILD_VERSION="$((pkgrel + 1 ))-$_flavor" \
 		Image.gz modules
 }

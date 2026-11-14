@@ -59,11 +59,23 @@ jobs:
           work = $WORK
           hostname = lg-g8x
           ssh_keys = False
+          ccache_size = 8G
           extra_packages = bluez,bluez-systemd,modemmanager,modemmanager-systemd,alsa-utils
           [providers]
           EOF
           printf 8 > "$WORK/version"
           $PMB --version
+
+      - name: Cache ccache, distfiles and apk downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ../pmb-work/cache_ccache_aarch64
+            ../pmb-work/cache_distfiles
+            ../pmb-work/cache_http
+            ../pmb-work/cache_apk_aarch64
+          key: pmb-${{ runner.arch }}-${{ github.run_id }}
+          restore-keys: pmb-${{ runner.arch }}-
 
       - name: Build kernel
         run: $PMB -y build --arch aarch64 linux-nura-lg-mh2lm
@@ -90,6 +102,12 @@ jobs:
           sudo cp $WORK/config_abuild/*.rsa.pub dist/nura-ci.rsa.pub 2>/dev/null || true
           sudo chown -R "$(id -u):$(id -g)" dist; (cd dist && sha256sum * > SHA256SUMS)
           ls -l dist
+
+      - name: ccache statistics
+        if: always()
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" $WORK/cache_* 2>/dev/null || true
+          du -sh $WORK/cache_* 2>/dev/null || true
 
       - name: Show pmbootstrap log on failure
         if: failure()
