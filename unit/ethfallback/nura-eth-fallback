@@ -1,0 +1,27 @@
+#!/bin/sh
+# A USB Ethernet link that keeps dropping while gigabit is advertised (bad or
+# 2-pair cable, marginal port: carrier toggles about once a second, so DHCP never
+# completes) is limited to 10/100 Mbit/s. A new interface (dock replug) starts
+# with gigabit again. Logs "<3>" when it falls back.
+S=/run/nura-eth-fallback
+mkdir -p $S
+while :; do
+	for d in /sys/class/net/e*; do
+		[ -e "$d/device" ] || continue
+		case $(readlink -f "$d") in */usb*) ;; *) continue ;; esac
+		i=${d##*/}
+		dn=$(cat "$d/carrier_down_count" 2>/dev/null) || continue
+		f=$S/$i.$(cat "$d/ifindex")
+		now=$(date +%s)
+		[ -e "$f.done" ] && continue
+		if [ -r "$f" ]; then read t b < "$f"; else t=$now; b=$dn; fi
+		[ $((now - t)) -ge 12 ] && { t=$now; b=$dn; }
+		echo "$t $b" > "$f"
+		if [ $((dn - b)) -ge 3 ]; then
+			ethtool -s "$i" autoneg on advertise 0x0f 2>/dev/null &&
+				echo "<3>$i: carrier dropped $((dn - b)) times in $((now - t)) s at gigabit; limited to 100 Mbit/s until the dock is replugged"
+			: > "$f.done"
+		fi
+	done
+	sleep 2
+done
