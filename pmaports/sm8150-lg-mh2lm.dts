@@ -842,7 +842,8 @@
 };
 
 &mdss_dp_out {
-	data-lanes = <0 1>;
+	/* 4 lanes for pin assignment C (DOCK_4K60); in D the dock reports 2 in its DPCD */
+	data-lanes = <0 1 2 3>;
 };
 
 &usb_1_qmpphy_out {
