@@ -1632,3 +1632,11 @@ Tooling: `devtools/rebase/rebase.sh REF NAME` (inside nura-kbd) applies every `p
   builds as uid 12345 in its chroot. The workflow chowns the ccache and
   distfiles dirs to 12345 after the restore and back to the runner before the
   save (the "ccache statistics" step). First fixed run: 2.2 GB cache saved.
+- **Charge limit was not applied at boot** (found 2026-11-15 on the first
+  release image: thresholds 100/95 after boot): `nura-tweaks-helper apply`
+  only wrote the udev rule and called UPower's `EnableChargeThreshold` when a
+  setting *changed*, never at boot. A fresh flash or reboot ran with no limit.
+  Boot apply now reloads udev, restarts UPower and enables the threshold.
+  Defaults for this phone: 50-60 %, hold at the limit (run from USB, battery
+  idle, no trickle loops), 1000 mA, 4200 mV (float voltage; about 85 %
+  capacity, much longer battery life). All changeable in LG G8x Tweaks.

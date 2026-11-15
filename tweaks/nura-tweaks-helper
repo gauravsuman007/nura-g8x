@@ -199,13 +199,16 @@ def apply(cfg, changed=None):
             os.makedirs(os.path.dirname(CHARGE_RULE), exist_ok=True)
             with open(CHARGE_RULE, 'w') as f:
                 f.write(rule)
-            if changed is not None:
-                subprocess.run(['udevadm', 'control', '--reload'])
-                subprocess.run(['udevadm', 'trigger', '-c', 'change',
-                                '/sys/class/power_supply/qcom-battery'])
-                subprocess.run(['systemctl', 'try-restart', 'upower.service'])
-                subprocess.run(['sleep', '2'])
-    if want('CHARGE_LIMIT', 'CHARGE_LIMIT_START', 'CHARGE_LIMIT_END') and changed is not None:
+            # also at boot: the rule is written after udev has seen the battery
+            subprocess.run(['udevadm', 'control', '--reload'])
+            subprocess.run(['udevadm', 'trigger', '-c', 'change',
+                            '/sys/class/power_supply/qcom-battery'])
+            subprocess.run(['systemctl', 'try-restart', 'upower.service'])
+            subprocess.run(['sleep', '2'])
+    if want('CHARGE_LIMIT', 'CHARGE_LIMIT_START', 'CHARGE_LIMIT_END'):
+        # also at boot: UPower only programs the thresholds when asked, so
+        # without this a fresh image or reboot runs with no limit at all
+        # (thresholds 100/95). The D-Bus call starts UPower if needed.
         if b('CHARGE_LIMIT'):
             upower(False)
         upower(b('CHARGE_LIMIT'))
