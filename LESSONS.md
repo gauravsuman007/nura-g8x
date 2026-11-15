@@ -1661,3 +1661,9 @@ Tooling: `devtools/rebase/rebase.sh REF NAME` (inside nura-kbd) applies every `p
 - During debugging, reading `dp_test_active` in debugfs oopsed the kernel (known upstream NULL deref) and every DP AUX read then timed out (-110). A clean reboot with the dock attached gave a working picture: after a monitor stays black, reboot with the dock attached before digging into registers.
 - GNOME also blanked every output (PowerSaveMode 3) after nura-dock turned the panel off; waking it was needed but not sufficient.
 - Never read `dp_test_active`/`dp_test_data` from debugfs.
+
+## Dock Ethernet flaps at gigabit, 2026-11-16
+- Release image, Dell TB16 RTL8153 (r8152, `Dell TB16 Dock, disable RX aggregation`): carrier toggles on/off about every second while 1000baseT/Full is advertised; no DHCP. Not NetworkManager (same unmanaged), not rtl_nic firmware (moved away, same), not the ECM config (no netdev). With 1000 not advertised the link came up and held at 100 Mbit/s with ping working. It worked at 1 Gbit/s on the dev build (LESSONS "USB-C dock"), so a difference between that kernel/image and the CI one is still open; the cable and switch port were not changed.
+- New test group `dock` in `tests/phone/hwtest.py` (`--only dock`, SKIP when undocked); `dock_ethernet` fails on a carrier flap and warns under 1000 Mbit/s.
+- 4K60 with `DOCK_4K60=1`: pin C selected, but the dock still reports 2 lanes in DPCD and USB peripherals die; left off. The alt mode enters before the tweak is applied at boot, so the setting would not apply at boot anyway.
+- Never flash a boot.img whose pmos UUIDs differ from the installed userdata (initramfs stuck); use `devtools/flash-boot-safe.sh`.

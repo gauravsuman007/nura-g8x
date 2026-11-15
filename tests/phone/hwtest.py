@@ -1026,6 +1026,163 @@ def remote_desktop():
     return "RDP listening on 3389"
 
 
+# ---------------------------------------------------------------- dock
+# USB-C dock (Dell TB16 + monitor). Every test SKIPs when no dock is attached,
+# so the suite stays green undocked. Never reads debugfs dp_test_* (kernel oops).
+def _dock_attached():
+    return os.path.isdir("/sys/class/typec/port0-partner")
+
+
+def _dp_card():
+    c = glob.glob("/sys/class/drm/card*-DP-1")
+    return c[0] if c else None
+
+
+def _need_dock():
+    if not _dock_attached():
+        raise Skip("no dock attached")
+
+
+@test("dock")
+def dock_altmode():
+    _need_dock()
+    base = "/sys/class/typec/port0-partner/port0-partner.0"
+    assert_(os.path.isdir(base), "dock attached but no DisplayPort alt mode (PD negotiation failed?)")
+    pin = rd(base + "/displayport/pin_assignment", "?")
+    hpd = rd(base + "/displayport/hpd", "?")
+    assert_(rd(base + "/active", "") == "yes", "DP alt mode not active")
+    assert_(hpd == "1", f"hot-plug detect low (hpd={hpd})")
+    return f"DP alt mode active, pin assignment {pin}", {"dock_pin": pin}
+
+
+@test("dock")
+def dock_dp_link():
+    _need_dock()
+    card = _dp_card()
+    assert_(card, "no DP-1 connector")
+    assert_(rd(card + "/status") == "connected", "DP-1 not connected (black monitor?)")
+    assert_(rd(card + "/enabled", "") == "enabled", "DP-1 not enabled")
+    modes = rd(card + "/modes", "").split()
+    assert_(modes, "monitor reports no modes")
+    # Lane count from the sink's DPCD (aux node) and training status
+    lanes = rate = None
+    try:
+        with open("/dev/drm_dp_aux0", "rb") as f:
+            f.seek(0x100); b = f.read(2)
+            rate, lanes = b[0], b[1] & 0x1f
+            f.seek(0x202); st = f.read(2)
+    except OSError as e:
+        raise Warn(f"cannot read DPCD: {e}")
+    assert_(st[0] & 0x77 == 0x77, f"lane status 0x{st[0]:02x}: link not trained")
+    gbps = {0x06: 1.62, 0x0a: 2.7, 0x14: 5.4, 0x1e: 8.1}.get(rate, rate)
+    return f"{lanes} lanes at {gbps} Gbit/s per lane, {len(modes)} modes", {"dp_lanes": lanes}
+
+
+@test("dock")
+def dock_monitor_modes():
+    _need_dock()
+    card = _dp_card()
+    assert_(card, "no DP-1 connector")
+    out = as_user("gdctl show 2>&1")
+    assert_("DP-1" in out, "GNOME does not see DP-1")
+    blk = out.split("Monitor DP-1", 1)[-1].split("Monitor DSI-1", 1)[0]
+    cur = re.search(r"Current mode\D+(\d+)x(\d+)@([\d.]+)", blk)
+    assert_(cur, "no current mode for DP-1")
+    w, h, hz = int(cur.group(1)), int(cur.group(2)), float(cur.group(3))
+    m = {"dock_w": w, "dock_h": h, "dock_hz": hz}
+    if hz < 50:
+        raise Warn(f"{w}x{h}@{hz:.0f}: under 50 Hz", m)
+    return f"{w}x{h}@{hz:.0f}", m
+
+
+@test("dock")
+def dock_phone_panel_kept():
+    """Regression: removing DSI-1 from the Mutter config left no monitor after undock."""
+    _need_dock()
+    out = as_user("gdctl show 2>&1")
+    assert_("DSI-1" in out, "GNOME has no phone panel monitor")
+    assert_("Logical monitor" in out, "GNOME has no logical monitor")
+
+
+@test("dock")
+def dock_service():
+    _need_dock()
+    uid = sh(f"id -u {USER}")
+    j = sh(f"journalctl _UID={uid} -b -o cat --no-pager 2>/dev/null | grep 'nura-dock:' | tail -30")
+    assert_("docked:" in j, "nura-dock never applied a docked config")
+    assert_("failed" not in j.lower() or "restore failed" not in j, "nura-dock reported a failure")
+    return j.splitlines()[-1] if j else ""
+
+
+@test("dock")
+def dock_usb_hub():
+    _need_dock()
+    devs = glob.glob("/sys/bus/usb/devices/[0-9]*-[0-9]*")
+    speeds = {os.path.basename(d): rd(d + "/speed", "0") for d in devs if "." not in os.path.basename(d) or True}
+    assert_(devs, "no USB devices behind the dock (pin assignment C has no USB 3; connect-debounce failed?)")
+    ss = [k for k, v in speeds.items() if v in ("5000", "10000")]
+    if not ss:
+        raise Warn(f"dock hub only at USB 2 ({len(devs)} devices)", {"dock_usb_devs": len(devs)})
+    return f"{len(devs)} USB devices, SuperSpeed hub present", {"dock_usb_devs": len(devs)}
+
+
+@test("dock")
+def dock_usb_peripherals():
+    _need_dock()
+    names = " ".join(rd(p, "") for p in glob.glob("/sys/class/input/input*/name")).lower()
+    kb, ms = "keyboard" in names, "mouse" in names
+    if not (kb or ms):
+        raise Skip("no external keyboard/mouse plugged into the dock")
+    assert_(kb and ms, f"keyboard={kb} mouse={ms}")
+    return "keyboard and mouse enumerated"
+
+
+@test("dock")
+def dock_usb_audio():
+    _need_dock()
+    cards = rd("/proc/asound/cards", "")
+    if "USB" not in cards:
+        raise Skip("no USB audio device on the dock")
+    return "USB audio card present"
+
+
+@test("dock")
+def dock_ethernet():
+    """Link must hold steady for 10 s (the failure mode is a carrier flap every second)."""
+    _need_dock()
+    ifs = [os.path.basename(p) for p in glob.glob("/sys/class/net/e*") if "/usb" in os.path.realpath(p)]
+    if not ifs:
+        raise Skip("no USB Ethernet adapter on the dock")
+    ifc = ifs[0]
+    n0 = dmesg().count(f"{ifc}: carrier")
+    time.sleep(10)
+    flips = dmesg().count(f"{ifc}: carrier") - n0
+    car = rd(f"/sys/class/net/{ifc}/carrier", "0")
+    if car != "1" and flips == 0:
+        raise Skip(f"{ifc} has no link and no flapping (no cable plugged in?)")
+    assert_(flips == 0, f"{ifc} carrier flapped {flips} times in 10 s")
+    assert_(car == "1", f"{ifc} no carrier")
+    speed = int(rd(f"/sys/class/net/{ifc}/speed", "0") or 0)
+    ping = sh(f"ping -c3 -W2 -I {ifc} $(ip route show default | awk '{{print $3; exit}}') 2>&1 | tail -2")
+    assert_("0% packet loss" in ping, f"ping over {ifc} failed: {ping}")
+    m = {"dock_eth_mbps": speed}
+    if speed < 1000:
+        raise Warn(f"{ifc} up at {speed} Mbit/s (expected 1000)", m)
+    return f"{ifc} at {speed} Mbit/s, stable, ping ok", m
+
+
+@test("dock")
+def dock_kernel_log_clean():
+    _need_dock()
+    bad = [l for l in dmesg().splitlines()
+           if (re.search(r"(msm_dp|dp_aux|typec_displayport|tcpm|xhci).*(error|fail|timed out|timeout)|dwc3.*failed", l, re.I)
+               or re.search(r"\bOops\b|\bBUG:", l))
+           and "probe with driver typec_displayport failed with error -71" not in l]
+    if bad:
+        raise Warn(f"{len(bad)} DP/USB error lines, first: {bad[0][:150]}")
+    return "no DP/USB errors in the kernel log"
+
+
 # ---------------------------------------------------------------- run
 def main():
     results = []
