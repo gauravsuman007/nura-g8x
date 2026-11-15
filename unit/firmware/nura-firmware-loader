@@ -6,6 +6,7 @@
 #   vendor_<slot>       -> GPU zap shader, sensor registry config
 #   dsp_<slot>          -> DSP userspace libraries (hexagonrpcd)
 #   sns                 -> sensor calibration registry
+rm -f /run/nura-fw-copied
 R=${NURA_FW_ROOT:-}	# install prefix (testing only)
 FW=$R/lib/firmware/qcom/sm8150/lg-mh2lm
 WLAN=$R/lib/firmware/ath10k/WCN3990/hw1.0
@@ -26,7 +27,7 @@ mnt() { # mnt PARTLABEL DIR
 cpn() { # cpn SRC DST: copy if missing or different size
 	[ -f "$1" ] || return 0
 	if [ ! -f "$2" ] || [ "$(stat -c %s "$1")" != "$(stat -c %s "$2")" ]; then
-		mkdir -p "$(dirname "$2")"; cp -a "$1" "$2.tmp" && mv "$2.tmp" "$2" && log "copied $2"
+		mkdir -p "$(dirname "$2")"; cp -a "$1" "$2.tmp" && mv "$2.tmp" "$2" && log "copied $2" && echo "$2" >> /run/nura-fw-copied
 	fi
 }
 n=0
@@ -74,3 +75,12 @@ if [ ! -e $Q/sensors/registry/.seeded ] && mnt sns $M/sns; then
 fi
 rmdir $M/* $M 2>/dev/null
 log "done ($n partitions read)"
+# First boot of a fresh image: the remote processors (modem, audio, sensors)
+# started before this firmware existed and stay dead until the next boot.
+# Reboot once automatically (marker: never twice, so a mismatch cannot loop).
+MARK=/var/lib/nura-firmware-reboot
+if [ -z "$R" ] && [ -s /run/nura-fw-copied ] && [ ! -e $MARK ]; then
+	mkdir -p /var/lib && : > $MARK
+	log "firmware was copied for the first time: rebooting once so Wi-Fi, audio and sensors start"
+	systemctl reboot
+fi

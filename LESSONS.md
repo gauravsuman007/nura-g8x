@@ -1648,3 +1648,10 @@ Tooling: `devtools/rebase/rebase.sh REF NAME` (inside nura-kbd) applies every `p
   (After=upower), which restarts UPower so it re-reads the udev rule and
   retries `EnableChargeThreshold` until `ChargeThresholdEnabled` is true.
   Never start a unit from a service that is ordered Before it.
+- **First boot after a flash left sensors and audio dead** (user report): the
+  remote processors start before `nura-firmware-loader` has copied their
+  firmware, so they stay offline until the next boot (known, was "reboot once"
+  in the README). The loader now reboots once by itself when it copied
+  something and `/var/lib/nura-firmware-reboot` does not exist yet (marker
+  prevents any loop). Tested both ways on the phone (nothing missing: no
+  reboot; one file removed: copy, then reboot).

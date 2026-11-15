@@ -39,8 +39,9 @@ fastboot reboot
 ```
 
 Log in as `user` with password `147147` and change it right away
-(`passwd`). The first boot copies the firmware and takes a little longer;
-reboot once afterwards so Wi-Fi, sensors and audio pick it up.
+(`passwd`). The first boot copies the firmware from the phone's own
+partitions and then reboots once by itself (about a minute), so Wi-Fi, sensors
+and audio come up on the second boot.
 The LG bootloader cannot switch slots (`fastboot --set-active` is an unknown
 command), so always flash the slot that is already active. A 30 s hardware
 watchdog resets the phone if it ever hangs (the power button cannot).
