@@ -7,7 +7,9 @@ d=open(N+'out/boot-flash-78.img','rb').read(); pg=2048
 ks,_,rs=struct.unpack('<III',d[8:20]); rdo=pg+(ks+pg-1)//pg*pg; rd=d[rdo:rdo+rs]
 nk=open(sys.argv[1],'rb').read()+open(__import__('os').environ.get('DTB',N+'out/probes/final.dtb'),'rb').read()
 h=bytearray(d[:pg]); struct.pack_into('<I',h,8,len(nk))
-c=h[64:576].rstrip(b'\0')+b' watchdog.handle_boot_enabled=1 watchdog.open_timeout=180 nura.testwd panic=10 softlockup_panic=1 hung_task_panic=1'+(sys.argv[3].encode() if len(sys.argv)>3 else b'')
+import os
+if os.environ.get('PHOTO'): c=h[64:576].rstrip(b'\0')+b' ignore_loglevel nura.testwd watchdog.handle_boot_enabled=1 watchdog.open_timeout=300 panic=0'
+else: c=h[64:576].rstrip(b'\0')+b' watchdog.handle_boot_enabled=1 watchdog.open_timeout=180 nura.testwd panic=10 softlockup_panic=1 hung_task_panic=1'+(sys.argv[3].encode() if len(sys.argv)>3 else b'')
 assert len(c)<512; h[64:576]=c.ljust(512,b'\0')
 i=hashlib.sha1()
 for b in (nk,rd,b''): i.update(b); i.update(struct.pack('<I',len(b)))
