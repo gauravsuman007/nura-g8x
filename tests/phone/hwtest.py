@@ -1061,7 +1061,12 @@ def dock_dp_link():
     card = _dp_card()
     assert_(card, "no DP-1 connector")
     assert_(rd(card + "/status") == "connected", "DP-1 not connected (black monitor?)")
-    assert_(rd(card + "/enabled", "") == "enabled", "DP-1 not enabled")
+    if rd(card + "/enabled", "") != "enabled":
+        psm = as_user("gdbus call --session -d org.gnome.Mutter.DisplayConfig -o /org/gnome/Mutter/DisplayConfig "
+                      "-m org.freedesktop.DBus.Properties.Get org.gnome.Mutter.DisplayConfig PowerSaveMode")
+        if "<0>" not in psm:
+            raise Skip(f"monitor blanked by GNOME (PowerSaveMode {psm}); wake it to test the link")
+        raise AssertionError("DP-1 not enabled while GNOME is awake (black monitor)")
     modes = rd(card + "/modes", "").split()
     assert_(modes, "monitor reports no modes")
     # Lane count from the sink's DPCD (aux node) and training status
@@ -1163,6 +1168,9 @@ def dock_ethernet():
     assert_(flips == 0, f"{ifc} carrier flapped {flips} times in 10 s")
     assert_(car == "1", f"{ifc} no carrier")
     speed = int(rd(f"/sys/class/net/{ifc}/speed", "0") or 0)
+    fw = re.search(r"firmware-version: (.*)", sh(f"ethtool -i {ifc}"))
+    assert_(not (fw and "rtl8153a-3" in fw.group(1)),
+            "rtl8153a-3 PHY patch loaded (breaks gigabit on the TB16; power-cycle the dock after fixing)")
     ping = sh(f"ping -c3 -W2 -I {ifc} $(ip route show default | awk '{{print $3; exit}}') 2>&1 | tail -2")
     assert_("0% packet loss" in ping, f"ping over {ifc} failed: {ping}")
     m = {"dock_eth_mbps": speed}

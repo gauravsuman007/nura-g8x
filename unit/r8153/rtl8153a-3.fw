@@ -1,0 +1,1 @@
+nura: Realtek rtl8153a-3 PHY patch disabled. With it the Dell TB16 RTL8153 never holds a gigabit link (carrier flaps every second); without it the link runs at 1000 Mbit/s. See LESSONS.md.

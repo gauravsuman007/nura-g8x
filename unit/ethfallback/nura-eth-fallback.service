@@ -1,9 +1,0 @@
-[Unit]
-Description=Fall back to 100 Mbit/s on a USB Ethernet link that flaps at gigabit
-
-[Service]
-ExecStart=/usr/bin/nura-eth-fallback
-Restart=always
-
-[Install]
-WantedBy=multi-user.target

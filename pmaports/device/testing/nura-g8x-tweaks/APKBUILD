@@ -4,7 +4,7 @@
 # tweaks/stage.sh packs unit/ and tweaks/ into nura-g8x-tweaks-files.tar.gz.
 pkgname=nura-g8x-tweaks
 pkgver=2026.11.12
-pkgrel=22
+pkgrel=23
 _hexver=0.5.0
 _sscver=0.4.4
 pkgdesc="LG G8x ThinQ tweaks: buttons, wake, pocket and dock modes, sensors, camera, settings app"
@@ -142,8 +142,9 @@ package() {
 	# USB network gadget with fixed MAC addresses (macOS names the interface reliably)
 	install -Dm755 $f/unit/usbreplug/nura-usb-replug -t "$pkgdir"/usr/bin/
 	install -Dm644 $f/unit/usbreplug/nura-usb-replug.service -t "$pkgdir"/usr/lib/systemd/system/
-	install -Dm755 $f/unit/ethfallback/nura-eth-fallback -t "$pkgdir"/usr/bin/
-	install -Dm644 $f/unit/ethfallback/nura-eth-fallback.service -t "$pkgdir"/usr/lib/systemd/system/
+	# Dell TB16 RTL8153: Realtek's rtl8153a-3 PHY patch breaks gigabit; an invalid
+	# file in updates/ wins over linux-firmware's .zst and r8152 skips the patch
+	install -Dm644 $f/unit/r8153/rtl8153a-3.fw -t "$pkgdir"/usr/lib/firmware/updates/rtl_nic/
 	install -Dm755 $f/unit/usbmac/nura-usb-mac -t "$pkgdir"/usr/bin/
 	install -Dm644 $f/unit/usbmac/nura-usb-mac.service -t "$pkgdir"/usr/lib/systemd/system/
 	# GNOME Shell on Adreno 640: no GMEM (tiled) rendering, see unit/gpu/nura-gpu.conf
@@ -154,7 +155,7 @@ package() {
 	install -Dm644 $f/unit/watchdog/50-nura-watchdog.conf -t "$pkgdir"/usr/lib/systemd/system.conf.d/
 }
 sha512sums="
-e086651ebd42a383b9a4e077bb3233cf5953de150c684ec31d2308a783321da76d0652fd3a8772ec053d95a1db9342adb62cac6d3bcf0ea60f67fc1bd88e43a4  nura-g8x-tweaks-files.tar.gz
+612c509c70381e9529b494c53c2bc1f413a8c7da18a654d27b5c7c8e60dc6deb1eb1736090b5426144c5c4dbafd94e9491568e0cf23faf6437893d0f296a8982  nura-g8x-tweaks-files.tar.gz
 919146c9018e4b0cc271237c7200af0b7abcd4500227e0140e1e44fd2b412d29c1519ffe29ed06a5119b3a0218a3ef016af21a5be3c5898b0f0d35b44ac78b1b  hexagonrpc-0.5.0.tar.gz
 9240970f6a70f4900ef2d8fad337dac815ea2602b3b395943326fb086f59d24dcf59b76bdbc6014ebd3c450eaad5393465ca038c165845ffe99bf8e282a5c170  libssc-0.4.4.tar.gz
 385817bc2b8f4bfd2a06d67b63f420bb610092758f43391887eb8335c01d68aa1590301f8e060902c95ed20cd9075d6ef38ee71edac30f20008b44eddc3f51ce  hexagonrpc-0001-close-aliased-descriptor.diff
