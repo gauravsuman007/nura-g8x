@@ -1627,3 +1627,8 @@ Tooling: `devtools/rebase/rebase.sh REF NAME` (inside nura-kbd) applies every `p
   Many things (PulseAudio, camera, RDP, the sleep tests) only exist inside a
   session, so the dev rootfs had GDM autologin set by hand. It is now the
   `AUTOLOGIN` tweak (default on, "Login" in LG G8x Tweaks).
+- **Restored CI cache failed the build** ("ccache: Permission denied"):
+  `actions/cache` restores files owned by the runner user, pmbootstrap
+  builds as uid 12345 in its chroot. The workflow chowns the ccache and
+  distfiles dirs to 12345 after the restore and back to the runner before the
+  save (the "ccache statistics" step). First fixed run: 2.2 GB cache saved.

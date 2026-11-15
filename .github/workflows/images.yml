@@ -79,6 +79,13 @@ jobs:
           key: pmb-${{ runner.arch }}-${{ github.run_id }}
           restore-keys: pmb-${{ runner.arch }}-
 
+      - name: Give the restored build caches to the chroot user
+        # actions/cache restores as the runner user; pmbootstrap builds as
+        # uid 12345 (pmos) inside its chroot ("ccache: Permission denied")
+        run: |
+          mkdir -p "$WORK/cache_ccache_aarch64" "$WORK/cache_distfiles"
+          sudo chown -R 12345:12345 "$WORK/cache_ccache_aarch64" "$WORK/cache_distfiles"
+
       - name: Build kernel
         run: $PMB -y build --arch aarch64 linux-nura-lg-mh2lm
 
