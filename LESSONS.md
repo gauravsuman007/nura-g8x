@@ -1564,4 +1564,4 @@ Tooling: `devtools/rebase/rebase.sh REF NAME` (inside nura-kbd) applies every `p
 - Old config options changed type (IPV6, NETFILTER_NETLINK, MULTIPLEXER warnings from olddefconfig): check them.
 - Kernel release now contains the git hash (`7.4.0-rc1-sm8150-g...-dirty`): set LOCALVERSION for packaging, modules install into a dir of that name.
 - OrbStack's Docker engine hangs under long `docker exec` pipes; run long jobs with `docker exec -d` and poll a log file.
-- RAM boot of the 7.4 image: the phone did not come back in fastboot or ssh (see below for result).
+- RAM boot of every 7.3/7.4 image (patched, unpatched, wip, clean, mainline v7.3.4) hangs before USB/display; unpatched pmOS 7.0 boots with the same config. A kernel regression between 7.0 and 7.3 is the cause; see plans/kernel-rebase.md for the bisect plan. Binder is Rust-only from 7.4 (Waydroid).
