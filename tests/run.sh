@@ -17,7 +17,7 @@ out=$N/tests/results/$stamp.jsonl
 print "[$(date +%T)] Nura G8x hardware tests -> tests/results/$stamp.*"
 if ! $P/g8x true 2>/dev/null; then print "FAIL: phone not reachable over SSH (USB link down?)"; exit 2; fi
 rem=/tmp/nura-hwtest-$stamp.py
-scp -q $SSHO $N/tests/phone/hwtest.py nura@172.16.42.1:$rem || { print "FAIL: copy"; exit 2; }
+scp -q $SSHO $N/tests/phone/hwtest.py ${G8X_USER:-nura}@172.16.42.1:$rem || { print "FAIL: copy"; exit 2; }
 # stream results, show progress per test
 perl -e 'alarm 900; exec @ARGV' $P/rs "python3 $rem ${args[*]}; rm -f $rem" 2>&1 | while IFS= read -r l; do
   case $l in

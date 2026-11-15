@@ -19,7 +19,9 @@ permissions:
 env:
   PMB_TAG: "3.12.1"
   PMB: python3 ${{ github.workspace }}/../pmbootstrap/pmbootstrap.py
-  WORK: ${{ github.workspace }}/../pmb-work
+  # absolute, without "..": actions/cache rejects relative parent paths (the
+  # first run silently saved no cache at all)
+  WORK: /home/runner/pmb-work
   APORTS: ${{ github.workspace }}/../pmaports
   # Default login for release images; change it on first boot (passwd).
   IMAGE_PASSWORD: "147147"
@@ -70,10 +72,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ../pmb-work/cache_ccache_aarch64
-            ../pmb-work/cache_distfiles
-            ../pmb-work/cache_http
-            ../pmb-work/cache_apk_aarch64
+            ${{ env.WORK }}/cache_ccache_aarch64
+            ${{ env.WORK }}/cache_distfiles
+            ${{ env.WORK }}/cache_http
+            ${{ env.WORK }}/cache_apk_aarch64
           key: pmb-${{ runner.arch }}-${{ github.run_id }}
           restore-keys: pmb-${{ runner.arch }}-
 

@@ -4,7 +4,7 @@
 # tweaks/stage.sh packs unit/ and tweaks/ into nura-g8x-tweaks-files.tar.gz.
 pkgname=nura-g8x-tweaks
 pkgver=2026.11.12
-pkgrel=14
+pkgrel=15
 _hexver=0.5.0
 _sscver=0.4.4
 pkgdesc="LG G8x ThinQ tweaks: buttons, wake, pocket and dock modes, sensors, camera, settings app"
@@ -138,6 +138,9 @@ package() {
 	install -Dm755 $f/unit/firmware/nura-firmware-loader -t "$pkgdir"/usr/libexec/
 	install -Dm644 $f/unit/firmware/nura-firmware-loader.service -t "$pkgdir"/usr/lib/systemd/system/
 	install -Dm644 $f/unit/firmware/socinfo/* -t "$pkgdir"/usr/share/qcom/sm8150/LG/mh2lm/socinfo/
+	# GNOME Shell on Adreno 640: no GMEM (tiled) rendering, see unit/gpu/nura-gpu.conf
+	install -Dm644 $f/unit/gpu/nura-gpu.conf \
+		"$pkgdir"/usr/lib/systemd/user/org.gnome.Shell@.service.d/50-nura-gpu.conf
 	install -Dm755 $f/unit/firmware/nura-ath10k-board2 -t "$pkgdir"/usr/libexec/
 	# 30 s hardware watchdog: a hung phone resets itself (power button is broken)
 	install -Dm644 $f/unit/watchdog/50-nura-watchdog.conf -t "$pkgdir"/usr/lib/systemd/system.conf.d/

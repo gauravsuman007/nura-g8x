@@ -2,7 +2,7 @@
 pkgname=device-lg-mh2lm
 pkgdesc="LG G8X ThinQ"
 pkgver=1
-pkgrel=3
+pkgrel=4
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -37,6 +37,16 @@ package() {
 	# Built by build-dtb.py (base DTS + pmaports/*-fragment.dtsi, dtbo sink labels)
 	install -Dm644 "$srcdir"/sm8150-lg-mh2lm.dtb \
 		"$pkgdir"/boot/dtbs/qcom/sm8150-lg-mh2lm.dtb
+	# Audio: ALSA UCM profile (without it PipeWire shows only "Dummy Output")
+	install -Dm644 "$startdir/ucm/conf.d/sm8150/LG G8x ThinQ.conf" \
+		"$pkgdir/usr/share/alsa/ucm2/conf.d/sm8150/LG G8x ThinQ.conf"
+	install -Dm644 "$startdir"/ucm/LG/G8x/HiFi.conf \
+		"$pkgdir"/usr/share/alsa/ucm2/LG/G8x/HiFi.conf
+	# Accelerometer mount matrix (screen rotation), haptics for feedbackd
+	install -Dm644 "$startdir"/sensors/81-lg-mh2lm-accel-mount.rules \
+		"$pkgdir"/usr/lib/udev/rules.d/81-lg-mh2lm-accel-mount.rules
+	install -Dm644 "$startdir"/haptics/70-feedbackd-dw7800.rules \
+		"$pkgdir"/usr/lib/udev/rules.d/70-feedbackd-dw7800.rules
 }
 sha512sums="
 0f88a638151e475fd04242c5a69ec6fa75d7bbd0d61c33ff78d0cf2a8bc2498c6444e0e8b82daf927a778d7013c650c69d812a8dcff1081242c9f7986121326e  deviceinfo

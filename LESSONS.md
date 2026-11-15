@@ -1597,3 +1597,20 @@ Tooling: `devtools/rebase/rebase.sh REF NAME` (inside nura-kbd) applies every `p
 - Never `modprobe -r ath10k_snoc` to retest: the unload hung the phone.
   Write chained test commands with `&&` (or `set -e`) throughout: a `;` after a
   failed step loaded the driver with the bad board file anyway.
+
+- **CI never cached anything**: the cache paths were `../pmb-work/...`, which
+  `actions/cache` rejects ("Relative pathing '..' is not allowed", easy to
+  miss: the post step still passes). Every run rebuilt the kernel (53 of 61
+  minutes). The work dir is now `/home/runner/pmb-work`; check
+  `gh api repos/OWNER/REPO/actions/caches` shows entries after a run.
+- **Device package shipped no UCM, accel rule, haptics rule** (the packaging
+  TODO from BRINGUP.md was never done, the dev rootfs had them copied by
+  hand): GNOME showed "Dummy Output" and the screen was 180 degrees off.
+  `device-lg-mh2lm` r4 installs them; `nura-g8x-tweaks` r15 installs the
+  GNOME Shell GPU drop-in (`FD_MESA_DEBUG=nogmem`). Audit method: list every
+  repo file under unit/ and the device dir and grep the APKBUILDs for its
+  name; then diff a fresh image against the dev rootfs.
+- Test helpers `out/probes/g8x`/`rs` and `tests/run.sh` take `G8X_USER=user
+  G8X_NOPASS=1` for the release image (key login, passwordless test sudo).
+- A phone reboot with `pon_reason=...OFF:PS_HOLD` is a software reset, for
+  example the Assistant + Volume Down restart combo, not a crash.
