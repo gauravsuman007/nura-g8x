@@ -12,7 +12,14 @@
 - Same config as 7.0 (`config-nura-lg-mh2lm.aarch64`), olddefconfig only. Screen photos show nothing useful (the
   LG logo stays; fbcon never starts before the hang).
 
-## Next tests (in this order, one RAM boot each, ~15 min build + 3 min test)
+## Result so far (updated 2026-11-15, rebase work STOPPED by owner decision; resume later)
+- Mainline tags with the shipped config + our DTB + stock ramdisk: **v7.0 boots (control), v7.1, v7.2, v7.3.4 hang.**
+  v7.1 also hangs with `ARM64_LSUI` and `ARM64_ERRATUM_4193714` off (the only new arm64 core options).
+  So the break is a commit in the 7.1 merge window (v7.0..v7.1). Nothing in our patches is involved.
+- To resume: full stable clone, `git bisect start v7.1 v7.0` (~13 steps; incremental builds in /work/pm with the
+  shipped config, RAM boot each with devtools/repack-boot.py + ramboot.sh), then patch it in `kernel-src`.
+
+## Next tests (old list) (in this order, one RAM boot each, ~15 min build + 3 min test)
 1. Mainline v7.2 (build started, `/work/pm`; boot `out/boot-*.img` via `devtools/repack-boot.py` + `ramboot.sh`).
 2. Depending on the result bisect 7.0 / 7.1 / 7.2 / 7.3 (mainline tags, same config); then `git bisect` between the
    last good and first bad tag (needs a full clone of the stable tree, ~4 GB; use `git bisect` with ~6 builds).
