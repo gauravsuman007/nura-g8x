@@ -1655,3 +1655,9 @@ Tooling: `devtools/rebase/rebase.sh REF NAME` (inside nura-kbd) applies every `p
   something and `/var/lib/nura-firmware-reboot` does not exist yet (marker
   prevents any loop). Tested both ways on the phone (nothing missing: no
   reboot; one file removed: copy, then reboot).
+
+### Dock monitor black on the CI release image, 2026-11-15 (fixed by a reboot)
+- Release image r6 (kernel, device r5, tweaks r20) with the Dell TB16 dock and Samsung U32R59x: monitor stayed black after hotplug (link trained at HBR2 x2, EDID read, GNOME frames accepted, planes bound correctly). Docking after the first-boot flow does not recover by itself; replugging and power-cycling the dock did not help either.
+- During debugging, reading `dp_test_active` in debugfs oopsed the kernel (known upstream NULL deref) and every DP AUX read then timed out (-110). A clean reboot with the dock attached gave a working picture: after a monitor stays black, reboot with the dock attached before digging into registers.
+- GNOME also blanked every output (PowerSaveMode 3) after nura-dock turned the panel off; waking it was needed but not sufficient.
+- Never read `dp_test_active`/`dp_test_data` from debugfs.
