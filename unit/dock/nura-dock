@@ -226,6 +226,20 @@ def apply_docked():
     set_docked(ext is not None)
     color_profile_off(ext is not None)
     if not ext:
+        # Undocked: if Mutter is left with no logical monitor (a config that
+        # only had the monitor, or a failed revert), the phone panel stays black
+        # and GNOME cannot show anything. Put the panel back.
+        if panel and not any(any(m[0] == panel[0] for m in l[5]) for l in logical):
+            cur = [m for m in panel[1] if m[6].get('is-current')] or \
+                  [m for m in panel[1] if m[6].get('is-preferred')] or panel[1][:1]
+            scale = cur[0][4]
+            log('undocked without a panel config: restoring', panel[0])
+            try:
+                call('ApplyMonitorsConfig', GLib.Variant(
+                    '(uua(iiduba(ssa{sv}))a{sv})',
+                    (serial, 1, [(0, 0, scale, 0, True, [(panel[0], cur[0][0], {})])], {})))
+            except GLib.Error as e:
+                log('restore failed:', e.message)
         return
     for l in logical:
         if l[4] and any(m[0] == ext[0] for m in l[5]):
