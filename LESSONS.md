@@ -1549,3 +1549,6 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
 - `systemctl reboot --reboot-argument=bootloader` hangs in userspace shutdown and ends in a normal boot. The raw syscall
   `reboot(RESTART2, "bootloader")` (devtools/bootloader-reboot.py, run as root) reaches fastboot in about 8 s, every time.
   ramtest.sh should use it. Details of the trustlet loading: plans/fingerprint.md.
+- Do not RAM-boot the CI `nura-lg-mh2lm-boot.img` on the phone's existing system: its initramfs expects the CI userdata layout, stays in
+  the first boot stage (USB serial "postmarketOS", no network) and, with no test watchdog, only the PMIC watchdog resets it (about
+  10 min). CI boot images are verified together with the CI userdata image (flash both), or by checksums only.
