@@ -62,7 +62,7 @@ jobs:
           hostname = lg-g8x
           ssh_keys = False
           ccache_size = 8G
-          extra_packages = bluez,bluez-systemd,modemmanager,modemmanager-systemd,alsa-utils
+          extra_packages = bluez,bluez-systemd,modemmanager,modemmanager-systemd,alsa-utils,libcamera-tools,v4l-utils,evtest,iw,usbutils,i2c-tools,mesa-utils,glmark2,gstreamer-tools,gst-plugins-good,gst-plugins-bad,gst-libav,calls,chatty,snapshot,loupe,showtime,decibels,papers,nautilus,gnome-text-editor,gnome-calculator,firefox-esr,mobile-config-firefox
           [providers]
           EOF
           printf 8 > "$WORK/version"

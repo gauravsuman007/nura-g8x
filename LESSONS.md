@@ -1614,3 +1614,16 @@ Tooling: `devtools/rebase/rebase.sh REF NAME` (inside nura-kbd) applies every `p
   G8X_NOPASS=1` for the release image (key login, passwordless test sudo).
 - A phone reboot with `pon_reason=...OFF:PS_HOLD` is a software reset, for
   example the Assistant + Volume Down restart combo, not a crash.
+- **Full suite on the release image (2026-11-15)**: audio (UCM), Bluetooth,
+  Wi-Fi scan, sensors, GPU, display, suspend all pass. Failures that were
+  test or image gaps, not driver bugs: the suite hard-coded the `nura` user
+  (now detected), needed tools missing from the image (`i2cget`, `cam`,
+  `v4l2-ctl`, `evtest`, `iw`; now in the CI `extra_packages`), RDP is opt-in
+  (now a WARN), and Wi-Fi / deep_sleep need a connected network (join one in
+  GNOME once). "Dummy Output" in GNOME = PulseAudio without the UCM profile
+  (this image runs PulseAudio, not PipeWire audio: `51-pulseaudio.conf`
+  disables WirePlumber's audio).
+- **Autologin**: pmbootstrap's GNOME Mobile image boots to the GDM greeter.
+  Many things (PulseAudio, camera, RDP, the sleep tests) only exist inside a
+  session, so the dev rootfs had GDM autologin set by hand. It is now the
+  `AUTOLOGIN` tweak (default on, "Login" in LG G8x Tweaks).

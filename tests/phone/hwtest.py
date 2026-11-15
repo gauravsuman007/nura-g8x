@@ -27,7 +27,19 @@ ONLY = None
 if "--only" in sys.argv:
     ONLY = set(sys.argv[sys.argv.index("--only") + 1].split(","))
 
-USER = "nura"
+def _login_user():
+    """The account that owns the GNOME session: first regular user (dev: nura, release: user)."""
+    try:
+        for line in open("/etc/passwd"):
+            f = line.rstrip("\n").split(":")
+            if len(f) >= 7 and 1000 <= int(f[2]) < 60000 and not f[6].endswith(("nologin", "false")):
+                return f[0]
+    except (OSError, ValueError):
+        pass
+    return "nura"
+
+
+USER = _login_user()
 TESTS = []
 
 
@@ -1008,7 +1020,9 @@ def remote_desktop():
     if not sh("command -v gnome-remote-desktop-daemon || ls /usr/libexec/gnome-remote-desktop-daemon 2>/dev/null"):
         raise Skip("gnome-remote-desktop not installed")
     listening = sh("ss -ltn 2>/dev/null | grep -c ':3389 '")
-    assert_(listening not in ("", "0"), "nothing listening on RDP port 3389")
+    if listening in ("", "0"):
+        # off until the user turns it on (Settings > System > Remote Desktop)
+        raise Warn("RDP is off (Settings > System > Remote Desktop to enable)")
     return "RDP listening on 3389"
 
 

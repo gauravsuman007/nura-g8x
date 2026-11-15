@@ -18,6 +18,7 @@ CONF = '/etc/nura/tweaks.conf'
 DEFAULTS = '/usr/share/nura-g8x-tweaks/tweaks.conf'
 OLD_KEYS = '/etc/nura/keys.conf'   # before the tweaks package
 KEYS = '/sys/module/nura_keys/parameters'
+GDM_CONF = '/etc/gdm/custom.conf'
 GPIO_KEYS_WAKE = '/sys/devices/platform/gpio-keys/power/wakeup'
 CHARGE_RULE = '/etc/udev/rules.d/61-nura-charge-limit.rules'
 SMBX = '/sys/module/qcom_smbx/parameters'
@@ -29,6 +30,7 @@ BOOL = (0, 1)
 SCHEMA = {   # key: (min, max)
     'POWER_KEY': BOOL, 'POWER_HOLD_MS': (50, 3000),
     'RESET_COMBO': BOOL, 'RESET_HOLD_MS': (3000, 20000),
+    'AUTOLOGIN': BOOL,
     'WAKE_KEYS': BOOL, 'TOUCH_GUARD': BOOL, 'POCKET_GUARD': BOOL,
     'DOCK_AUTO': BOOL, 'DOCK_PANEL_OFF': BOOL, 'DOCK_POWER_KEY_OFF': BOOL,
     'DOCK_STUCK_WARN': BOOL, 'MONITOR_COLOR_PROFILE': BOOL, 'DOCK_4K60': BOOL,
@@ -100,6 +102,43 @@ def unit(name, on, user=False):
                        stderr=subprocess.DEVNULL)
 
 
+def login_user():
+    """First regular account (the one pmbootstrap created)."""
+    try:
+        for line in open('/etc/passwd'):
+            f = line.rstrip('\n').split(':')
+            if len(f) >= 7 and 1000 <= int(f[2]) < 60000 \
+                    and not f[6].endswith(('nologin', 'false')) and f[0] != 'nobody':
+                return f[0]
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def set_autologin(on):
+    """GDM automatic login for the first user; rewrites only the two keys."""
+    user = login_user()
+    if not os.path.exists(GDM_CONF) or (on and not user):
+        return
+    text = open(GDM_CONF).read()
+    want = {'AutomaticLoginEnable': 'True' if on else 'False'}
+    if on:
+        want['AutomaticLogin'] = user
+    old = text
+    for k, v in want.items():
+        pat = re.compile(r'^\s*#?\s*%s\s*=.*$' % k, re.M)
+        if pat.search(text):
+            text = pat.sub('%s=%s' % (k, v), text, count=1)
+        elif '[daemon]' in text:
+            text = text.replace('[daemon]', '[daemon]\n%s=%s' % (k, v), 1)
+        else:
+            text = '[daemon]\n%s=%s\n' % (k, v) + text
+    if text != old:
+        with open(GDM_CONF + '.new', 'w') as f:
+            f.write(text)
+        os.replace(GDM_CONF + '.new', GDM_CONF)
+
+
 def apply(cfg, changed=None):
     def want(*keys):
         return changed is None or any(k in changed for k in keys)
@@ -112,6 +151,8 @@ def apply(cfg, changed=None):
         if os.path.exists(KEYS + '/power_hold_ms'):
             write(KEYS + '/power_hold_ms', cfg['POWER_HOLD_MS'])
         write(KEYS + '/reset_combo', cfg['RESET_COMBO'])
+    if want('AUTOLOGIN'):
+        set_autologin(b('AUTOLOGIN'))
     if want('WAKE_KEYS') and os.path.exists(GPIO_KEYS_WAKE):
         write(GPIO_KEYS_WAKE, 'enabled' if b('WAKE_KEYS') else 'disabled')
     if want('TOUCH_GUARD', 'POCKET_GUARD', 'POWER_KEY') and changed is not None:

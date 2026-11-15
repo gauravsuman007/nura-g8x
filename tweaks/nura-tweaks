@@ -34,6 +34,10 @@ PAGES = [
         ('POCKET_GUARD', 'switch', 'Pocket detection',
          'Ignore the volume keys while the screen is off and covered'),
     ]),
+    ('Login', None, [
+        ('AUTOLOGIN', 'switch', 'Sign in automatically',
+         'Skip the password screen at boot. Off: type your password at the greeter. Applies at the next boot'),
+    ]),
     ('Dock', 'USB-C DisplayPort docks and adapters', [
         ('DOCK_AUTO', 'switch', 'Docked desktop',
          'The external monitor becomes the main desktop'),
