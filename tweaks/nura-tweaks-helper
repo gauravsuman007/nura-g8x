@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 
 CONF = '/etc/nura/tweaks.conf'
 DEFAULTS = '/usr/share/nura-g8x-tweaks/tweaks.conf'
@@ -139,6 +140,35 @@ def set_autologin(on):
         os.replace(GDM_CONF + '.new', GDM_CONF)
 
 
+def upower_enable(on):
+    """Turn UPower's charge threshold on or off; retry until it reports the
+    wanted state (right after boot UPower may not know the battery yet)."""
+    want_s = 'true' if on else 'false'
+    for _ in range(30):
+        subprocess.run(['busctl', '--timeout=5', 'call', 'org.freedesktop.UPower', UPOWER_BAT,
+                        'org.freedesktop.UPower.Device', 'EnableChargeThreshold',
+                        'b', want_s],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        r = subprocess.run(['busctl', '--timeout=5', 'get-property', 'org.freedesktop.UPower',
+                            UPOWER_BAT, 'org.freedesktop.UPower.Device',
+                            'ChargeThresholdEnabled'],
+                           capture_output=True, text=True)
+        if r.stdout.split()[-1:] == [want_s]:
+            return
+        time.sleep(1)
+
+
+def charge_limit_boot(cfg):
+    """nura-charge-limit.service, after upower.service: UPower reads the udev
+    rule (CHARGE_LIMIT) at start and programs the thresholds only when asked.
+    Not done inside nura-tweaks-apply, which runs Before=upower.service."""
+    subprocess.run(['systemctl', 'restart', 'upower.service'], stderr=subprocess.DEVNULL)
+    on = cfg.get('CHARGE_LIMIT') == '1'
+    if on:
+        upower_enable(False)
+    upower_enable(on)
+
+
 def apply(cfg, changed=None):
     def want(*keys):
         return changed is None or any(k in changed for k in keys)
@@ -182,13 +212,6 @@ def apply(cfg, changed=None):
         write(SMBX + '/hold_mode', 'Y' if b('CHARGE_HOLD') else 'N')
         write(SMBX + '/charge_ma', cfg['CHARGE_CURRENT_MA'])
         write(SMBX + '/float_mv', cfg['CHARGE_VOLTAGE_MV'])
-    if want('CHARGE_LIMIT', 'CHARGE_LIMIT_START', 'CHARGE_LIMIT_END'):
-        # UPower re-reads the thresholds only when the limit is (re)enabled
-        def upower(on):
-            subprocess.run(['busctl', 'call', 'org.freedesktop.UPower', UPOWER_BAT,
-                            'org.freedesktop.UPower.Device', 'EnableChargeThreshold',
-                            'b', 'true' if on else 'false'],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if want('CHARGE_LIMIT_START', 'CHARGE_LIMIT_END'):
         rule = ('# Written by nura-tweaks-helper (LG G8x Tweaks). UPower offers\n'
                 '# "Preserve Battery Health" when CHARGE_LIMIT is set.\n'
@@ -203,15 +226,13 @@ def apply(cfg, changed=None):
             subprocess.run(['udevadm', 'control', '--reload'])
             subprocess.run(['udevadm', 'trigger', '-c', 'change',
                             '/sys/class/power_supply/qcom-battery'])
-            subprocess.run(['systemctl', 'try-restart', 'upower.service'])
-            subprocess.run(['sleep', '2'])
-    if want('CHARGE_LIMIT', 'CHARGE_LIMIT_START', 'CHARGE_LIMIT_END'):
-        # also at boot: UPower only programs the thresholds when asked, so
-        # without this a fresh image or reboot runs with no limit at all
-        # (thresholds 100/95). The D-Bus call starts UPower if needed.
+            if changed is not None:
+                subprocess.run(['systemctl', 'restart', 'upower.service'])
+                time.sleep(2)
+    if want('CHARGE_LIMIT', 'CHARGE_LIMIT_START', 'CHARGE_LIMIT_END') and changed is not None:
         if b('CHARGE_LIMIT'):
-            upower(False)
-        upower(b('CHARGE_LIMIT'))
+            upower_enable(False)
+        upower_enable(b('CHARGE_LIMIT'))   # at boot: nura-charge-limit.service
 
 
 def parse_text(path):
@@ -222,7 +243,7 @@ def parse_text(path):
 
 
 def main(argv):
-    if not argv or argv[0] not in ('get', 'set', 'apply'):
+    if not argv or argv[0] not in ('get', 'set', 'apply', 'charge'):
         print(__doc__.strip())
         return 2
     cfg = load()
@@ -233,6 +254,10 @@ def main(argv):
     if os.geteuid() != 0:
         print('must run as root', file=sys.stderr)
         return 1
+    if argv[0] == 'charge':
+        charge_limit_boot(cfg)
+        return 0
+
     if argv[0] == 'apply':
         apply(cfg)
         return 0

@@ -1,0 +1,15 @@
+[Unit]
+Description=Enable the LG G8x charge limit in UPower
+# UPower reads the udev rule written by nura-tweaks-apply and programs the
+# battery thresholds only when asked. Kept out of nura-tweaks-apply, which
+# runs Before=upower.service (starting UPower from there deadlocks).
+After=upower.service nura-tweaks-apply.service
+Wants=upower.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/nura-tweaks-helper charge
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

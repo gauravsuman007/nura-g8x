@@ -1640,3 +1640,11 @@ Tooling: `devtools/rebase/rebase.sh REF NAME` (inside nura-kbd) applies every `p
   Defaults for this phone: 50-60 %, hold at the limit (run from USB, battery
   idle, no trickle loops), 1000 mA, 4200 mV (float voltage; about 85 %
   capacity, much longer battery life). All changeable in LG G8x Tweaks.
+- **Charge limit still off after boot even with the boot apply (found on the
+  flashed CI image)**: `nura-tweaks-apply.service` has `Before=upower.service`;
+  my first fix called `systemctl start upower` from inside it and deadlocked
+  (start job waits for the apply job, the apply waits for UPower; D-Bus
+  activation also waits). The boot step now lives in `nura-charge-limit.service`
+  (After=upower), which restarts UPower so it re-reads the udev rule and
+  retries `EnableChargeThreshold` until `ChargeThresholdEnabled` is true.
+  Never start a unit from a service that is ordered Before it.
