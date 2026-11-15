@@ -79,7 +79,7 @@ Grouped by where each part belongs (see "Scope" below).
 | `devtools/testwd/` | development | auto-restart and watchdog for test images |
 | `devtools/bootok/` | retired | old boot slot marker, replaced by `qbootctl` on the phone |
 | `unit/usbmac/` | tweaks package | fixed MAC addresses for the USB network gadget (macOS names the interface reliably) |
-| `devtools/usbreplug/` | development | USB re-plug helper for a Mac host |
+| `unit/usbreplug/` | tweaks package | software USB re-plug when the host does not bring up the link |
 | `tests/` | testing | automated hardware regression tests (`zsh tests/run.sh`) |
 | `build-dtb.py` | build | builds the DTB and packs `out/boot-test.img` |
 | `out/probes/` | build | kernel build, RAM boot test, phone shell helpers |
