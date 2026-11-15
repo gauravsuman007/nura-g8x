@@ -230,7 +230,8 @@ static void s5k3m3_fill_fmt(struct v4l2_mbus_framefmt *f)
 	f->xfer_func = V4L2_XFER_FUNC_NONE;
 }
 
-static int s5k3m3_set_fmt(struct v4l2_subdev *sd, struct v4l2_subdev_state *st,
+static int s5k3m3_set_fmt(struct v4l2_subdev *sd, const struct v4l2_subdev_client_info *ci,
+								struct v4l2_subdev_state *st,
 			  struct v4l2_subdev_format *fmt)
 {
 	s5k3m3_fill_fmt(&fmt->format);
@@ -257,7 +258,8 @@ static int s5k3m3_enum_frame_size(struct v4l2_subdev *sd, struct v4l2_subdev_sta
 	return 0;
 }
 
-static int s5k3m3_get_selection(struct v4l2_subdev *sd, struct v4l2_subdev_state *st,
+static int s5k3m3_get_selection(struct v4l2_subdev *sd, const struct v4l2_subdev_client_info *ci,
+								struct v4l2_subdev_state *st,
 				struct v4l2_subdev_selection *sel)
 {
 	switch (sel->target) {

@@ -4,13 +4,11 @@
 # 400 MHz set by the driver. Same code as the linux-media submission
 # (camss-sm8150-up.py). Replaces the earlier "reuse SM6150 tables" shortcut,
 # so the four touched files are first reset from the pristine source.
-import os, shutil, subprocess
+import subprocess
 L = '/work/linux/'
-P = '/work/pristine/linux-v7.0.0-sm8150/'
 D = 'drivers/media/platform/qcom/camss/'
+# Always run on a pristine tree (rebase.sh); never copy files from another kernel release over it.
 if 'sm8150_resources' not in open(L + D + 'camss.c').read():
-    for f in ('camss.c', 'camss.h', 'camss-vfe.c', 'camss-csiphy-3ph-1-0.c', 'camss-vfe-17x.c'):
-        shutil.copy(P + D + f, L + D + f)
     subprocess.check_call(['python3', '/n/kernel-src/camss-sm8150-up.py', L])
 print('camss sm8150 ok')
 

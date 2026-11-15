@@ -12,6 +12,18 @@ SRC = '/work/nabu-iris/kernel-overlay/drivers/media/platform/qcom/iris/'
 if not os.path.exists(D + '.nura-sm8150'):
     shutil.rmtree(D, ignore_errors=True)
     shutil.copytree(SRC, D)
+    # 7.4: the PAS calls moved from qcom_scm to qcom_pas (qcom_pas.h)
+    for fn in os.listdir(D):
+        if fn.endswith(('.c', '.h')):
+            t = open(D + fn).read()
+            u = (t.replace('qcom_scm_pas_auth_and_reset', 'qcom_pas_auth_and_reset')
+                  .replace('qcom_scm_pas_shutdown', 'qcom_pas_shutdown')
+                  .replace('qcom_scm_set_remote_state', 'qcom_pas_set_remote_state'))
+            if u != t and 'qcom_pas.h' not in u:
+                u = u.replace('#include <linux/firmware/qcom/qcom_scm.h>',
+                              '#include <linux/firmware/qcom/qcom_pas.h>\n#include <linux/firmware/qcom/qcom_scm.h>', 1)
+            if u != t:
+                open(D + fn, 'w').write(u)
     p = D + 'iris_vidc.c'
     s = open(p).read()
     for a, b in (('static void iris_v4l2_fh_init(struct iris_inst *inst)\n',

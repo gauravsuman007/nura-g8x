@@ -15,20 +15,22 @@ import sys
 p = (sys.argv[1] if len(sys.argv) > 1 else '/work/linux') + '/drivers/misc/fastrpc.c'
 s = open(p).read()
 if 'nura: sdsp assign once' not in s:
-    a = '''			err = qcom_scm_assign_mem(res.start, resource_size(&res), &src_perms,
-				    data->vmperms, data->vmcount);
-			if (err)
-				goto err_free_data;'''
-    b = '''			/* nura: sdsp assign once; still owned by the DSP after a restart */
-			static phys_addr_t sdsp_assigned;
+    a = '''	src_perms = BIT(QCOM_SCM_VMID_HLOS);
+	return qcom_scm_assign_mem(res.start, resource_size(&res), &src_perms,
+				  cctx->vmperms, cctx->vmcount);'''
+    b = '''	/* nura: sdsp assign once; still owned by the DSP after a restart */
+	{
+		static phys_addr_t sdsp_assigned;
 
-			if (sdsp_assigned != res.start) {
-				err = qcom_scm_assign_mem(res.start, resource_size(&res),
-					    &src_perms, data->vmperms, data->vmcount);
-				if (err)
-					goto err_free_data;
-				sdsp_assigned = res.start;
-			}'''
+		if (sdsp_assigned == res.start)
+			return 0;
+		src_perms = BIT(QCOM_SCM_VMID_HLOS);
+		err = qcom_scm_assign_mem(res.start, resource_size(&res), &src_perms,
+					  cctx->vmperms, cctx->vmcount);
+		if (!err)
+			sdsp_assigned = res.start;
+		return err;
+	}'''
     assert s.count(a) == 1, 'probe assign'
     s = s.replace(a, b)
     open(p, 'w').write(s)

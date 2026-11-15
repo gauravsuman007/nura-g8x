@@ -1552,3 +1552,16 @@ the sound card, PipeWire and a prior mic capture gave aosd/cxsd/ddr = 1, about
 - Do not RAM-boot the CI `nura-lg-mh2lm-boot.img` on the phone's existing system: its initramfs expects the CI userdata layout, stays in
   the first boot stage (USB serial "postmarketOS", no network) and, with no test watchdog, only the PMIC watchdog resets it (about
   10 min). CI boot images are verified together with the CI userdata image (flash both), or by checksums only.
+
+## Rebase to 7.4-rc1 (2026-11-15)
+
+Tooling: `devtools/rebase/rebase.sh REF NAME` (inside nura-kbd) applies every `pmaports/kernel-src` script to a fresh copy of the base and reports OK/FAIL per script; `devtools/rebase/dtb.py` builds the DTB for that tree. Run ONE rebase at a time (two overlapping runs wrecked the tree) and never wipe the tree between a fix and a build you want incremental.
+
+- Base: use `sm8150/7.4-rc1-wip`. `sm8150/7.4-rc1-clean` drops downstream drivers (`qcom_fg.c`, `sound/soc/qcom/sm8150.c`).
+- Scripts need `.config` in the tree (rebase.sh copies the shipped config). Never copy files from another release over the tree (`extra-camss-sm8150.py` did; it silently reverted camss to 7.0 and broke the build).
+- Already upstream in 7.4, scripts moved to `kernel-src/retired/`: cci-pm-leak, geni-serial-sleep, ufs-lane-clk, slim-ngd-disable, rpmhpd-mmcx-noret (rpmhpd now skips retention for all domains), qmp pipe clk in com_init (only the error-path fix remains).
+- API changes: v4l2 `set_fmt/get_selection/set_selection` pad ops got a `const struct v4l2_subdev_client_info *ci` argument (`get_fmt` did not); PAS calls moved from `qcom_scm_pas_*` to `qcom_pas_*` (`linux/firmware/qcom/qcom_pas.h`); `v4l2_fh_add/del` take the file.
+- Old config options changed type (IPV6, NETFILTER_NETLINK, MULTIPLEXER warnings from olddefconfig): check them.
+- Kernel release now contains the git hash (`7.4.0-rc1-sm8150-g...-dirty`): set LOCALVERSION for packaging, modules install into a dir of that name.
+- OrbStack's Docker engine hangs under long `docker exec` pipes; run long jobs with `docker exec -d` and poll a log file.
+- RAM boot of the 7.4 image: the phone did not come back in fastboot or ssh (see below for result).

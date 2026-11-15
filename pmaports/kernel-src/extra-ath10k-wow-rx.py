@@ -15,11 +15,7 @@ if 'nura: wow wake frame' not in s:
     a = '''		case -EAGAIN:
 			fallthrough;
 		default:
-			/* Should not happen. */
-			ath10k_warn(ar, "failed to extract amsdu: %d\\n", ret);
-			htt->rx_confused = true;
-			__skb_queue_purge(&list);
-			return -EIO;'''
+			/* Should not happen. */'''
     b = '''		case -EAGAIN:
 			/* nura: wow wake frame. An incomplete A-MSDU (seen
 			 * for the frame that matched a WoWLAN pattern) is
@@ -30,11 +26,7 @@ if 'nura: wow wake frame' not in s:
 			__skb_queue_purge(&list);
 			return 0;
 		default:
-			/* Should not happen. */
-			ath10k_warn(ar, "failed to extract amsdu: %d\\n", ret);
-			htt->rx_confused = true;
-			__skb_queue_purge(&list);
-			return -EIO;'''
+			/* Should not happen. */'''
     assert s.count(a) == 1
     open(p, 'w').write(s.replace(a, b))
 print('ath10k wow rx ok')
