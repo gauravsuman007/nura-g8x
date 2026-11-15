@@ -155,6 +155,7 @@ def apply(cfg, changed=None):
                 'ENV{CHARGE_LIMIT}="%s,%s"\n' % (cfg['CHARGE_LIMIT_START'],
                                                  cfg['CHARGE_LIMIT_END']))
         if parse_text(CHARGE_RULE) != rule:
+            os.makedirs(os.path.dirname(CHARGE_RULE), exist_ok=True)
             with open(CHARGE_RULE, 'w') as f:
                 f.write(rule)
             if changed is not None:
