@@ -1565,3 +1565,35 @@ Tooling: `devtools/rebase/rebase.sh REF NAME` (inside nura-kbd) applies every `p
 - Kernel release now contains the git hash (`7.4.0-rc1-sm8150-g...-dirty`): set LOCALVERSION for packaging, modules install into a dir of that name.
 - OrbStack's Docker engine hangs under long `docker exec` pipes; run long jobs with `docker exec -d` and poll a log file.
 - RAM boot of every 7.3/7.4 image (patched, unpatched, wip, clean, mainline v7.3.4) hangs before USB/display; unpatched pmOS 7.0 boots with the same config. A kernel regression between 7.0 and 7.3 is the cause; see plans/kernel-rebase.md for the bisect plan. Binder is Rust-only from 7.4 (Waydroid).
+
+## First CI release image on the phone (2026-11-15)
+
+- **Wi-Fi crashed the modem in a loop and hung the phone.** Log: `PDM:
+  service 'wlan_process' crash ... MAXIMUM POLL COUNT REACHED FOR
+  WCSS_WLAN1_GDSCR.PWR_ON`, then `CCPM: SRPLL lock failed`, and ath10k
+  `firmware crashed` with `board_file api 2`. Cause: ath10k always prefers
+  `board-2.bin`. linux-firmware's copy has no entry for this phone
+  (`qmi-board-id=ff,qmi-chip-id=30224`), so it falls back to the generic
+  `bus=snoc,qmi-board-id=ff` entry (SDM845 reference board data), and LG's
+  `bdwlan.bin` (`board.bin`, API 1) is never read. The wrong board data stops
+  the WCN3990 PLL from locking. The dev rootfs never hit this.
+  Fix: `nura-firmware-loader` builds `/lib/firmware/updates/ath10k/WCN3990/hw1.0/board-2.bin`
+  (`nura-ath10k-board2`) holding only LG's data under the exact name; the
+  kernel searches `updates/` first. The loader runs before `rmtfs`, and the
+  modem cannot start Wi-Fi without `rmtfs`, so the file always exists in time.
+  Check: dmesg shows `firmware ver ... api 5` and `wlan0` appears.
+- **No watchdog on the release image.** The dev rootfs had a hand-made
+  `/etc/systemd/system.conf.d/50-watchdog.conf`; the CI image did not, so
+  the modem crash loop left the phone hung until a manual key reset. The
+  tweaks package now ships `/usr/lib/systemd/system.conf.d/50-nura-watchdog.conf`
+  (30 s, `qcom_wdt`). Anything the dev rootfs got by hand must be in a package.
+- **`aplay -l` saying "no soundcards" over ssh is a permission issue**, not
+  missing audio: the ssh user has no seat ACL on `/dev/snd`. Use `sudo aplay -l`.
+- **The LG bootloader has no `fastboot --set-active`** (unknown command).
+  Flash the boot image to the active slot (`fastboot getvar current-slot`);
+  `devtools/flash-release.sh` does this.
+- Release image fixes from the first flash: tweaks-apply failed without
+  `/etc/udev/rules.d` and the firmware loader was not enabled (r13).
+- Never `modprobe -r ath10k_snoc` to retest: the unload hung the phone.
+  Write chained test commands with `&&` (or `set -e`) throughout: a `;` after a
+  failed step loaded the driver with the bad board file anyway.

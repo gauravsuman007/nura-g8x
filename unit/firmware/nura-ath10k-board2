@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+# Build an ath10k board-2.bin holding only the G8x's own board data (LG
+# bdwlan.bin) under the exact name ath10k looks up first. Without it,
+# linux-firmware's board-2.bin wins with its generic "qmi-board-id=ff" entry
+# (SDM845 reference data); the WCN3990 then fails to power up
+# ("SRPLL lock failed", WCSS GDSC timeout), the modem crashes in a loop and
+# the phone hangs. Usage: nura-ath10k-board2 BDWLAN OUT
+import struct, sys
+
+NAMES = ["bus=snoc,qmi-board-id=ff,qmi-chip-id=30224",
+         "bus=snoc,qmi-board-id=ff"]
+
+
+def ie(t, data):
+    pad = (-len(data)) % 4
+    return struct.pack("<II", t, len(data)) + data + b"\0" * pad
+
+
+bd = open(sys.argv[1], "rb").read()
+body = b"".join(ie(0, ie(0, n.encode()) + ie(1, bd)) for n in NAMES)
+magic = b"QCA-ATH10K-BOARD\0"
+magic += b"\0" * ((-len(magic)) % 4)
+tmp = sys.argv[2] + ".tmp"
+with open(tmp, "wb") as f:
+    f.write(magic + body)
+import os
+os.replace(tmp, sys.argv[2])

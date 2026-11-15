@@ -43,6 +43,12 @@ if mnt "modem$slot" $M/modem; then
 		esac
 	done
 	cpn $M/modem/image/bdwlan.bin $WLAN/board.bin
+	# ath10k prefers board-2.bin; linux-firmware's generic board-id=ff entry
+	# crashes the G8x Wi-Fi, so give it the LG data under the exact name
+	U=$R/lib/firmware/updates/ath10k/WCN3990/hw1.0
+	if [ -f $WLAN/board.bin ] && { [ ! -f $U/board-2.bin ] || [ $WLAN/board.bin -nt $U/board-2.bin ]; }; then
+		mkdir -p $U && /usr/libexec/nura-ath10k-board2 $WLAN/board.bin $U/board-2.bin && log "built $U/board-2.bin"
+	fi
 	umount $M/modem; n=$((n+1))
 fi
 if mnt "vendor$slot" $M/vendor; then

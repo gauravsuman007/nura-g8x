@@ -70,6 +70,9 @@ Grouped by where each part belongs (see "Scope" below).
 | `unit/screen/` | this phone only | screen blank, suspend after 5 min idle on battery, pocket guard (frozen) |
 | `unit/battery/` | device package | udev rule that enables GNOME's Preserve Battery Health (75-80%) |
 | `unit/suspend/` | device package | systemd-sleep hook: Wi-Fi off across suspend (ath10k crash) |
+| `unit/firmware/` | tweaks package | first-boot copy of LG firmware from the phone's partitions; builds the ath10k `board-2.bin` from LG's Wi-Fi board data |
+| `unit/watchdog/` | tweaks package | 30 s hardware watchdog (a hung phone resets itself) |
+| `devtools/flash-release.sh` | release | flashes a CI release to the active slot (no `--set-active` on this bootloader) |
 | `unit/sensors/` | this phone only | boot check: alerts if the SLPI sensor core did not start |
 | `tweaks/`, `pmaports/device/testing/nura-g8x-tweaks/` | one apk | every userspace tweak plus the "LG G8x Tweaks" settings app (`/etc/nura/tweaks.conf`); build with `sh tweaks/build-apk.sh` |
 | `unit/dock/` | device package | `nura-dock` user service: external monitor becomes the primary GNOME desktop on plug-in; power key off while docked; warns when the dock is stuck |
