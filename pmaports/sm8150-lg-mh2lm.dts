@@ -132,6 +132,7 @@
 			gpios = <&pm8150_gpios 1 GPIO_ACTIVE_LOW>;
 			linux,code = <KEY_ASSISTANT>;
 			debounce-interval = <15>;
+			wakeup-source;
 		};
 	};
 
@@ -673,6 +674,7 @@
 
 &pon_resin {
 	linux,code = <KEY_VOLUMEDOWN>;
+	wakeup-source;
 	status = "okay";
 };
 
