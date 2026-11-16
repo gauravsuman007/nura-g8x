@@ -287,3 +287,36 @@ captures for 30 s with the Android sequence, then restarts GNOME. Look for a bri
   which does `ldr r0,[handle+0x2f44]; r0 = r0 ? r0+0x4c : 0; str r8,[r0,#0x10]` -> **NULL write at 0x10 if handle+0x2f44 is NULL**.
   handle+0x2f44 is a ref-counted object passed into the algorithm constructor (0x641fc / 0x65d9c via 0x47408), the handle is made at
   0x2ff5c by 0x47ba4(&G, 0, 0, cfg). Candidate cause, unconfirmed (the "ks" no-init_algo case also aborts, so it may be elsewhere).
+
+### 2026-11-16 (evening 2): enroll abort SOLVED - missing background calibration (found by emulation)
+- **Correction:** earlier static addresses were `all.bin` offsets, not VAs (code VA = all.bin - 0x1c5c, data differs
+  more). `ta/va.bin` (scratchpad) is built from egista.mdt/.bNN at their vaddrs, and the TA has a **full symbol table**
+  (DT_SYMTAB 0x31d470): command_handler 0x24ec (ARM, jump table at 0x2734), inline_handler 0x7938, isensor_calibrate
+  0x1d698, calibration_generate 0x20780, output_log 0x23d0, tz_app_cmd_handler Thumb ~0x388.
+- **Emulator** (unicorn 2.1 in the nura-kbd container; macOS unicorn crashes in its JIT): va.bin at 0, 50 imports stubbed
+  (qsee_malloc bump heap, fts read fails, SPI fake: reg 0/1 = 7/0x0d (ET713 dev ids), other reads a fill byte; 0x5b
+  makes SYS_STUS frame-ready), Cortex-A15 with VFP on, output_log hooked to print the TA's own log. Scripts emu.py /
+  inl.py / run*.py in the scratchpad (not in the repo; they need the private TA image).
+- **Cause of the abort:** enroll_init -> isensor_calibrate(14) -> calibration_get finds no calibration -> the default
+  background is NULL and ip_clt_16bit reads 16-bit pixels from address 0 -> TA data abort. With all-zero SPI data the
+  path differed, which is why the first emulation did not reproduce it; with non-zero sensor data it does.
+- **Fix:** generate the calibration in the TA. Outer request id **0xE3** (0xE0 = command_handler) routes the frame
+  {type 3, sub 0x25, 0, 0, 16, {cmd, a1, a2, a3}} to inline_handler (= libRbsFlow `flow_inline_legacy_cmd` ->
+  `opm_extra_command(3, ...)`). Inline cmd **0xd2 = FP_INLINE_SENSOR_CALIBRATE(type)**: 16 = check loaded, 7 =
+  calibration_generate (real captures, ~1.7 s, no finger), 8 = calibration_save. Driver: `egista_cmd.pad` = outer id |
+  frame type << 8; client `Egista.inline()`.
+- **Hardware result:** generate 0, then **enroll_init 0 (no abort)**, do_enroll 0, enroll_uninit 0; get_image now
+  returns status 0 with a result code (380 ms per real frame) instead of 10. Result codes (libRbsFlow cpt state machine):
+  0 = good image, 8 = no finger, 2/7/9 = retry. With the LHBM spot lit the TA grades even an empty frame as 0 (Android
+  uses the touchscreen for finger-down), so the enroll loop must be driven by the user touching.
+- do_enroll's 0x20-byte output stays 0 at first: the TA's "uk" manager collects 4 background frames before enroll
+  progress moves (ukm_get_uk_progress max_bkg_num 4). Not yet verified with a finger.
+- Save (8) returns 3 although the fs listener now writes the file (cmd 1: +0x104 offset, +0x108 length, data at +0x110;
+  130124 encrypted bytes). A fresh session does not accept either the saved file or the factory copy from the drm
+  partition (check 16 -> 3), so for now generate at every session start. Next: emulate calibration_load with the
+  file's plaintext layout (decrypt is inside qsee_fts_read_file) or check the listener reply for writes.
+- Tools: `tests/phone/tz/egista_calib.py [gen] [lhbm]`, `tests/phone/tz/egista_enroll.py enroll|verify|dry`,
+  `devtools/fp-enroll.sh enroll [touches] | verify [tries]` (stops gdm, white circle, LHBM per wait, restarts gdm).
+- **Next test (needs a finger):** `G8X_IP=172.16.42.1 devtools/fp-enroll.sh enroll 20`, touch the circle when told,
+  lift between touches; watch do_enroll output for the percentage, then `fp-enroll.sh verify`. Templates go to
+  /var/lib/egista/data/vendor_de/0/fpdata/template_N through the listener. Then libfprint (match-on-chip driver).

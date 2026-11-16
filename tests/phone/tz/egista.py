@@ -33,8 +33,8 @@ class Egista:
         self.fd = os.open(path, os.O_RDWR)
         self.verbose = True
 
-    def cmd(self, sub, a2=0, a3=0, payload=b'', out=None, outlen=0):
-        c = Cmd(sub=sub, a2=a2 & 0xffffffff, a3=a3 & 0xffffffff, in_len=len(payload))
+    def cmd(self, sub, a2=0, a3=0, payload=b'', out=None, outlen=0, pad=0):
+        c = Cmd(sub=sub, a2=a2 & 0xffffffff, a3=a3 & 0xffffffff, in_len=len(payload), pad=pad)
         inb = ctypes.create_string_buffer(payload, max(1, len(payload)))
         c.in_ptr = ctypes.addressof(inb)
         if out is not None or outlen:
@@ -50,6 +50,11 @@ class Egista:
             print(f'  sub 0x{sub:02x} a2={a2:#x} a3={a3:#x} in={len(payload)} -> status {c.status:#x} out={c.out_len} '
                   f'{res[:32].hex()} ({(time.time()-t)*1000:.0f} ms)', flush=True)
         return c.status, res, bytes(rb.raw)
+
+    def inline(self, cmd, a1=0, a2=0, a3=0, outlen=0x100):
+        """Inline (factory) command as libRbsFlow's flow_inline_legacy_cmd: outer id 0xE3, frame type 3, sub 0x25,
+        payload {cmd, a1, a2, a3}. 0xd2 = FP_INLINE_SENSOR_CALIBRATE(a1): 7 generate, 8 save, 16 check loaded."""
+        return self.cmd(EXTRA, 0, 0, struct.pack('<IIII', cmd, a1, a2, a3), outlen=outlen, pad=0xe3 | (3 << 8))
 
     def power(self, on): fcntl.ioctl(self.fd, IOC_POWER, int(on))
     def lhbm(self, on): fcntl.ioctl(self.fd, IOC_LHBM, int(on))

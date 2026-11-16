@@ -14,7 +14,7 @@ struct egista_cmd {
 	__s32 status;		/* out: TA result code (0 = OK) */
 	__u64 rsp_ptr;		/* optional: copy of the response ETS frame */
 	__u32 rsp_len;
-	__u32 pad;
+	__u32 pad;		/* 0, or outer request id (0xE3 = inline) | frame type << 8 */
 };
 
 struct egista_lsnr {

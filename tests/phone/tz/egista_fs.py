@@ -4,6 +4,7 @@
 import os, struct, time, errno
 ROOT = '/var/lib/egista'
 LOG = '/tmp/egista-fs.log'
+WRITE_DATA_OFF = 0x110
 
 def _log(s):
     with open(LOG, 'a') as f:
@@ -32,6 +33,17 @@ def handle(lid, req):
                 d = f.read(min(a108, 0x3e000))
             _log(f'  read {len(d)}')
             return _reply(len(d), 0, d)
+        if cmd == 1:        # write (+0x104 offset, +0x108 length, data at DATA_OFF)
+            open(f'/tmp/egista-fs-req{cmd}.bin', 'wb').write(req[:0x200 + a108])
+            d = req[WRITE_DATA_OFF:WRITE_DATA_OFF + a108]
+            os.makedirs(os.path.dirname(rp), exist_ok=True)
+            if os.path.exists(rp) and not os.path.exists(rp + '.orig'):
+                os.rename(rp, rp + '.orig')        # keep the first version (e.g. the factory copy)
+            with open(rp, 'r+b' if os.path.exists(rp) else 'wb') as f:
+                f.seek(a104)
+                f.write(d)
+            _log(f'  wrote {len(d)} (data[:8]={d[:8].hex()})')
+            return _reply(len(d), 0)
         raise OSError(errno.ENOSYS, 'unknown cmd')
     except OSError as e:
         _log(f'  -> errno {e.errno}')

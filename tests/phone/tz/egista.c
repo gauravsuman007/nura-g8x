@@ -352,8 +352,10 @@ static long do_cmd(struct egista_cmd __user *uc)
 	if (!e.loaded)
 		goto out;
 	memset(e.req, 0, REQ_LEN);
-	w[0] = 0xe0;
-	fr[0] = 0xe0; fr[1] = c.sub; fr[2] = c.a2; fr[3] = c.a3; fr[4] = c.in_len;
+	/* pad: 0 = ETS command (outer id 0xE0 -> command_handler); else low byte = outer id
+	 * (0xE3 -> inline_handler, the factory/calibration path) and byte 1 = frame type word */
+	w[0] = c.pad ? (c.pad & 0xff) : 0xe0;
+	fr[0] = c.pad ? ((c.pad >> 8) & 0xff) : 0xe0; fr[1] = c.sub; fr[2] = c.a2; fr[3] = c.a3; fr[4] = c.in_len;
 	ret = -EFAULT;
 	if (c.in_len && copy_from_user(fr + 5, u64_to_user_ptr(c.in_ptr), c.in_len))
 		goto out;

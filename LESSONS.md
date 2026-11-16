@@ -1709,3 +1709,9 @@ Compared the dev rootfs backup (`out/backup-nura-20261112`) with the running rel
   The sensor sits at x 540, y 2107, r 98 px (LineageOS mh2lm overlay), and the panel only boosts pixels the content draws white.
 - libRbsFlow capture = open SPI 0x2a, 0x22/0x12 {temp 0.1 C, 0}, get_image 0x8, close SPI 0x2b; "scan start" is a host-side flag.
   Reading IMEM (tz-log 0x146bf720) from Linux hard-hangs the phone. 
+
+- ET713 trustlet: enroll_init aborts the TA when no background calibration is loaded (NULL background pointer). Generate it
+  with the inline request (outer id 0xE3, cmd 0xd2 type 7) before enrolling; found by emulating the TA with unicorn.
+- egista TA addresses: use VAs from the segments (egista.mdt/.bNN), not offsets in a concatenated blob; the TA ships a full
+  dynamic symbol table, so check DT_SYMTAB before hand-naming functions.
+- unicorn on macOS (2.1) crashes in its JIT; run it in the Linux container instead.
