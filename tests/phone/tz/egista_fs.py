@@ -29,7 +29,7 @@ def handle(lid, req):
         if cmd == 0:        # read
             with open(rp, 'rb') as f:
                 f.seek(a104)
-                d = f.read(min(a108, 0xd000))
+                d = f.read(min(a108, 0x3e000))
             _log(f'  read {len(d)}')
             return _reply(len(d), 0, d)
         raise OSError(errno.ENOSYS, 'unknown cmd')

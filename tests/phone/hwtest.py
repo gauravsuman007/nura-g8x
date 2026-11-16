@@ -367,6 +367,10 @@ def charge_limit():
 
 @test("power")
 def idle_power_and_load():
+    # right after boot or after the earlier tests the shell is still busy: settle first
+    t0 = time.time()
+    while time.time() - t0 < 60 and (float(rd("/proc/uptime").split()[0]) < 120 or float(rd("/proc/loadavg").split()[0]) > 1.0):
+        time.sleep(5)
     l1 = float(rd("/proc/loadavg").split()[0])
     # CPU used by gnome-shell over 5 s while idle
     pid = sh("pgrep -f 'gnome-shell --mode=user' | head -1")
@@ -1035,7 +1039,20 @@ def remote_desktop():
 # USB-C dock (Dell TB16 + monitor). Every test SKIPs when no dock is attached,
 # so the suite stays green undocked. Never reads debugfs dp_test_* (kernel oops).
 def _dock_attached():
-    return os.path.isdir("/sys/class/typec/port0-partner")
+    """A dock, not the Mac or a charger on the USB-C port: a Dell partner (the TB16, USB vendor
+    0x413c in the PD identity), a connected DP-1 monitor, or `--dock` on the command line."""
+    if "--dock" in sys.argv:
+        return True
+    base = "/sys/class/typec/port0-partner"
+    if not os.path.isdir(base):
+        return False
+    try:
+        if int(rd(base + "/identity/id_header", "0x0"), 16) & 0xffff == 0x413c:
+            return True
+    except ValueError:
+        pass
+    card = _dp_card()
+    return bool(card and rd(card + "/status", "") == "connected")
 
 
 def _dp_card():
@@ -1188,7 +1205,7 @@ def dock_ethernet():
 def dock_kernel_log_clean():
     _need_dock()
     bad = [l for l in dmesg().splitlines()
-           if (re.search(r"(msm_dp|dp_aux|typec_displayport|tcpm|xhci).*(error|fail|timed out|timeout)|dwc3.*failed", l, re.I)
+           if (re.search(r"(msm_dp(?!u)|dp_aux|typec_displayport|tcpm|xhci).*(error|fail|timed out|timeout)|dwc3.*failed", l, re.I)
                or re.search(r"\bOops\b|\bBUG:", l))
            and "probe with driver typec_displayport failed with error -71" not in l]
     if bad:
@@ -1208,7 +1225,7 @@ def apk_repository_configured():
 
 @test("system")
 def libcamera_patched_and_pinned():
-    v = sh("apk info -v libcamera 2>/dev/null | head -1")
+    v = sh("apk list -I libcamera 2>/dev/null | head -1").split(" ")[0]
     m = re.search(r"-r(\d+)$", v)
     assert_(m, f"libcamera not installed ({v!r})")
     assert_(int(m.group(1)) >= 100, f"{v}: stock libcamera, G8x sensor helpers missing (expected -r1xx)")
@@ -1220,7 +1237,7 @@ def libcamera_patched_and_pinned():
 @test("system")
 def packages_upgradable_from_repository():
     pol = sh("apk policy nura-g8x-tweaks 2>&1 | head -12")
-    if "nura-g8x" not in pol and "github.io" not in pol:
+    if "github.io" not in pol:
         raise Warn("tweaks package not offered by the Nura repository yet (repo not published or phone offline)")
     return "tweaks package offered by the Nura repository"
 

@@ -484,6 +484,41 @@ sfree:
 	return ret;
 }
 
+#define QLOG_SIZE	0x8000
+static void *qlog;
+static dma_addr_t qlog_phys;
+static int qlog_reg = 1;	/* 1 = not tried */
+
+static long do_log(struct egista_log __user *ul)
+{
+	struct egista_log l;
+	u64 a[2], r[3];
+	static const int t2[] = { 2, 0 };	/* RW, VAL */
+
+	if (copy_from_user(&l, ul, sizeof(l)))
+		return -EFAULT;
+	mutex_lock(&e.lock);
+	if (!qlog) {
+		qlog = dma_alloc_coherent(&e.pdev->dev, QLOG_SIZE, &qlog_phys, GFP_KERNEL);
+		if (!qlog) {
+			mutex_unlock(&e.lock);
+			return -ENOMEM;
+		}
+		memset(qlog, 0, QLOG_SIZE);
+		a[0] = qlog_phys; a[1] = QLOG_SIZE;
+		qlog_reg = qcom_scm_qseecom_raw(OWNER_QSEE_OS, 1, 6, scm_arginfo(2, t2), a, r);
+		pr_info("egista: register log buf: ret=%d result=0x%llx type=0x%llx data=0x%llx\n", qlog_reg, r[0], r[1], r[2]);
+	}
+	l.reg_ret = qlog_reg;
+	l.len = min_t(u32, l.len, QLOG_SIZE);
+	if (copy_to_user(u64_to_user_ptr(l.ptr), qlog, l.len)) {
+		mutex_unlock(&e.lock);
+		return -EFAULT;
+	}
+	mutex_unlock(&e.lock);
+	return copy_to_user(ul, &l, sizeof(l)) ? -EFAULT : 0;
+}
+
 static long egista_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 {
 	switch (cmd) {
@@ -497,6 +532,8 @@ static long egista_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 		return do_lsnr_wait((void __user *)arg);
 	case EGISTA_IOC_LSNR_REPLY:
 		return do_lsnr_reply((void __user *)arg);
+	case EGISTA_IOC_LOG:
+		return do_log((void __user *)arg);
 	case EGISTA_IOC_APP_LOOKUP:
 	case EGISTA_IOC_APP_LOAD:
 	case EGISTA_IOC_APP_SEND:

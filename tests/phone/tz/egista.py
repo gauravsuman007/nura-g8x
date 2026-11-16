@@ -164,3 +164,23 @@ def app_send(e, app_id, req, rsp_len):
     a = App(app_id=app_id, buf_ptr=ctypes.addressof(rq), buf_len=len(req), rsp_len=rsp_len, rsp_ptr=ctypes.addressof(rs))
     fcntl.ioctl(e.fd, IOC_APP_SEND, a)
     return a.result, bytes(rs.raw)
+
+def start_session(e, group=b'/data/vendor_de/0/fpdata', panel=0):
+    """Fresh TA instance, powered sensor, init in Android's order with the keymaster-bound key. Returns list of statuses."""
+    e.reload(); e.power(True)
+    r, rs = app_send(e, 1, struct.pack('<II', 0x205, 2), 0x40c)      # keymaster64: key encapsulated for this egista instance
+    ln = struct.unpack_from('<I', rs, 8)[0]
+    key = rs[12:12 + ln] if 0 < ln < 0x400 else b''
+    st = [e.cmd(HW_INFO, panel)[0], e.cmd(INIT_SDK, 0, 0, key)[0], e.cmd(INIT_SENSOR)[0], e.cmd(INIT_ALGO)[0]]
+    e.cmd(ACTIVE_GROUP, 0, 0, group)
+    return st
+
+class Log(ctypes.Structure):
+    _fields_ = [('ptr', ctypes.c_uint64), ('len', ctypes.c_uint32), ('reg_ret', ctypes.c_int32)]
+IOC_LOG = _ioc(3, 11, ctypes.sizeof(Log))
+
+def qsee_log(e, size=0x8000):
+    b = ctypes.create_string_buffer(size)
+    l = Log(ptr=ctypes.addressof(b), len=size)
+    fcntl.ioctl(e.fd, IOC_LOG, l)
+    return l.reg_ret, bytes(b.raw)
