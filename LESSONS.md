@@ -1675,3 +1675,22 @@ Tooling: `devtools/rebase/rebase.sh REF NAME` (inside nura-kbd) applies every `p
 - Fix (tweaks r23): `/usr/lib/firmware/updates/rtl_nic/rtl8153a-3.fw` is a text file. The firmware loader tries uncompressed names first and `updates/` before the main dir, so r8152 gets this file, logs `checksum fail`, skips the patch. Result: 1000 Mbit/s full duplex, no carrier drops, 427 Mbit/s TCP to a Mac on Wi-Fi.
 - Debug aid: `SIOCGMIIREG` on eth0 (scratch `mii.py`; `mii_ioctl_data.val_out` is at ifreq offset 22). CTRL1000 0x0200 + STAT1000 0x3800 = gigabit resolved; STAT1000 0 with LPA lacking bit 15 = partner gave up on gigabit.
 - `nura-eth-fallback` (r22) removed again: it hid the bug. `dock_ethernet` now also fails if the rtl8153a-3 patch is loaded.
+- **Fingerprint ET713 (2026-11-16).** The ETS request is 0x880 bytes: word 0 = 0xE0, ETS frame at +0x5C, TA result at
+  +0x10 of the response, response frame at +0x14; a side buffer for output goes in +4/+8 (32-bit phys) with its length
+  at +0xC and byte +0x1C = 0x5A. The sensor answers only when powered: gpio21 high (LDO enable) and a low->high pulse on
+  gpio116 (reset); then init_sensor/init_algo return 0 and get_raw_image (0x2d) captures in ~400 ms. The phone was on
+  the CI image: RAM-boot test images must take their header/cmdline/DTB from the boot image whose pmos UUIDs match
+  (`out/ci-final/...boot.img` here), and nura-testwd had to be installed on that userdata first. Details:
+  plans/fingerprint.md.
+
+## Release vs dev image parity audit, 2026-11-16
+Compared the dev rootfs backup (`out/backup-nura-20261112`) with the running release image (package lists, file lists, /etc, enabled units, kernel config).
+- **Kernel config:** release == `config-nura-lg-mh2lm.aarch64` in the repo. The saved dev config (Nov 7) only lacked later options (DP AUX chardev, UAS, CAMCC, S5K3M5).
+- **`msm.separate_gpu_kms=1` was still on the release command line** (device package since the first bring-up; the dev image had dropped it when the DSI driver replaced simpledrm). It splits KMS and GPU into card1 + card2. Removed in device r7: one card, same renderer.
+- **`FD_MESA_DEBUG=nogmem` drop-in still shipped** (tweaks r15 to r23) although the kernel fix (`extra-msm-va-align`) is in the release kernel; the dev image had removed it when the fixed kernel was flashed. Removed in tweaks r24: GNOME Shell renders in GMEM again.
+- **libcamera:** dev had a locally built libcamera with the G8x sensor helpers (`libcamera-nura-sensors.patch`); the release used stock pmOS libcamera (0.8.0 fork) with slow, creeping auto-exposure. CI now patches pmOS's `temp/libcamera` aport (`pmaports/patch-libcamera.py`, pkgrel +100) and builds it.
+- **Tools in the dev image missing from release:** htop, lsof, zstd, gnome-screenshot, bluez-btmgmt, libgpiod, mesa-rusticl (added to CI `extra_packages`). Intentionally not copied: compilers, `-dev` packages, meson, flatpak remote data, coredumps, the `.bak` module tree.
+- **Mesa 26.3.0 (release) vs 26.2.6 (dev):** same glmark2 within noise (233-247 vs 247 on identical phone state, run with the dev libs via LD_LIBRARY_PATH).
+- **The "glmark2 regression" (243 vs 534) is the GPU governor, not the image:** devfreq `simple_ondemand` starts at 257 MHz; the first run sits at 257-345 MHz (score about 250), the next run at 585 MHz (541). The same low/high pattern is in the Nov 8 and Nov 14 dev history (250, 253, 238, 247 among 500+ runs). The test now warms up first. Screen on or off made no difference to the shell (0.3 % idle, 1.9 % with the screen on); the 3.8 % reading was right after the backlight tests.
+- Not differences: power profile (dev `powersave`, release `balanced`, no glmark2 effect), tuned, autologin user name, `/etc/nura/keys.conf` vs `tweaks.conf` (renamed).
+- **Other sessions RAM-boot test kernels on this phone:** after a reboot the phone can come up on a RAM test kernel (`uname -v` `#85`/`#86`, `nura.testwd` on the command line) instead of the flashed boot_b. Check `uname -v` before testing the release kernel (flashed is `#7-nura-lg-mh2lm`).

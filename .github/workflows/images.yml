@@ -46,6 +46,8 @@ jobs:
             rm -rf "$APORTS/device/testing/$p"
             cp -r "pmaports/device/testing/$p" "$APORTS/device/testing/"
           done
+          python3 pmaports/patch-libcamera.py "$APORTS" pmaports
+          grep -n "nura\|^pkgrel" "$APORTS/temp/libcamera/APKBUILD"
           git -C "$APORTS" -c user.email=ci@local -c user.name=ci add -A
           git -C "$APORTS" -c user.email=ci@local -c user.name=ci commit -qm "nura-g8x packages"
 
@@ -62,7 +64,7 @@ jobs:
           hostname = lg-g8x
           ssh_keys = False
           ccache_size = 8G
-          extra_packages = bluez,bluez-systemd,modemmanager,modemmanager-systemd,alsa-utils,libcamera-tools,v4l-utils,evtest,iw,usbutils,i2c-tools,mesa-utils,glmark2,gstreamer-tools,gst-plugins-good,gst-plugins-bad,gst-libav,calls,chatty,snapshot,loupe,showtime,decibels,papers,nautilus,gnome-text-editor,gnome-calculator,firefox-esr,mobile-config-firefox
+          extra_packages = bluez,bluez-systemd,modemmanager,modemmanager-systemd,alsa-utils,libcamera-tools,v4l-utils,evtest,iw,usbutils,i2c-tools,mesa-utils,glmark2,gstreamer-tools,gst-plugins-good,gst-plugins-bad,gst-libav,calls,chatty,snapshot,loupe,showtime,decibels,papers,nautilus,gnome-text-editor,gnome-calculator,firefox-esr,mobile-config-firefox,htop,lsof,zstd,gnome-screenshot,bluez-btmgmt,libgpiod,mesa-rusticl
           [providers]
           EOF
           printf 8 > "$WORK/version"
@@ -90,7 +92,7 @@ jobs:
         run: $PMB -y build --arch aarch64 linux-nura-lg-mh2lm
 
       - name: Build device and tweaks packages
-        run: $PMB -y build --arch aarch64 device-lg-mh2lm nura-g8x-tweaks
+        run: $PMB -y build --arch aarch64 libcamera device-lg-mh2lm nura-g8x-tweaks
 
       - name: Install rootfs
         run: $PMB -y install --password "$IMAGE_PASSWORD"

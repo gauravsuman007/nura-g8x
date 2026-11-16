@@ -507,8 +507,13 @@ def gpu_benchmark():
     exe = sh("command -v glmark2-es2-drm")
     if not exe:
         raise Skip("glmark2-es2-drm not installed")
-    out = sh("glmark2-es2-drm --off-screen -b build:duration=3 -b texture:duration=3 "
-             "-b shading:duration=3 -b refract:duration=3 2>&1 | tail -3", timeout=120)
+    # The GPU governor (simple_ondemand) starts at 257 MHz and takes several seconds to
+    # reach 585 MHz, so a cold run scores about 250 and a warm one about 530 on the same
+    # image (history in tests/results). Warm up first, then measure.
+    cmd = ("glmark2-es2-drm --off-screen -b build:duration=3 -b texture:duration=3 "
+           "-b shading:duration=3 -b refract:duration=3 2>&1 | tail -3")
+    sh("glmark2-es2-drm --off-screen -b refract:duration=6 >/dev/null 2>&1", timeout=60)
+    out = sh(cmd, timeout=120)
     m = re.search(r"Score:\s*(\d+)", out)
     if not m:
         raise Skip("glmark2 could not run: " + out[-120:])
