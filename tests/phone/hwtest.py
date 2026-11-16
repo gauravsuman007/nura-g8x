@@ -1196,6 +1196,35 @@ def dock_kernel_log_clean():
     return "no DP/USB errors in the kernel log"
 
 
+# ---------------------------------------------------------------- system / updates
+@test("system")
+def apk_repository_configured():
+    key = "/etc/apk/keys/nura-g8x-2026.rsa.pub"
+    lst = "/etc/apk/repositories.d/nura-g8x.list"
+    assert_(os.path.exists(key), f"{key} missing (device-lg-mh2lm r8 or newer)")
+    assert_(os.path.exists(lst), f"{lst} missing (device-lg-mh2lm r8 or newer)")
+    return rd(lst).split()[0]
+
+
+@test("system")
+def libcamera_patched_and_pinned():
+    v = sh("apk info -v libcamera 2>/dev/null | head -1")
+    m = re.search(r"-r(\d+)$", v)
+    assert_(m, f"libcamera not installed ({v!r})")
+    assert_(int(m.group(1)) >= 100, f"{v}: stock libcamera, G8x sensor helpers missing (expected -r1xx)")
+    dep = sh("apk info -R nura-g8x-tweaks 2>/dev/null | grep -c '^libcamera'")
+    assert_(dep and int(dep) >= 1, "nura-g8x-tweaks does not pin libcamera")
+    return v
+
+
+@test("system")
+def packages_upgradable_from_repository():
+    pol = sh("apk policy nura-g8x-tweaks 2>&1 | head -12")
+    if "nura-g8x" not in pol and "github.io" not in pol:
+        raise Warn("tweaks package not offered by the Nura repository yet (repo not published or phone offline)")
+    return "tweaks package offered by the Nura repository"
+
+
 # ---------------------------------------------------------------- run
 def main():
     results = []

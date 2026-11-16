@@ -37,7 +37,7 @@
 #define FRAME_MAX	0x400
 #define OUT_MAX		(4 << 20)
 #define LSNR_BUF	(256 << 10)
-#define MAX_LSNR	8
+#define MAX_LSNR	12
 
 /* QSEE OS listener service (downstream qseecom: TZ_OWNER_QSEE_OS, TZ_SVC_LISTENER) */
 #define OWNER_TZ_APPS	48
@@ -51,8 +51,9 @@
 #define RESULT_BLOCKED	2
 #define ARGS(n, ...)	(n)
 
-static int lsnr_ids[MAX_LSNR] = { 10, 11, 12, 0x2000, 0x3000, 0x4000, 0x5000, 0x6000 };
-static int n_lsnr = 8;
+/* ids qseecomd registers (its .data table): fs 10, 11, rpmb/ssd/... 0x1100 0x2000 0x3000 0x4000 0x7000 0x9000 0xb000 0xc000 */
+static int lsnr_ids[MAX_LSNR] = { 10, 11, 0x1100, 0x2000, 0x3000, 0x4000, 0x7000, 0x9000, 0xb000, 0xc000 };
+static int n_lsnr = 10;
 module_param_array_named(listeners, lsnr_ids, int, &n_lsnr, 0444);
 
 struct lsnr {
@@ -147,6 +148,7 @@ static int ta_call(void)
 		b[0] = id;
 		b[1] = st ? 0xffffffff : 0;
 		ret = qcom_scm_qseecom_raw(OWNER_QSEE_OS, SVC_LISTENER, LSNR_RESPONSE, 2, b, r);
+		pr_info("egista: listener 0x%x response st=%d -> ret=%d result=0x%llx type=0x%llx data=0x%llx\n", id, st, ret, r[0], r[1], r[2]);
 	}
 	if (ret) {
 		pr_err("egista: scm ret=%d result=0x%llx type=0x%llx data=0x%llx\n", ret, r[0], r[1], r[2]);
@@ -403,6 +405,85 @@ static long do_lsnr_reply(struct egista_lsnr __user *ul)
 	return 0;
 }
 
+static long do_app(unsigned int cmd, struct egista_app __user *ua)
+{
+	struct egista_app a;
+	void *buf = NULL, *rsp = NULL;
+	dma_addr_t bp = 0, rp = 0;
+	size_t bl, rl;
+	long ret = 0;
+	u64 r[3];
+
+	if (copy_from_user(&a, ua, sizeof(a)))
+		return -EFAULT;
+	a.name[sizeof(a.name) - 1] = 0;
+	mutex_lock(&e.lock);
+	switch (cmd) {
+	case EGISTA_IOC_APP_LOOKUP:
+		ret = qcom_scm_qseecom_app_get_id(a.name, &a.app_id);
+		break;
+	case EGISTA_IOC_APP_UNLOAD: {
+		u64 x[1] = { a.app_id };
+
+		ret = qcom_scm_qseecom_raw(OWNER_QSEE_OS, 1, 2, 1, x, r);
+		break;
+	}
+	case EGISTA_IOC_APP_LOAD:
+		if (a.buf_len > (8 << 20) || a.mdt_len > a.buf_len) {
+			ret = -EINVAL;
+			break;
+		}
+		buf = vmalloc(a.buf_len);
+		if (!buf) {
+			ret = -ENOMEM;
+			break;
+		}
+		if (copy_from_user(buf, u64_to_user_ptr(a.buf_ptr), a.buf_len))
+			ret = -EFAULT;
+		else
+			ret = qcom_scm_qseecom_app_load(buf, a.mdt_len, a.buf_len, &a.app_id);
+		vfree(buf);
+		break;
+	case EGISTA_IOC_APP_SEND: {
+		static const int t5[] = { 0, 2, 0, 2, 0 };
+		u64 x[5];
+
+		bl = ALIGN(max_t(u32, a.buf_len, 64), 64);
+		rl = ALIGN(max_t(u32, a.rsp_len, 64), 64);
+		if (bl > 0x4000 || rl > 0x4000) {
+			ret = -EINVAL;
+			break;
+		}
+		buf = dma_alloc_coherent(&e.pdev->dev, bl, &bp, GFP_KERNEL);
+		rsp = dma_alloc_coherent(&e.pdev->dev, rl, &rp, GFP_KERNEL);
+		if (!buf || !rsp) {
+			ret = -ENOMEM;
+			goto sfree;
+		}
+		memset(buf, 0, bl);
+		if (copy_from_user(buf, u64_to_user_ptr(a.buf_ptr), a.buf_len)) {
+			ret = -EFAULT;
+			goto sfree;
+		}
+		x[0] = a.app_id; x[1] = bp; x[2] = bl; x[3] = rp; x[4] = rl;
+		ret = qcom_scm_qseecom_raw(OWNER_TZ_APPS, 0, 1, scm_arginfo(5, t5), x, r);
+		a.result = r[0];
+		if (!ret && copy_to_user(u64_to_user_ptr(a.rsp_ptr), rsp, min_t(u32, a.rsp_len, rl)))
+			ret = -EFAULT;
+sfree:
+		if (buf)
+			dma_free_coherent(&e.pdev->dev, bl, buf, bp);
+		if (rsp)
+			dma_free_coherent(&e.pdev->dev, rl, rsp, rp);
+		break;
+	}
+	}
+	mutex_unlock(&e.lock);
+	if (!ret && copy_to_user(ua, &a, sizeof(a)))
+		ret = -EFAULT;
+	return ret;
+}
+
 static long egista_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 {
 	switch (cmd) {
@@ -416,6 +497,11 @@ static long egista_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 		return do_lsnr_wait((void __user *)arg);
 	case EGISTA_IOC_LSNR_REPLY:
 		return do_lsnr_reply((void __user *)arg);
+	case EGISTA_IOC_APP_LOOKUP:
+	case EGISTA_IOC_APP_LOAD:
+	case EGISTA_IOC_APP_SEND:
+	case EGISTA_IOC_APP_UNLOAD:
+		return do_app(cmd, (void __user *)arg);
 	case EGISTA_IOC_RELOAD: {
 		u64 r[3], a[1];
 		int ret;

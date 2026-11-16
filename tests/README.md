@@ -28,7 +28,7 @@ touch errors, pocket guard state), audio (card, UCM, speaker playback, mic
 capture level, jack control), network (USB gadget, Wi-Fi link, both-band
 scan, ping and download speed, Bluetooth scan), modem (ModemManager, GPS),
 sensors (services, patched libssc, accelerometer gravity, compass,
-proximity, light), desktop (GNOME settings, remote desktop port), dock (only when a USB-C dock is attached, else SKIP: DP alt mode and pin assignment, DP lanes and link training, monitor mode and refresh, phone panel kept in the GNOME config, nura-dock applied, USB hub speed, keyboard and mouse, USB audio, Ethernet link stability and ping, DP/USB kernel errors), sleep
+proximity, light), desktop (GNOME settings, remote desktop port), system (Nura apk repository and key installed, libcamera is the patched build and pinned by the tweaks package, tweaks package offered by the repository), dock (only when a USB-C dock is attached, else SKIP: DP alt mode and pin assignment, DP lanes and link training, monitor mode and refresh, phone panel kept in the GNOME config, nura-dock applied, USB hub speed, keyboard and mouse, USB audio, Ethernet link stability and ping, DP/USB kernel errors), sleep
 (runs last: no deep-sleep blockers left, ADSP idle, and a 20 s RTC suspend
 that must reach whole-SoC sleep with Wi-Fi, audio, Bluetooth and sensors
 back afterwards).

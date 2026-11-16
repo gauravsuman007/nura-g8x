@@ -15,6 +15,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 env:
   PMB_TAG: "3.12.1"
@@ -30,6 +32,8 @@ jobs:
   image:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 340
+    outputs:
+      publish: ${{ steps.key.outputs.publish }}
     steps:
       - uses: actions/checkout@v4
 
@@ -88,6 +92,27 @@ jobs:
           mkdir -p "$WORK/cache_ccache_aarch64" "$WORK/cache_distfiles"
           sudo chown -R 12345:12345 "$WORK/cache_ccache_aarch64" "$WORK/cache_distfiles"
 
+      - name: Package signing key
+        id: key
+        # Stable key (repo secret APK_SIGNING_KEY; public half shipped in device-lg-mh2lm as
+        # /etc/apk/keys/nura-g8x-2026.rsa.pub) so phones can update from the published
+        # repository. Without the secret pmbootstrap makes a throwaway key and nothing is published.
+        env:
+          KEY: ${{ secrets.APK_SIGNING_KEY }}
+        run: |
+          if [ -n "$KEY" ]; then
+            mkdir -p "$WORK/config_abuild"
+            printf '%s\n' "$KEY" > "$WORK/config_abuild/nura-g8x-2026.rsa"
+            cp pmaports/device/testing/device-lg-mh2lm/nura-g8x-2026.rsa.pub "$WORK/config_abuild/"
+            printf 'PACKAGER_PRIVKEY="/home/pmos/.abuild/nura-g8x-2026.rsa"\n' > "$WORK/config_abuild/abuild.conf"
+            chmod 600 "$WORK/config_abuild/nura-g8x-2026.rsa"
+            sudo chown -R 12345:12345 "$WORK/config_abuild"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::APK_SIGNING_KEY secret missing: packages signed with a throwaway key, repository not published"
+          fi
+
       - name: Build kernel
         run: $PMB -y build --arch aarch64 linux-nura-lg-mh2lm
 
@@ -114,6 +139,31 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" dist; (cd dist && sha256sum * > SHA256SUMS)
           ls -l dist
 
+      - name: Build package repository
+        if: steps.key.outputs.publish == 'true'
+        run: |
+          mkdir -p site/repo/aarch64
+          sudo cp -L $WORK/packages/*/aarch64/*.apk $WORK/packages/*/aarch64/APKINDEX.tar.gz site/repo/aarch64/
+          sudo chown -R "$(id -u):$(id -g)" site
+          cp pmaports/device/testing/device-lg-mh2lm/nura-g8x-2026.rsa.pub site/
+          # the index must be signed with the published key
+          tar -tzf site/repo/aarch64/APKINDEX.tar.gz | grep -q 'SIGN.RSA.nura-g8x-2026.rsa.pub' \
+            || { echo "APKINDEX not signed with nura-g8x-2026"; tar -tzf site/repo/aarch64/APKINDEX.tar.gz | head; exit 1; }
+          cat > site/index.html <<'HTML'
+          <!doctype html><meta charset="utf-8"><title>Nura G8x package repository</title>
+          <h1>Nura LG G8x packages</h1>
+          <p>apk repository for the Nura images (kernel, device, tweaks, patched libcamera).
+          Images already include the key and repository entry; update with <code>sudo apk update &amp;&amp; sudo apk upgrade</code>.
+          Manual setup: copy <a href="nura-g8x-2026.rsa.pub">nura-g8x-2026.rsa.pub</a> to <code>/etc/apk/keys/</code> and add
+          <code>https://gauravsuman007.github.io/nura-g8x/repo</code> to <code>/etc/apk/repositories</code>.</p>
+          HTML
+          ls -l site/repo/aarch64
+
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.key.outputs.publish == 'true'
+        with:
+          path: site
+
       - name: ccache statistics
         if: always()
         run: |
@@ -138,3 +188,14 @@ jobs:
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
             gh release create "$GITHUB_REF_NAME" --title "Nura LG G8x $GITHUB_REF_NAME" --notes-file release/README.md
           gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+
+  pages:
+    needs: image
+    if: needs.image.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -123,3 +123,44 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# ---- generic QSEE app access (keymaster etc.) ----
+class App(ctypes.Structure):
+    _fields_ = [('name', ctypes.c_char * 32), ('app_id', ctypes.c_uint32), ('mdt_len', ctypes.c_uint32),
+                ('buf_ptr', ctypes.c_uint64), ('buf_len', ctypes.c_uint32), ('rsp_len', ctypes.c_uint32),
+                ('rsp_ptr', ctypes.c_uint64), ('result', ctypes.c_int32), ('pad', ctypes.c_uint32)]
+
+IOC_APP_LOOKUP, IOC_APP_LOAD = _ioc(3, 7, ctypes.sizeof(App)), _ioc(3, 8, ctypes.sizeof(App))
+IOC_APP_SEND, IOC_APP_UNLOAD = _ioc(3, 9, ctypes.sizeof(App)), _ioc(1, 10, ctypes.sizeof(App))
+
+def app_lookup(e, name):
+    a = App(name=name.encode())
+    try:
+        fcntl.ioctl(e.fd, IOC_APP_LOOKUP, a)
+    except OSError:
+        return None
+    return a.app_id
+
+def elf_to_qsee_image(raw):
+    """Combined ELF (hdr+phdrs, hash seg, LOAD segs) -> mdt(hdr+phdrs+hash) + segments, as the split files concatenate."""
+    phoff, = struct.unpack_from('<Q', raw, 0x20); phentsz, phnum = struct.unpack_from('<HH', raw, 0x36)
+    ph = [struct.unpack_from('<IIQQQQQQ', raw, phoff + i * phentsz) for i in range(phnum)]
+    mdt = raw[:phoff + phnum * phentsz]
+    for t, fl, off, va, pa, fsz, msz, al in ph:
+        if (fl >> 24) & 7 == 2 or (t == 0 and fsz and off):   # hash segment
+            mdt += raw[off:off + fsz]
+    body = b''.join(raw[off:off + fsz] for t, fl, off, va, pa, fsz, msz, al in ph if t == 1 and fsz)
+    return len(mdt), mdt + body
+
+def app_load(e, name, raw):
+    mdt_len, img = elf_to_qsee_image(raw)
+    ib = ctypes.create_string_buffer(img, len(img))
+    a = App(name=name.encode(), mdt_len=mdt_len, buf_ptr=ctypes.addressof(ib), buf_len=len(img))
+    fcntl.ioctl(e.fd, IOC_APP_LOAD, a)
+    return a.app_id
+
+def app_send(e, app_id, req, rsp_len):
+    rq = ctypes.create_string_buffer(req, len(req)); rs = ctypes.create_string_buffer(rsp_len)
+    a = App(app_id=app_id, buf_ptr=ctypes.addressof(rq), buf_len=len(req), rsp_len=rsp_len, rsp_ptr=ctypes.addressof(rs))
+    fcntl.ioctl(e.fd, IOC_APP_SEND, a)
+    return a.result, bytes(rs.raw)

@@ -48,3 +48,11 @@ Public, from Alpine/postmarketOS packages: Bluetooth `qca/crbtfw21.tlv`,
 - Testing an image means flashing `userdata`, which replaces the phone's
   current system; back up first.
 - The default password must not be the test image's.
+
+## Updates (2026-11-16)
+
+- **Package repository.** Every CI run signs its packages (kernel `linux-nura-lg-mh2lm`, `device-lg-mh2lm`, `nura-g8x-tweaks`, the patched `libcamera*`) with one stable key, `nura-g8x-2026.rsa` (private half: GitHub secret `APK_SIGNING_KEY`, copy in `out/apk-key/`, never committed), and publishes them to GitHub Pages at `https://gauravsuman007.github.io/nura-g8x/repo/aarch64`. The device package ships the public key (`/etc/apk/keys/`) and the repository line (`/etc/apk/repositories.d/nura-g8x.list`), so a phone updates with `sudo apk update && sudo apk upgrade`. The repository holds only the latest build.
+- **Kernel updates** arrive as `linux-nura-lg-mh2lm` but the bootloader boots the flashed `boot_b`: after upgrading the kernel package, flash the matching `boot.img` (`devtools/flash-boot-safe.sh`), or the modules and kernel disagree.
+- **libcamera is pinned** by `nura-g8x-tweaks` (`libcamera>=99990.8.0-r100`, `<99990.8.1`). Our build is `-r101`; postmarketOS moving to another libcamera version makes `apk upgrade` report a conflict instead of silently dropping the G8x sensor patch. To follow it, rebase `pmaports/libcamera-nura-sensors.patch`, bump the pin in the tweaks APKBUILD.
+- **Phones that were set up by `apk add` of a local file** have a pinned world entry (`nura-g8x-tweaks><checksum`): run `sudo apk add nura-g8x-tweaks` once with the repository configured to release it.
+- The `system` test group checks the key, the repository line and the libcamera pin.
