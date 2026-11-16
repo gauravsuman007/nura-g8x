@@ -248,15 +248,22 @@ static int set_power(bool on)
 	if (!e.pwr || !e.rst)
 		return -ENODEV;
 	if (on) {
-		gpiod_direction_output_raw(e.pwr, 1);
-		usleep_range(2000, 3000);
+		/* LG et713_platform.c egis_power_onoff_ex(), after a full off cycle */
 		gpiod_direction_output_raw(e.rst, 0);
-		msleep(20);
+		gpiod_direction_output_raw(e.pwr, 0);
+		msleep(50);
+		gpiod_direction_output_raw(e.pwr, 1);
+		msleep(2);
 		gpiod_direction_output_raw(e.rst, 1);
-		msleep(10);
+		msleep(2);
+		gpiod_direction_output_raw(e.rst, 0);
+		msleep(13);
+		gpiod_direction_output_raw(e.rst, 1);
+		msleep(8);
 	} else {
 		gpiod_direction_output_raw(e.rst, 0);
 		gpiod_direction_output_raw(e.pwr, 0);
+		msleep(50);
 	}
 	e.powered = on;
 	return 0;
@@ -294,6 +301,10 @@ static int dsi_seq(struct mipi_dsi_device *dsi, const u8 *s, size_t len)
 	return ret;
 }
 
+static const u8 lhbm_brlvl[] = { 0x15,1,0,0,0,0,2,0xb0,0x80, 0x39,1,0,0,0,0,4,0xe2,0x63,0x00,0xff, 0x15,1,0,0,0,0,2,0xb0,0x03 };
+static int lhbm_mode;	/* 0 ready+on (Android), 1 on only, 2 brlvl+on, 3 ready+brlvl+on */
+module_param(lhbm_mode, int, 0644);
+
 static int set_lhbm(bool on)
 {
 	struct device_node *np = of_find_compatible_node(NULL, NULL, "lg,mh2lm-r66456");
@@ -307,11 +318,17 @@ static int set_lhbm(bool on)
 	if (!dsi)
 		return -ENODEV;
 	if (on) {
-		ret = dsi_seq(dsi, lhbm_ready, sizeof(lhbm_ready));
+		ret = 0;
+		if (lhbm_mode == 0 || lhbm_mode == 3)
+			ret = dsi_seq(dsi, lhbm_ready, sizeof(lhbm_ready));
+		if (!ret && lhbm_mode >= 2)
+			ret = dsi_seq(dsi, lhbm_brlvl, sizeof(lhbm_brlvl));
 		if (!ret)
 			ret = dsi_seq(dsi, lhbm_on, sizeof(lhbm_on));
 	} else {
-		ret = dsi_seq(dsi, lhbm_exit, sizeof(lhbm_exit));
+		ret = dsi_seq(dsi, lhbm_off, sizeof(lhbm_off));
+		if (!ret)
+			ret = dsi_seq(dsi, lhbm_exit, sizeof(lhbm_exit));
 		if (!ret)
 			ret = dsi_seq(dsi, lhbm_exit_post, sizeof(lhbm_exit_post));
 	}
@@ -484,6 +501,46 @@ sfree:
 	return ret;
 }
 
+/* TZ diag area, like downstream tz_log.c: IMEM 0x146bf720 holds the physical address of the diag buffer (0x3000).
+ * Only 4 bytes of IMEM are read (mapping 0x3000 bytes of IMEM itself hard-hangs the SoC). */
+static long do_tzdiag(struct egista_log __user *ul)
+{
+	struct egista_log l;
+	void __iomem *m;
+	u32 phys;
+	u8 *tmp;
+
+	if (copy_from_user(&l, ul, sizeof(l)))
+		return -EFAULT;
+	m = ioremap(0x146bf720, 4);
+	if (!m)
+		return -ENOMEM;
+	phys = readl_relaxed(m);
+	iounmap(m);
+	pr_info("egista: tz diag phys 0x%x\n", phys);
+	l.reg_ret = phys;
+	if (1) {	/* reading the diag area (0x14695000 here) hard-hangs the SoC too */
+		/* only report the address on the first call */
+		return copy_to_user(ul, &l, sizeof(l)) ? -EFAULT : 0;
+	}
+	l.len = min_t(u32, l.len, 0x3000);
+	m = ioremap(phys, 0x3000);
+	tmp = kmalloc(0x3000, GFP_KERNEL);
+	if (!m || !tmp) {
+		if (m) iounmap(m);
+		kfree(tmp);
+		return -ENOMEM;
+	}
+	memcpy_fromio(tmp, m, 0x3000);
+	iounmap(m);
+	if (copy_to_user(u64_to_user_ptr(l.ptr), tmp, l.len)) {
+		kfree(tmp);
+		return -EFAULT;
+	}
+	kfree(tmp);
+	return copy_to_user(ul, &l, sizeof(l)) ? -EFAULT : 0;
+}
+
 #define QLOG_SIZE	0x8000
 static void *qlog;
 static dma_addr_t qlog_phys;
@@ -532,6 +589,8 @@ static long egista_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 		return do_lsnr_wait((void __user *)arg);
 	case EGISTA_IOC_LSNR_REPLY:
 		return do_lsnr_reply((void __user *)arg);
+	case EGISTA_IOC_TZDIAG:
+		return do_tzdiag((void __user *)arg);
 	case EGISTA_IOC_LOG:
 		return do_log((void __user *)arg);
 	case EGISTA_IOC_APP_LOOKUP:

@@ -1694,3 +1694,18 @@ Compared the dev rootfs backup (`out/backup-nura-20261112`) with the running rel
 - **The "glmark2 regression" (243 vs 534) is the GPU governor, not the image:** devfreq `simple_ondemand` starts at 257 MHz; the first run sits at 257-345 MHz (score about 250), the next run at 585 MHz (541). The same low/high pattern is in the Nov 8 and Nov 14 dev history (250, 253, 238, 247 among 500+ runs). The test now warms up first. Screen on or off made no difference to the shell (0.3 % idle, 1.9 % with the screen on); the 3.8 % reading was right after the backlight tests.
 - Not differences: power profile (dev `powersave`, release `balanced`, no glmark2 effect), tuned, autologin user name, `/etc/nura/keys.conf` vs `tweaks.conf` (renamed).
 - **Other sessions RAM-boot test kernels on this phone:** after a reboot the phone can come up on a RAM test kernel (`uname -v` `#85`/`#86`, `nura.testwd` on the command line) instead of the flashed boot_b. Check `uname -v` before testing the release kernel (flashed is `#7-nura-lg-mh2lm`).
+- **Fingerprint bring-up (2026-11-16, tests/phone/tz, plans/fingerprint.md).** `/dev/egista` + `egista.py`: trustlet loads,
+  sensor powers, init chain returns 0, raw capture works; enroll_init still aborts the TA instantly (open).
+  Hard-won facts: the real persist-lg partition is `drm` (not `p_persist_lg`); the egista TA reads `calibration.bin` via
+  QSEE listener 0x7000 (GP file service; registers: ids from qseecomd's .data table, 0xa 0xb 0x1100 0x2000 0x3000 0x4000 0x7000
+  0x9000 0xb000 0xc000); init_sdk's key comes from `keymaster64` request {0x205,2} and is bound to the running egista
+  instance (fetch after every reload); a call that ends in SMC -EINVAL/-23 kills the instance, `EGISTA_IOC_RELOAD` recovers.
+  A RAM boot needs an ssh session open at all times (nura-testwd resets after 120 s); a second session on the same phone can
+  silently replace your RAM kernel - check `uname -v` first. mdt+segments image order, 32-bit ARM trustlet: code mixes
+  A32 and Thumb, so xref scripts must try both (A32 `add rX, pc, rY` after `ldr rY,[pc,#]`).
+
+- Fingerprint LHBM (LG G8x r66456): the stock DT `lge,mdss-dsi-fp-lhbm-command` holds `cc 11` = OFF; LG's kernel rewrites that byte to
+  0x13 for ON. Copying DT sequences verbatim can silently send the "off" variant; check the vendor kernel's ddic ops for payload patches.
+  The sensor sits at x 540, y 2107, r 98 px (LineageOS mh2lm overlay), and the panel only boosts pixels the content draws white.
+- libRbsFlow capture = open SPI 0x2a, 0x22/0x12 {temp 0.1 C, 0}, get_image 0x8, close SPI 0x2b; "scan start" is a host-side flag.
+  Reading IMEM (tz-log 0x146bf720) from Linux hard-hangs the phone. 

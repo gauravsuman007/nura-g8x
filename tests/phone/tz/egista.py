@@ -26,6 +26,7 @@ GET_IMAGE, ENROLLED_COUNT, ENROLL_INIT, DO_ENROLL, ENROLL_UNINIT, SAVE_ENROLLED 
 IDENTIFY_START, IDENTIFY, IDENTIFY_FINISH, TEMPLATE_UPDATE, TEMPLATE_SAVE = 0xf, 0x10, 0x11, 0x12, 0x13
 REMOVE, GET_IDS, WORK_MODE, ACTIVE_GROUP, DATA_PATH, HW_INFO = 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a
 SET_DATA, GET_DATA, EXTRA, FINGER_LOST, RAW_IMAGE, IPP_IMAGE = 0x22, 0x23, 0x25, 0x26, 0x2d, 0x2e
+OPEN_SPI, CLOSE_SPI = 0x2a, 0x2b
 
 class Egista:
     def __init__(self, path='/dev/egista'):
@@ -59,13 +60,15 @@ class Egista:
         st = [self.cmd(HW_INFO, panel_type)[0], self.cmd(INIT_SDK)[0], self.cmd(INIT_SENSOR)[0], self.cmd(INIT_ALGO)[0]]
         return st
 
-    def capture(self):
-        """One frame as in Android's enroll path: work mode, set image data, raw image, get image (quality)."""
-        self.cmd(SET_DATA, 0x12, 0, bytes(16))
-        st = self.cmd(RAW_IMAGE)[0]
-        if st:
-            return st, None
-        st, q, _ = self.cmd(GET_IMAGE, outlen=4)
+    def capture(self, temp=250):
+        """One frame as libRbsFlow does after a finger-on trigger: open SPI (0x2a), host device info
+        {temperature in 0.1 C, 0} (0x22/0x12), get image (0x8 -> quality), close SPI (0x2b)."""
+        self.cmd(OPEN_SPI)
+        try:
+            self.cmd(SET_DATA, 0x12, 0, struct.pack('<QQ', temp, 0))
+            st, q, _ = self.cmd(GET_IMAGE, outlen=4)
+        finally:
+            self.cmd(CLOSE_SPI)
         return st, (struct.unpack('<i', q)[0] if len(q) == 4 else None)
 
 class ListenerThread(threading.Thread):

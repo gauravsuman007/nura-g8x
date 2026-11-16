@@ -48,5 +48,6 @@ struct egista_app {
 #define EGISTA_IOC_APP_SEND	_IOWR('E', 9, struct egista_app)
 #define EGISTA_IOC_APP_UNLOAD	_IOW('E', 10, struct egista_app)
 struct egista_log { __u64 ptr; __u32 len; __s32 reg_ret; };
+#define EGISTA_IOC_TZDIAG	_IOWR('E', 12, struct egista_log)	/* ptr=0: reg_ret = diag phys; else copy the TZ diag area */
 #define EGISTA_IOC_LOG		_IOWR('E', 11, struct egista_log)	/* register (first call) and read the QSEE log buffer */
 #endif
