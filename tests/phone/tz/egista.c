@@ -37,6 +37,7 @@
 #define FRAME_MAX	0x400
 #define OUT_MAX		(4 << 20)
 #define LSNR_BUF	(256 << 10)
+#define LSNR_BUF_FS	(2 << 20)	/* 0x7000 file service: enrolled templates are 0xfa040 bytes */
 #define MAX_LSNR	12
 
 /* QSEE OS listener service (downstream qseecom: TZ_OWNER_QSEE_OS, TZ_SVC_LISTENER) */
@@ -61,6 +62,7 @@ struct lsnr {
 	bool registered;
 	void *buf;
 	dma_addr_t phys;
+	size_t size;
 };
 
 static struct {
@@ -111,7 +113,7 @@ static s32 service_listener(int i)
 
 	e.pending = i;
 	e.replied = false;
-	e.pending_len = LSNR_BUF;
+	e.pending_len = e.l[i].size;
 	wake_up_interruptible(&e.wq);
 	t = wait_event_timeout(e.wq, e.replied, msecs_to_jiffies(10000));
 	e.pending = -1;
@@ -172,16 +174,17 @@ static void lsnr_register_all(void)
 		int ret;
 
 		l->id = lsnr_ids[i];
-		l->buf = dma_alloc_coherent(&e.pdev->dev, LSNR_BUF, &l->phys, GFP_KERNEL);
+		l->size = l->id == 0x7000 ? LSNR_BUF_FS : LSNR_BUF;
+		l->buf = dma_alloc_coherent(&e.pdev->dev, l->size, &l->phys, GFP_KERNEL);
 		if (!l->buf)
 			continue;
-		a[0] = l->id; a[1] = l->phys; a[2] = LSNR_BUF;
+		a[0] = l->id; a[1] = l->phys; a[2] = l->size;
 		ret = qcom_scm_qseecom_raw(OWNER_QSEE_OS, SVC_LISTENER, LSNR_REGISTER, scm_arginfo(3, t3), a, r);
 		l->registered = !ret && r[0] == RESULT_SUCCESS;
 		pr_info("egista: register listener 0x%x: ret=%d result=0x%llx%s\n", l->id, ret, r[0],
 			l->registered ? "" : " (not registered)");
 		if (!l->registered) {
-			dma_free_coherent(&e.pdev->dev, LSNR_BUF, l->buf, l->phys);
+			dma_free_coherent(&e.pdev->dev, l->size, l->buf, l->phys);
 			l->buf = NULL;
 		}
 	}
@@ -198,7 +201,7 @@ static void lsnr_deregister_all(void)
 		if (l->registered)
 			qcom_scm_qseecom_raw(OWNER_QSEE_OS, SVC_LISTENER, LSNR_DEREGISTER, 1, a, r);
 		if (l->buf)
-			dma_free_coherent(&e.pdev->dev, LSNR_BUF, l->buf, l->phys);
+			dma_free_coherent(&e.pdev->dev, l->size, l->buf, l->phys);
 		l->registered = false;
 		l->buf = NULL;
 	}
@@ -401,7 +404,7 @@ static long do_lsnr_wait(struct egista_lsnr __user *ul)
 	if (ret)
 		return ret;
 	l.id = e.l[e.pending].id;
-	l.len = min_t(u32, l.len, LSNR_BUF);
+	l.len = min_t(u32, l.len, e.l[e.pending].size);
 	if (copy_to_user(u64_to_user_ptr(l.buf_ptr), e.l[e.pending].buf, l.len))
 		return -EFAULT;
 	return copy_to_user(ul, &l, sizeof(l)) ? -EFAULT : 0;
@@ -415,7 +418,7 @@ static long do_lsnr_reply(struct egista_lsnr __user *ul)
 		return -EFAULT;
 	if (e.pending < 0 || e.l[e.pending].id != l.id)
 		return -EINVAL;
-	l.len = min_t(u32, l.len, LSNR_BUF);
+	l.len = min_t(u32, l.len, e.l[e.pending].size);
 	if (l.len && copy_from_user(e.l[e.pending].buf, u64_to_user_ptr(l.buf_ptr), l.len))
 		return -EFAULT;
 	e.reply_status = l.status;

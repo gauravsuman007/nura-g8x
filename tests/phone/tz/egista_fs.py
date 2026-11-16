@@ -15,7 +15,8 @@ def _real(p):
     return ROOT + p
 
 def _reply(ret, err=0, data=b''):
-    return 0, struct.pack('<IiiI', 0, ret, err, 0)[:12] + data
+    # libdrmfs gpfs_start: +4 errno (0 = ok), +8 byte count, read data from +0xc
+    return 0, struct.pack('<IiI', 0, err if ret < 0 else 0, max(ret, 0)) + data
 
 def handle(lid, req):
     if lid != 0x7000:
@@ -30,7 +31,7 @@ def handle(lid, req):
         if cmd == 0:        # read
             with open(rp, 'rb') as f:
                 f.seek(a104)
-                d = f.read(min(a108, 0x3e000))
+                d = f.read(min(a108, 0x1f0000))
             _log(f'  read {len(d)}')
             return _reply(len(d), 0, d)
         if cmd == 1:        # write (+0x104 offset, +0x108 length, data at DATA_OFF)

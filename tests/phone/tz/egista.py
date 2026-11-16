@@ -83,9 +83,9 @@ class ListenerThread(threading.Thread):
         self.fd, self.handler, self.log = fd, handler, log
 
     def run(self):
-        buf = ctypes.create_string_buffer(256 << 10)
+        buf = ctypes.create_string_buffer(2 << 20)
         while True:
-            l = Lsnr(len=256 << 10, buf_ptr=ctypes.addressof(buf))
+            l = Lsnr(len=2 << 20, buf_ptr=ctypes.addressof(buf))
             fcntl.ioctl(self.fd, IOC_LSNR_WAIT, l)
             req = bytes(buf.raw)
             with open(self.log, 'a') as f:

@@ -320,3 +320,18 @@ captures for 30 s with the Android sequence, then restarts GNOME. Look for a bri
 - **Next test (needs a finger):** `G8X_IP=172.16.42.1 devtools/fp-enroll.sh enroll 20`, touch the circle when told,
   lift between touches; watch do_enroll output for the percentage, then `fp-enroll.sh verify`. Templates go to
   /var/lib/egista/data/vendor_de/0/fpdata/template_N through the listener. Then libfprint (match-on-chip driver).
+
+### 2026-11-16 (night 2): enroll reaches 100 %, file service reply fixed
+- Per touch Android sends get_image (0x8) -> **get_image_ipp (0x2e)** -> do_enroll (0xc). 0x2e is what feeds the frame
+  to the enroll (ukm_add_image); without it progress stays 0. do_enroll output word 1 = progress %. With it a real
+  finger reached 100 % in ~17-24 touches.
+- Captures are triggered by the touchscreen (BTN_TOUCH on the Synaptics evdev), like Android's UDFPS flow; continuous
+  polling with get_image killed the TA after ~5 min. `fbui.py` draws big prompts + the circle on fb0 (keep fbcon bound,
+  unbinding it stops fb0 from being scanned out).
+- Save: enroll_uninit (0xd, packs the template via fp_finishEnroll) **then** save 0xe with a2 = gid 0, a3 = fid
+  (64-bit {gid,fid}); one shot, the pending flag is cleared by the first attempt.
+- Templates are 0xfa040 bytes, written in 0x7d000 chunks: the 0x7000 listener buffer is now 2 MB (driver per-listener size).
+- **libdrmfs gpfs reply layout: +4 errno (0 = ok), +8 byte count, data from +0xc** (was swapped). With that fixed,
+  calibration save returns 0 and a fresh session loads it (inline 0xd2/16 -> 0). The factory calibration.bin from the drm
+  partition is still rejected (likely an older format); the generated one replaces it (the old file is kept as .orig).
+- Next: re-enroll (template save untested since the reply fix), then verify.
