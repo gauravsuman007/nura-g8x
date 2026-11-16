@@ -116,8 +116,13 @@ jobs:
       - name: Build kernel
         run: $PMB -y build --arch aarch64 linux-nura-lg-mh2lm
 
+      - name: Build patched libcamera
+        # before the tweaks package: it depends on libcamera>=...-r100 and pmbootstrap resolves
+        # dependencies before building anything
+        run: $PMB -y build --arch aarch64 libcamera
+
       - name: Build device and tweaks packages
-        run: $PMB -y build --arch aarch64 libcamera device-lg-mh2lm nura-g8x-tweaks
+        run: $PMB -y build --arch aarch64 device-lg-mh2lm nura-g8x-tweaks
 
       - name: Install rootfs
         run: $PMB -y install --password "$IMAGE_PASSWORD"
