@@ -137,7 +137,8 @@ Never again (in place since 2026-11-07):
 | Touch (Synaptics S3618, TouchComm) | works | own driver + GPI DMA fixes, see below |
 | Display | simpledrm only | real DSI panel driver written, not enabled |
 | Sensors (SLPI) | not working | see below |
-| Audio, GPS, camera, fingerprint | not done | |
+| Audio, GPS, camera | not done | |
+| Fingerprint | lock-screen unlock works (RAM test kernel #86; packaging open) | see "Fingerprint end to end" |
 
 **Touch.** `pmaports/kernel-src/synaptics_tcm_s3618.c` on i2c17 address 0x20,
 IRQ gpio122 (active low, needs pull-up), reset gpio54. TouchComm framing:
@@ -324,7 +325,7 @@ supplies. **Do not force the modem radio on without a SIM**: `mmcli
 `rmmod ath10k_snoc` hangs on a second unload. Stopping ModemManager also stops
 NetworkManager. Large files to the phone: use scp, not `rs` arguments.
 
-**Fingerprint (researched 2026-11-08, not feasible).** The G8x has an
+**Fingerprint (researched 2026-11-08, judged not feasible; superseded: it works since 2026-11-17, see "Fingerprint end to end" below).** The G8x has an
 Egistec ET713 optical sensor under the OLED. On Android it is driven by a
 trusted app in Qualcomm's TrustZone (QSEE) through LG's fingerprint HAL; the
 kernel never sees fingerprint images. Mainline has no general way to load
@@ -1728,3 +1729,50 @@ Compared the dev rootfs backup (`out/backup-nura-20261112`) with the running rel
 - Suite on test kernel #86: glmark2 257 vs 534 baseline, gnome-shell 84% CPU at idle. Not a GPU or shell regression: the RAM image was repacked (devtools/repack-ci-ram.py) from a pre-r7 CI boot image whose cmdline still had `msm.separate_gpu_kms=1`, so dmesg shows "msm_dpu: no GPU device was found" and mutter copies frames between card1/card2.
 - The GPU governor cannot be forced (`performance` → I/O error, GMU-managed); with the split the score stays ~310–380 at any clock.
 - Fix: repack-ci-ram.py strips the flag; the gpu_benchmark test warns when it sees it in /proc/cmdline instead of reporting a regression.
+
+## Fingerprint end to end: how it was done, what failed and why (2026-11-08 to 2026-11-17)
+Result: Egistec ET713 under-display sensor unlocks the GNOME lock screen. Stack: own QSEECOM-style kernel module
+(`/dev/egista`) loads LG's egista trustlet -> `egistad` (Python, owns the TA, its file service, touch trigger, LHBM spot,
+haptics; line protocol on `/run/egistad.sock`) -> libfprint `egis_et713` virtual-device driver -> fprintd ->
+`gdm-fingerprint` PAM + Shell extension drawing the sensor circle. Tests: `zsh tests/run.sh --only fingerprint`.
+
+**Techniques that worked**
+- Talk to the vendor trustlet directly instead of porting the Android HAL (libhybris route judged too heavy). Reverse the
+  request format from LG's userspace libs (libRbsFlow, libdrmfs, qseecomd) and replay it from Python (`egista.py`).
+- Emulate the TA with unicorn when it dies silently. The 32-bit ARM TA has a full DT_SYMTAB, so load segments at their
+  real VAs, stub QSEE syscalls, and run the failing command: it pinpointed the enroll abort (NULL background buffer =
+  no calibration) in minutes after days of black-box probing. Run unicorn in the Linux container (macOS 2.1 JIT crashes).
+- Read what the stock HAL does in order and copy that order exactly: per touch get_image -> get_image_ipp (0x2e) ->
+  do_enroll; save = enroll_uninit then save(gid 0, fid); identify within 1 s of capture.
+- Implement the TA's file service (listener 0x7000, GP fs) yourself and log every call; most "TA errors" were our
+  replies. Keep a `.orig` of every file the TA writes.
+- Trigger captures from the touchscreen (finger-down inside the sensor circle), light the LHBM spot only while capturing.
+- Keep the daemon in Python and the libfprint driver thin (socket client, GTask thread, report on the main context
+  captured at open). Fast iteration: edit, scp, restart egistad, no rebuild of libfprint.
+- Build libfprint on the phone (same toolchain/ABI), keep the original .so as `.orig`.
+- Verify each layer alone before the next: egista.py -> egista_enroll.py with on-screen prompts -> egistad via `socat`
+  -> fprintd-enroll/verify -> lock screen.
+
+**What failed and why**
+- Polling captures continuously: the TA crashed after ~5 min. Capture only on touch.
+- Enroll stuck at 0%: missing the ipp step (0x2e). Endless "try again": calibration generated with the spot off; it
+  must match capture lighting (delete calibration.bin to regenerate lit).
+- Save returned -1/-3: wrong order (save before uninit) and a listener buffer smaller than the 0xfa040-byte template
+  (chunks of 0x7d000); 0x7000 needs a 2 MB buffer.
+- Calibration/template never persisted: fs reply fields swapped (+4 is errno, +8 count). Template not loading after
+  reboot: `.orig` backup was taken on the second chunk and truncated chunk 1; back up only at offset 0, open r+b otherwise.
+- verify NOMATCH (status 9 "permission denied"): ran 0x2e between capture and identify, missing the 1 s window.
+- fprintd NOMATCH on a real match: parsed the wrong words (fid is +0, match flag +8). Log raw output before parsing.
+- Matched a deleted finger: gpfs remove (cmd 2) was unimplemented, so delete left the template file.
+- Tiny unreadable fb text: draw a big font yourself. Unbinding vtcon to own fb0 broke display; keep fbcon bound.
+- Bench started with the panel asleep: black screen, needed a RAM reboot. Start with the display on.
+- `pkill -f egista_enroll` killed its own ssh shell (pattern matched its own command line); use `egista_enrol[l]`.
+- libfprint: no `fpi_device_get_main_context`; capture `g_main_context_ref_thread_default()` at open instead.
+- Lock screen: circle vanished on rotation (map sensor coords per orientation, divide by monitor scale); touches dead
+  after a gdm restart (stale evdev fd: reopen per wait); green spot on any tap (filter touches to 1.6 R of the circle).
+- GDM greeter: extensions do not run there (no circle), and a fingerprint login cannot unlock the keyring, giving a grey
+  session. Made the greeter password-only via a gdm dconf profile; fingerprint is lock-screen only (stock GNOME does
+  the same on laptops). Back-to-back gdm restarts broke user@ (grey screen): `systemctl restart user@<uid>` then gdm.
+
+**Open:** packaging (libfprint patch in APKBUILD, egistad + module in the tweaks package, kernel patch + DT node),
+sudo/polkit fingerprint.
