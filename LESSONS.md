@@ -1723,3 +1723,8 @@ Compared the dev rootfs backup (`out/backup-nura-20261112`) with the running rel
 - CI signing with the stable key failed indexing ("UNTRUSTED signature") until the public key was also copied to `$WORK/config_apk_keys/` so the build chroots trust it.
 - GitHub Pages had to be enabled (`gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow`); deploy-pages returns 404 otherwise.
 - Phones from before device r8 need the key and list installed by hand once: copy `nura-g8x-2026.rsa.pub` to `/etc/apk/keys/` and `nura-g8x.list` to `/etc/apk/repositories.d/`, then `apk update && apk add nura-g8x-tweaks && apk upgrade`. After that the system test group passes 3/3.
+
+## Low glmark2 / busy gnome-shell on RAM-test kernels, 2026-11-17
+- Suite on test kernel #86: glmark2 257 vs 534 baseline, gnome-shell 84% CPU at idle. Not a GPU or shell regression: the RAM image was repacked (devtools/repack-ci-ram.py) from a pre-r7 CI boot image whose cmdline still had `msm.separate_gpu_kms=1`, so dmesg shows "msm_dpu: no GPU device was found" and mutter copies frames between card1/card2.
+- The GPU governor cannot be forced (`performance` → I/O error, GMU-managed); with the split the score stays ~310–380 at any clock.
+- Fix: repack-ci-ram.py strips the flag; the gpu_benchmark test warns when it sees it in /proc/cmdline instead of reporting a regression.

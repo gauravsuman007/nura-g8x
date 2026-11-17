@@ -523,6 +523,9 @@ def gpu_benchmark():
         raise Skip("glmark2 could not run: " + out[-120:])
     s = int(m.group(1))
     assert_(s > 200, f"glmark2 score {s}")
+    if "msm.separate_gpu_kms=1" in sh("cat /proc/cmdline"):
+        # KMS and GPU on separate cards: scores about half and gnome-shell CPU-copies frames
+        raise Warn(f"glmark2 score {s} with msm.separate_gpu_kms=1 on the cmdline (old boot image; not comparable)", {"glmark2_score": s})
     return f"glmark2 off-screen score {s}", {"glmark2_score": s}
 
 
