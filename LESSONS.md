@@ -1863,3 +1863,9 @@ fprintd see the enrolled finger, fingerprint test group 6/6.
   nura-fp-local fails, so sudo and polkit skip pam_fprintd. With no UI connected egistad captures on any touch and lights
   the spot itself, so GNOME's own lock-screen prompt ("or place finger on reader") works unaided.
 - polkit-1 now also gets the nura-fp-local gate line (the same helper skips ssh for admin requests).
+
+## One GPU fault in a camera app still happens with the 64 KiB VA kernel fix, 2026-11-17
+- Kernel r8 (extra-msm-va-align) was running when `*** gpu fault ... source=CCU` hit once in 3.3 h (iova 64 KiB aligned) while Snapshot was taking photos. Afterwards every new Snapshot launch failed `gdk_gl_context_make_current()` and segfaulted in `gsk_renderer_render_texture` (3 cores), and `dsi_err_worker` logged 69 errors in the next minute (the dark screen).
+- Not reproducible on demand: ~100 libcamera captures, 60 pipewire streams into a GL window, 190 full-size offscreen `render_texture` shots and all three together with a glmark2 loop gave 0 faults. Scripts were throwaway (cam loops, gst `pipewiresrc ! glimagesink`, a GTK4 `render_texture` loop).
+- Mitigation shipped in tweaks r32: `/usr/lib/environment.d/50-nura-nogmem.conf` (FD_MESA_DEBUG=nogmem for the whole user session; glmark2 score unchanged). Off switch: `FD_MESA_DEBUG=` in /etc/environment.d/50-nura-nogmem.conf. Test: gpu/gmem_workaround_active.
+- Separate bug, not fixed: reopening a camera right after a capture hangs about 1 in 3 times with no gap (0 of 9 with 1 s or more). `cam` waits for frames, V4L2 buffers queued, no kernel message, but the VFE interrupt counter jumped by ~550 000 during the hung run (IRQ storm in vfe0). Recovers on the next open. The camera tests now open each camera twice and fail on any new GPU fault, so they catch it.

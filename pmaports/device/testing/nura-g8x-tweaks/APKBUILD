@@ -4,7 +4,7 @@
 # tweaks/stage.sh packs unit/ and tweaks/ into nura-g8x-tweaks-files.tar.gz.
 pkgname=nura-g8x-tweaks
 pkgver=2026.11.12
-pkgrel=31
+pkgrel=32
 _hexver=0.5.0
 _sscver=0.4.4
 _fpver=1.94.9
@@ -150,6 +150,9 @@ package() {
 
 	# battery default (the helper writes /etc/udev/rules.d/ with your values)
 	install -Dm644 $f/unit/battery/61-nura-charge-limit.rules -t "$pkgdir"/usr/lib/udev/rules.d/
+
+	# GPU: sysmem rendering for the whole user session (GMEM CCU fault)
+	install -Dm644 $f/unit/gpu/50-nura-nogmem.conf -t "$pkgdir"/usr/lib/environment.d/
 
 	# camera: PipeWire names, softISP tuning
 	install -Dm644 $f/unit/camera/51-nura-cameras.conf -t "$pkgdir"/usr/share/wireplumber/wireplumber.conf.d/

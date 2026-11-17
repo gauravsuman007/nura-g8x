@@ -507,6 +507,18 @@ def gpu_render():
 
 
 @test("gpu")
+def gmem_workaround_active():
+    # tweaks r32: /usr/lib/environment.d/50-nura-nogmem.conf puts FD_MESA_DEBUG=nogmem in the whole
+    # user session (GMEM CCU fault: lost GL context in camera apps, DSI errors, blank screen)
+    pid = sh("pgrep -x gnome-shell | head -1")
+    assert_(pid, "gnome-shell not running")
+    env = rd(f"/proc/{pid}/environ", "")
+    assert_("FD_MESA_DEBUG=nogmem" in env.split("\0"),
+            "gnome-shell has no FD_MESA_DEBUG=nogmem (tweaks < r32, or an /etc/environment.d override; log in again after updating)")
+    return "gnome-shell renders without GMEM (FD_MESA_DEBUG=nogmem)"
+
+
+@test("gpu")
 def gpu_benchmark():
     exe = sh("command -v glmark2-es2-drm")
     if not exe:
@@ -938,8 +950,15 @@ def _cam_capture(match, label):
            if match in l and (m := re.match(r"\s*(\d+): ", l))]
     assert_(idx, f"libcamera lists no {label} ({match}): " + out[-200:])
     sh("rm -f /tmp/nura-cam-*.ppm")
-    out = sh(f"cam -c{idx[0]} --capture=15 -s width=1280,height=720,pixelformat=BGR888 "
-             "--file=/tmp/nura-cam-#.ppm 2>&1", timeout=60)
+    faults0 = dmesg().count("*** gpu fault")
+    # twice: the second open re-creates the GPU debayer EGL context, as every app launch does
+    for _ in range(2):
+        sh("rm -f /tmp/nura-cam-*.ppm")
+        out = sh(f"cam -c{idx[0]} --capture=15 -s width=1280,height=720,pixelformat=BGR888 "
+                 "--file=/tmp/nura-cam-#.ppm 2>&1", timeout=60)
+    new_faults = dmesg().count("*** gpu fault") - faults0
+    assert_(new_faults == 0, f"{new_faults} GPU fault(s) (source=CCU) while the {label} ran; "
+            "camera apps crash and the screen can go dark after one")
     fps = [float(x) for x in re.findall(r"\(([\d.]+) fps\)", out)]
     n = len(glob.glob("/tmp/nura-cam-*.ppm"))
     sh("rm -f /tmp/nura-cam-*.ppm")
