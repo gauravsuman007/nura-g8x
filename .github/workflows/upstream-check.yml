@@ -1,0 +1,38 @@
+# Weekly: does the G8x work still fit current postmarketOS? Catches the things that would make
+# `nura-update` on a phone hit a conflict, before users do. No images are built.
+name: upstream-check
+on:
+  schedule: [{cron: "0 6 * * 1"}]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get upstream pmaports
+        run: git clone -q --depth 1 https://gitlab.postmarketos.org/postmarketOS/pmaports.git ../pmaports
+      - name: libcamera still matches the G8x pin and patch
+        run: |
+          set -e
+          A=../pmaports/temp/libcamera/APKBUILD
+          ver=$(sed -n 's/^pkgver=//p' $A)
+          pin=$(grep -o 'libcamera<[0-9.]*' pmaports/device/testing/nura-g8x-tweaks/APKBUILD | cut -d'<' -f2)
+          echo "upstream libcamera $ver, G8x pin allows below $pin"
+          [ "$(printf '%s\n%s\n' "$ver" "$pin" | sort -V | head -1)" = "$ver" ] && [ "$ver" != "$pin" ] \
+            || { echo "::error::upstream libcamera $ver is outside the G8x pin (<$pin): rebase libcamera-nura-sensors.patch and bump the pin"; exit 1; }
+          python3 pmaports/patch-libcamera.py ../pmaports pmaports \
+            || { echo "::error::libcamera aport changed: patch-libcamera.py no longer applies"; exit 1; }
+      - name: libfprint version
+        run: |
+          want=$(sed -n 's/^_fpver=//p' pmaports/device/testing/nura-g8x-tweaks/APKBUILD)
+          have=$(sed -n 's/^pkgver=//p' ../pmaports/main/libfprint/APKBUILD 2>/dev/null || sed -n 's/^pkgver=//p' ../pmaports/community/libfprint/APKBUILD)
+          echo "private libfprint $want, upstream libfprint $have"
+          [ "$want" = "$have" ] || echo "::warning::upstream libfprint is $have, the G8x private copy is $want: check the egis_et713 driver still builds against fprintd"
+      - name: Kernel base
+        run: |
+          pv=$(sed -n 's/^pkgver=//p' pmaports/device/testing/linux-nura-lg-mh2lm/APKBUILD)
+          t=v$pv-sm8150
+          git ls-remote --tags https://gitlab.postmarketos.org/soc/qualcomm-sm8150/linux.git | grep -q "refs/tags/$t$" \
+            || { echo "::error::kernel base tag gone"; exit 1; }

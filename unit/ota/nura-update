@@ -1,15 +1,43 @@
 #!/bin/sh
-# Update the phone from the Nura package repository (OTA): packages, then the kernel on the boot partition.
+# Update the phone from the Nura package repositories (OTA): packages, then the kernel on the boot partition.
 # usage: nura-update [--check]
+# Foolproof rules: never start on a low battery or a full disk; if the full upgrade is refused (a
+# package from the upstream repository conflicts with a G8x pin, e.g. libcamera), still update the
+# G8x packages and leave the rest held back, and say so. Everything is logged to /var/log/nura-update.log.
 [ "$(id -u)" = 0 ] || exec sudo "$0" "$@"
-set -e
-echo "== package lists"; apk update
+LOG=/var/log/nura-update.log
+OWN="linux-nura-lg-mh2lm device-lg-mh2lm nura-g8x-tweaks"
+echo "== package lists"; apk update || { echo "Cannot reach the package repositories. Check the network and try again."; exit 1; }
 if [ "${1:-}" = --check ]; then
 	apk version -l '<' || true
 	/usr/libexec/nura-boot-update --check
 	exit 0
 fi
-echo "== upgrade"; apk upgrade -a
+
+# preflight
+bat=/sys/class/power_supply/battery
+if [ -r $bat/capacity ] && [ "$(cat $bat/status 2>/dev/null)" != Charging ] && [ "$(cat $bat/capacity)" -lt 30 ]; then
+	echo "Battery is at $(cat $bat/capacity)% and not charging. Plug in the charger and run nura-update again."; exit 1
+fi
+free=$(df -Pk / | awk 'NR==2{print int($4/1024)}')
+if [ "$free" -lt 800 ]; then
+	echo "Only $free MB free on /, need 800 MB. Free some space (apk cache clean, delete downloads) and run nura-update again."; exit 1
+fi
+
+{ date; echo "before:"; apk list -I 2>/dev/null | grep -E '^(linux-nura|device-lg-mh2lm|nura-g8x-tweaks|libcamera)-'; } >> $LOG 2>&1
+echo "== upgrade"
+if apk upgrade -a >/run/nura-update.out 2>&1; then
+	cat /run/nura-update.out; cat /run/nura-update.out >> $LOG
+else
+	cat /run/nura-update.out; cat /run/nura-update.out >> $LOG
+	echo
+	echo "The full upgrade was refused (see $LOG). Usually a newer package from the upstream"
+	echo "repository does not fit the G8x packages yet. Updating the G8x packages on their own;"
+	echo "the other packages stay as they are until the G8x packages catch up."
+	# shellcheck disable=SC2086
+	apk upgrade $OWN >/run/nura-update.out 2>&1; rc=$?; cat /run/nura-update.out; cat /run/nura-update.out >> $LOG
+	[ $rc = 0 ] || { echo "Update failed, nothing was changed that breaks the phone. Details in $LOG."; exit 1; }
+fi
 echo "== kernel"; /usr/libexec/nura-boot-update
 echo "== installed"; apk list -I 2>/dev/null | grep -E '^(linux-nura|device-lg-mh2lm|nura-g8x-tweaks)-' | cut -d' ' -f1
 if [ -e /run/nura-reboot-required ]; then

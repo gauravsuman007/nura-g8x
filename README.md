@@ -93,9 +93,21 @@ itself:
 nura-update
 ```
 
-(or `sudo apk update && sudo apk upgrade`). It updates the kernel, device
-package and tweaks package; restart when it says so. Only the latest build is
-kept in the repository.
+(or `sudo apk update && sudo apk upgrade`). It updates everything, including
+the kernel, and restart when it says so. What it does for you:
+
+- refuses to start on a battery under 30% (not charging) or under 800 MB free;
+- copies a new kernel to the active boot partition after checking it belongs
+  to this install, keeps the previous one for rollback, and reads it back
+  (this also happens by itself after a plain `apk upgrade`);
+- if a package from the upstream Nura/postmarketOS repository does not fit the
+  G8x packages yet (for example a newer libcamera), the G8x packages are still
+  updated and the others stay as they are until we catch up;
+- logs to `/var/log/nura-update.log`.
+
+A weekly CI job (`upstream-check`) tests the G8x packages against the current
+upstream repository so we notice such a mismatch before you do. Only the
+latest build is kept in the repository.
 
 Without network, copy the `.apk` files and `nura-ci.rsa.pub` from a release
 to the phone and run:
