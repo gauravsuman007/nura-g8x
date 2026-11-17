@@ -272,6 +272,21 @@ static int set_power(bool on)
 	return 0;
 }
 
+/* Length of the part of sequence @s before its first "b0 80" (manufacturer bank 0x80) command after the start. */
+static size_t seq_until_bank80(const u8 *s, size_t len)
+{
+	size_t p = 0;
+
+	while (p + 7 <= len) {
+		u16 n = (s[p + 5] << 8) | s[p + 6];
+
+		if (p && n == 2 && s[p + 7] == 0xb0 && s[p + 8] == 0x80)
+			return p;
+		p += 7 + n;
+	}
+	return len;
+}
+
 /* Send a Qualcomm-format DSI command sequence to the panel. */
 static int dsi_seq(struct mipi_dsi_device *dsi, const u8 *s, size_t len)
 {
@@ -305,7 +320,12 @@ static int dsi_seq(struct mipi_dsi_device *dsi, const u8 *s, size_t len)
 }
 
 static const u8 lhbm_brlvl[] = { 0x15,1,0,0,0,0,2,0xb0,0x80, 0x39,1,0,0,0,0,4,0xe2,0x63,0x00,0xff, 0x15,1,0,0,0,0,2,0xb0,0x03 };
-static int lhbm_mode;	/* 0 ready+on (Android), 1 on only, 2 brlvl+on, 3 ready+brlvl+on */
+static const u8 lhbm_relock[] = { 0x15,1,0,0,0,0,2,0xb0,0x03 };
+/* 0 ready+on (Android), 1 on only, 2 brlvl+on, 3 ready+brlvl+on,
+ * 4 ready up to the bank 0x80 switch (bank-0 cf setup without the d3 gamma tables) + on.
+ * Only 0 gives usable images (2026-11-17): 1, 2 and 4 are too dim. The ready sequence switches the whole panel to
+ * HBM gamma (green, bright); like Android, the shell paints everything but the spot black during a capture. */
+static int lhbm_mode;
 module_param(lhbm_mode, int, 0644);
 
 static int set_lhbm(bool on)
@@ -324,6 +344,11 @@ static int set_lhbm(bool on)
 		ret = 0;
 		if (lhbm_mode == 0 || lhbm_mode == 3)
 			ret = dsi_seq(dsi, lhbm_ready, sizeof(lhbm_ready));
+		if (lhbm_mode == 4) {
+			ret = dsi_seq(dsi, lhbm_ready, seq_until_bank80(lhbm_ready, sizeof(lhbm_ready)));
+			if (!ret)
+				ret = dsi_seq(dsi, lhbm_relock, sizeof(lhbm_relock));
+		}
 		if (!ret && lhbm_mode >= 2)
 			ret = dsi_seq(dsi, lhbm_brlvl, sizeof(lhbm_brlvl));
 		if (!ret)
