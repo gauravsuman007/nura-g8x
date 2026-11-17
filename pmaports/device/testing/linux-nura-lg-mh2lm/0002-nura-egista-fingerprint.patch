@@ -1,4 +1,3 @@
-diff -ruN '--exclude=.config' a/drivers/firmware/qcom/qcom_scm.c b/drivers/firmware/qcom/qcom_scm.c
 --- a/drivers/firmware/qcom/qcom_scm.c	2026-06-26 07:51:31.000000000 +0000
 +++ b/drivers/firmware/qcom/qcom_scm.c	2026-11-17 09:14:59.044486575 +0000
 @@ -2284,6 +2284,113 @@
@@ -115,7 +114,106 @@ diff -ruN '--exclude=.config' a/drivers/firmware/qcom/qcom_scm.c b/drivers/firmw
  /*
   * We do not yet support re-entrant calls via the qseecom interface. To prevent
   + any potential issues with this, only allow validated machines for now.
-diff -ruN '--exclude=.config' a/drivers/misc/Kconfig b/drivers/misc/Kconfig
+--- a/include/linux/firmware/qcom/qcom_scm.h	2026-06-26 07:51:31.000000000 +0000
++++ b/include/linux/firmware/qcom/qcom_scm.h	2026-11-17 09:14:59.044731157 +0000
+@@ -170,6 +170,11 @@
+ #ifdef CONFIG_QCOM_QSEECOM
+ 
+ int qcom_scm_qseecom_app_get_id(const char *app_name, u32 *app_id);
++int qcom_scm_qseecom_app_load(const void *img, size_t mdt_len, size_t img_len,
++			      u32 *app_id);
++int qcom_scm_qseecom_app_unload(u32 app_id);
++int qcom_scm_qseecom_app_send_buf(u32 app_id, void *data, size_t len);
++int qcom_scm_qseecom_raw(u32 owner, u32 svc, u32 cmd, u32 arginfo, const u64 *args, u64 *res3);
+ int qcom_scm_qseecom_app_send(u32 app_id, void *req, size_t req_size,
+ 			      void *rsp, size_t rsp_size);
+ 
+--- a/drivers/gpu/drm/panel/panel-lg-r66456.c	2026-11-17 09:14:47.335859648 +0000
++++ b/drivers/gpu/drm/panel/panel-lg-r66456.c	2026-11-17 13:14:43.000000000 +0000
+@@ -4,6 +4,7 @@
+ #include <linux/delay.h>
+ #include <linux/gpio/consumer.h>
+ #include <linux/module.h>
++#include <linux/mutex.h>
+ #include <linux/of.h>
+ #include <linux/regulator/consumer.h>
+ #include <video/mipi_display.h>
+@@ -17,9 +18,30 @@
+ 	struct mipi_dsi_device *dsi;
+ 	struct gpio_desc *reset;
+ 	struct regulator_bulk_data supplies[2];
++	struct mutex lock;	/* ready and every DSI write after the on sequence (backlight, fingerprint spot) */
+ 	bool ready;
+ };
+ 
++/*
++ * Run @fn (DSI writes to this panel, e.g. the fingerprint spot sequences of the egista driver) under the panel lock,
++ * only while the panel is on: DSI traffic while the panel is off or being switched hangs the SoC, and writes
++ * interleaved with backlight updates fight over the shared mode flags. Returns -EAGAIN when the panel is not on.
++ */
++int r66456_run_locked(struct mipi_dsi_device *dsi, int (*fn)(struct mipi_dsi_device *dsi, void *arg), void *arg);
++int r66456_run_locked(struct mipi_dsi_device *dsi, int (*fn)(struct mipi_dsi_device *dsi, void *arg), void *arg)
++{
++	struct r66456 *ctx = dsi ? mipi_dsi_get_drvdata(dsi) : NULL;
++	int ret;
++
++	if (!ctx)
++		return -ENODEV;
++	mutex_lock(&ctx->lock);
++	ret = ctx->ready ? fn(dsi, arg) : -EAGAIN;
++	mutex_unlock(&ctx->lock);
++	return ret;
++}
++EXPORT_SYMBOL_GPL(r66456_run_locked);
++
+ static int r66456_on_seq(struct r66456 *ctx)
+ {
+ 	struct mipi_dsi_device *dsi = ctx->dsi;
+@@ -74,7 +96,9 @@
+ 		dev_info(&ctx->dsi->dev, "power mode 0x%02x (%d), dsi errors 0x%02x (%d)\n",
+ 			 pm, r1, err, r2);
+ 	}
++	mutex_lock(&ctx->lock);
+ 	ctx->ready = true;
++	mutex_unlock(&ctx->lock);
+ 	/* brightness writes before ready were dropped; send the current level */
+ 	if (ctx->panel.backlight)
+ 		backlight_update_status(ctx->panel.backlight);
+@@ -88,7 +112,9 @@
+ 	const u8 unlock[] = { 0xb0, 0x03 };
+ 	const u8 bl0[] = { MIPI_DCS_SET_DISPLAY_BRIGHTNESS, 0, 0 };
+ 
++	mutex_lock(&ctx->lock);	/* waits for a running fingerprint/backlight write */
+ 	ctx->ready = false;
++	mutex_unlock(&ctx->lock);
+ 	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
+ 	mipi_dsi_dcs_write_buffer(dsi, unlock, sizeof(unlock));
+ 	mipi_dsi_dcs_write_buffer(dsi, bl0, sizeof(bl0));
+@@ -142,11 +168,15 @@
+ 	u8 cmd[3] = { MIPI_DCS_SET_DISPLAY_BRIGHTNESS, lvl >> 8, lvl & 0xff };
+ 	int ret;
+ 
+-	if (!ctx->ready)
++	mutex_lock(&ctx->lock);
++	if (!ctx->ready) {
++		mutex_unlock(&ctx->lock);
+ 		return 0;
++	}
+ 	dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
+ 	ret = mipi_dsi_dcs_write_buffer(dsi, cmd, sizeof(cmd));
+ 	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
++	mutex_unlock(&ctx->lock);
+ 	return ret < 0 ? ret : 0;
+ }
+ 
+@@ -180,6 +210,7 @@
+ 		return PTR_ERR(ctx->reset);
+ 
+ 	ctx->dsi = dsi;
++	mutex_init(&ctx->lock);
+ 	mipi_dsi_set_drvdata(dsi, ctx);
+ 	dsi->lanes = 4;
+ 	dsi->format = MIPI_DSI_FMT_RGB888;
 --- a/drivers/misc/Kconfig	2026-06-26 07:51:31.000000000 +0000
 +++ b/drivers/misc/Kconfig	2026-11-17 09:14:59.076567795 +0000
 @@ -660,4 +660,5 @@
@@ -124,7 +222,6 @@ diff -ruN '--exclude=.config' a/drivers/misc/Kconfig b/drivers/misc/Kconfig
  source "drivers/misc/rp1/Kconfig"
 +source "drivers/misc/egista/Kconfig"
  endmenu
-diff -ruN '--exclude=.config' a/drivers/misc/Makefile b/drivers/misc/Makefile
 --- a/drivers/misc/Makefile	2026-06-26 07:51:31.000000000 +0000
 +++ b/drivers/misc/Makefile	2026-11-17 09:14:59.076705544 +0000
 @@ -75,3 +75,4 @@
@@ -132,9 +229,8 @@ diff -ruN '--exclude=.config' a/drivers/misc/Makefile b/drivers/misc/Makefile
  obj-y				+= amd-sbi/
  obj-$(CONFIG_MISC_RP1)		+= rp1/
 +obj-$(CONFIG_NURA_EGISTA)	+= egista/
-diff -ruN '--exclude=.config' a/drivers/misc/egista/Kconfig b/drivers/misc/egista/Kconfig
 --- a/drivers/misc/egista/Kconfig	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/misc/egista/Kconfig	2026-11-17 09:14:59.076393170 +0000
++++ b/drivers/misc/egista/Kconfig	1970-01-01 00:00:00.000000000 +0000
 @@ -0,0 +1,7 @@
 +config NURA_EGISTA
 +	tristate "LG G8x Egistec ET713 fingerprint trustlet interface"
@@ -143,15 +239,13 @@ diff -ruN '--exclude=.config' a/drivers/misc/egista/Kconfig b/drivers/misc/egist
 +	  /dev/egista: loads the Egistec "egista" QSEE trustlet, powers the
 +	  ET713 under-display sensor, lights the panel's fingerprint spot and
 +	  forwards trustlet listener requests to userspace (egistad).
-diff -ruN '--exclude=.config' a/drivers/misc/egista/Makefile b/drivers/misc/egista/Makefile
 --- a/drivers/misc/egista/Makefile	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/misc/egista/Makefile	2026-11-17 09:14:59.076347379 +0000
++++ b/drivers/misc/egista/Makefile	1970-01-01 00:00:00.000000000 +0000
 @@ -0,0 +1 @@
 +obj-$(CONFIG_NURA_EGISTA) += egista.o
-diff -ruN '--exclude=.config' a/drivers/misc/egista/egista.c b/drivers/misc/egista/egista.c
 --- a/drivers/misc/egista/egista.c	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/misc/egista/egista.c	2026-11-17 09:14:59.075573548 +0000
-@@ -0,0 +1,728 @@
++++ b/drivers/misc/egista/egista.c	1970-01-01 00:00:00.000000000 +0000
+@@ -0,0 +1,789 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * egista: /dev/egista for the LG G8x Egistec ET713 in-display fingerprint sensor (experimental, nura 2026-11-16).
@@ -426,6 +520,21 @@ diff -ruN '--exclude=.config' a/drivers/misc/egista/egista.c b/drivers/misc/egis
 +	return 0;
 +}
 +
++/* Length of the part of sequence @s before its first "b0 80" (manufacturer bank 0x80) command after the start. */
++static size_t seq_until_bank80(const u8 *s, size_t len)
++{
++	size_t p = 0;
++
++	while (p + 7 <= len) {
++		u16 n = (s[p + 5] << 8) | s[p + 6];
++
++		if (p && n == 2 && s[p + 7] == 0xb0 && s[p + 8] == 0x80)
++			return p;
++		p += 7 + n;
++	}
++	return len;
++}
++
 +/* Send a Qualcomm-format DSI command sequence to the panel. */
 +static int dsi_seq(struct mipi_dsi_device *dsi, const u8 *s, size_t len)
 +{
@@ -459,8 +568,68 @@ diff -ruN '--exclude=.config' a/drivers/misc/egista/egista.c b/drivers/misc/egis
 +}
 +
 +static const u8 lhbm_brlvl[] = { 0x15,1,0,0,0,0,2,0xb0,0x80, 0x39,1,0,0,0,0,4,0xe2,0x63,0x00,0xff, 0x15,1,0,0,0,0,2,0xb0,0x03 };
-+static int lhbm_mode;	/* 0 ready+on (Android), 1 on only, 2 brlvl+on, 3 ready+brlvl+on */
++static const u8 lhbm_relock[] = { 0x15,1,0,0,0,0,2,0xb0,0x03 };
++/* 0 ready+on (Android), 1 on only, 2 brlvl+on, 3 ready+brlvl+on,
++ * 4 ready up to the bank 0x80 switch (bank-0 cf setup without the d3 gamma tables) + on.
++ * Only 0 gives usable images (2026-11-17): 1, 2 and 4 are too dim. The ready sequence switches the whole panel to
++ * HBM gamma (green, bright); like Android, the shell paints everything but the spot black during a capture. */
++static int lhbm_mode;
 +module_param(lhbm_mode, int, 0644);
++/* bit n set: leave out command n of lhbm_ready (0 b0 00, 1-10 bank-0 cf writes, 11 b0 80, 12-13 small d3, 14-15
++ * large d3 table, 16 b0 03). Tested 2026-11-17: the large bank-0x80 d3 table is what makes the spot bright enough
++ * (without it every image is too dim); it also brightens/tints the whole panel for the capture (the panel has no
++ * spot-only HBM). The bank-0 cf writes and the small d3 table only add a visible flicker, so they are left out. */
++static unsigned int lhbm_skip = 0x27fe;
++module_param(lhbm_skip, uint, 0644);
++
++/* dsi_seq() over the commands of @s whose bit is clear in @skip */
++static int dsi_seq_skip(struct mipi_dsi_device *dsi, const u8 *s, size_t len, unsigned int skip)
++{
++	size_t p = 0;
++	int i = 0, ret = 0;
++
++	while (p + 7 <= len && !ret) {
++		size_t n = 7 + ((s[p + 5] << 8) | s[p + 6]);
++
++		if (p + n > len)
++			break;
++		if (!(skip & (1u << i)))
++			ret = dsi_seq(dsi, s + p, n);
++		p += n;
++		i++;
++	}
++	return ret;
++}
++
++/* panel-lg-r66456: runs @fn under the panel lock while the panel is on (-EAGAIN otherwise) */
++int r66456_run_locked(struct mipi_dsi_device *dsi, int (*fn)(struct mipi_dsi_device *dsi, void *arg), void *arg);
++
++static int lhbm_seq_locked(struct mipi_dsi_device *dsi, void *arg)
++{
++	bool on = (uintptr_t)arg;
++	int ret = 0;
++
++	if (on) {
++		if (lhbm_mode == 0 || lhbm_mode == 3)
++			ret = dsi_seq_skip(dsi, lhbm_ready, sizeof(lhbm_ready), lhbm_skip);
++		if (lhbm_mode == 4) {
++			ret = dsi_seq(dsi, lhbm_ready, seq_until_bank80(lhbm_ready, sizeof(lhbm_ready)));
++			if (!ret)
++				ret = dsi_seq(dsi, lhbm_relock, sizeof(lhbm_relock));
++		}
++		if (!ret && lhbm_mode >= 2 && lhbm_mode <= 3)
++			ret = dsi_seq(dsi, lhbm_brlvl, sizeof(lhbm_brlvl));
++		if (!ret)
++			ret = dsi_seq(dsi, lhbm_on, sizeof(lhbm_on));
++	} else {
++		ret = dsi_seq(dsi, lhbm_off, sizeof(lhbm_off));
++		if (!ret)
++			ret = dsi_seq(dsi, lhbm_exit, sizeof(lhbm_exit));
++		if (!ret)
++			ret = dsi_seq(dsi, lhbm_exit_post, sizeof(lhbm_exit_post));
++	}
++	return ret;
++}
 +
 +static int set_lhbm(bool on)
 +{
@@ -474,21 +643,7 @@ diff -ruN '--exclude=.config' a/drivers/misc/egista/egista.c b/drivers/misc/egis
 +	of_node_put(np);
 +	if (!dsi)
 +		return -ENODEV;
-+	if (on) {
-+		ret = 0;
-+		if (lhbm_mode == 0 || lhbm_mode == 3)
-+			ret = dsi_seq(dsi, lhbm_ready, sizeof(lhbm_ready));
-+		if (!ret && lhbm_mode >= 2)
-+			ret = dsi_seq(dsi, lhbm_brlvl, sizeof(lhbm_brlvl));
-+		if (!ret)
-+			ret = dsi_seq(dsi, lhbm_on, sizeof(lhbm_on));
-+	} else {
-+		ret = dsi_seq(dsi, lhbm_off, sizeof(lhbm_off));
-+		if (!ret)
-+			ret = dsi_seq(dsi, lhbm_exit, sizeof(lhbm_exit));
-+		if (!ret)
-+			ret = dsi_seq(dsi, lhbm_exit_post, sizeof(lhbm_exit_post));
-+	}
++	ret = r66456_run_locked(dsi, lhbm_seq_locked, (void *)(uintptr_t)on);
 +	put_device(&dsi->dev);
 +	pr_info("egista: lhbm %s ret=%d\n", on ? "on" : "off", ret);
 +	return ret;
@@ -880,9 +1035,8 @@ diff -ruN '--exclude=.config' a/drivers/misc/egista/egista.c b/drivers/misc/egis
 +module_exit(egista_exit);
 +MODULE_DESCRIPTION("LG G8x Egistec ET713 fingerprint trustlet bridge (experimental)");
 +MODULE_LICENSE("GPL");
-diff -ruN '--exclude=.config' a/drivers/misc/egista/egista.h b/drivers/misc/egista/egista.h
 --- a/drivers/misc/egista/egista.h	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/misc/egista/egista.h	2026-11-17 09:14:59.075914047 +0000
++++ b/drivers/misc/egista/egista.h	1970-01-01 00:00:00.000000000 +0000
 @@ -0,0 +1,53 @@
 +/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 +/* /dev/egista ioctls (LG G8x Egistec ET713 fingerprint trustlet bridge, experimental) */
@@ -937,9 +1091,8 @@ diff -ruN '--exclude=.config' a/drivers/misc/egista/egista.h b/drivers/misc/egis
 +#define EGISTA_IOC_TZDIAG	_IOWR('E', 12, struct egista_log)	/* ptr=0: reg_ret = diag phys; else copy the TZ diag area */
 +#define EGISTA_IOC_LOG		_IOWR('E', 11, struct egista_log)	/* register (first call) and read the QSEE log buffer */
 +#endif
-diff -ruN '--exclude=.config' a/drivers/misc/egista/lhbm-seq.h b/drivers/misc/egista/lhbm-seq.h
 --- a/drivers/misc/egista/lhbm-seq.h	1970-01-01 00:00:00.000000000 +0000
-+++ b/drivers/misc/egista/lhbm-seq.h	2026-11-17 09:14:59.076128338 +0000
++++ b/drivers/misc/egista/lhbm-seq.h	1970-01-01 00:00:00.000000000 +0000
 @@ -0,0 +1,56 @@
 +/* LG R66456 (Tianma) fingerprint local-HBM DSI sequences, from the stock mh2lm dtbo (r66456_tianmamd_pv).
 + * Qualcomm cmd format: dtype, last, vc, ack, wait_ms, len(be16), payload. */
@@ -997,18 +1150,3 @@ diff -ruN '--exclude=.config' a/drivers/misc/egista/lhbm-seq.h b/drivers/misc/eg
 +static const u8 norm_irc[] = { /* 6 cmds */
 +	0x15, 0x01, 0x00, 0x00, 0x00, 0x00, 0x02, 0xb0, 0x80, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xf1, 0x04, 0x39, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, 0xd3, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xf1, 0x38, 0x39, 0x01, 0x00, 0x00, 0x00, 0x00, 0x59, 0xd3, 0xea, 0xfb, 0xfb, 0xfb, 0xf5, 0xfb, 0xfb, 0xf5, 0xf0, 0xf8, 0xf8, 0xf0, 0xed, 0xf0, 0xf0, 0xed, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xfe, 0xfe, 0xfe, 0xfd, 0xfd, 0xfd, 0xfd, 0xfc, 0xfc, 0xfc, 0xfc, 0xd6, 0xff, 0xc4, 0x5b, 0x5e, 0x61, 0x64, 0x67, 0x6a, 0x6d, 0x70, 0x73, 0x76, 0x79, 0x7b, 0x7c, 0x7e, 0x7f, 0x7f, 0x80, 0x5b, 0x5e, 0x61, 0x64, 0x67, 0x6a, 0x6d, 0x70, 0x73, 0x76, 0x79, 0x7b, 0x7c, 0x7e, 0x7f, 0x7f, 0x80, 0x5b, 0x5e, 0x61, 0x64, 0x67, 0x6a, 0x6d, 0x70, 0x73, 0x76, 0x79, 0x7b, 0x7c, 0x7e, 0x7f, 0x7f, 0x80, 0x17, 0xbb, 0x15, 0x01, 0x00, 0x00, 0x14, 0x00, 0x02, 0xb0, 0x03,
 +};
-diff -ruN '--exclude=.config' a/include/linux/firmware/qcom/qcom_scm.h b/include/linux/firmware/qcom/qcom_scm.h
---- a/include/linux/firmware/qcom/qcom_scm.h	2026-06-26 07:51:31.000000000 +0000
-+++ b/include/linux/firmware/qcom/qcom_scm.h	2026-11-17 09:14:59.044731157 +0000
-@@ -170,6 +170,11 @@
- #ifdef CONFIG_QCOM_QSEECOM
- 
- int qcom_scm_qseecom_app_get_id(const char *app_name, u32 *app_id);
-+int qcom_scm_qseecom_app_load(const void *img, size_t mdt_len, size_t img_len,
-+			      u32 *app_id);
-+int qcom_scm_qseecom_app_unload(u32 app_id);
-+int qcom_scm_qseecom_app_send_buf(u32 app_id, void *data, size_t len);
-+int qcom_scm_qseecom_raw(u32 owner, u32 svc, u32 cmd, u32 arginfo, const u64 *args, u64 *res3);
- int qcom_scm_qseecom_app_send(u32 app_id, void *req, size_t req_size,
- 			      void *rsp, size_t rsp_size);
- 

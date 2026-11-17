@@ -192,7 +192,11 @@ class Sensor:
         # watchdog then resets the phone)
         if not panel_on():
             return False
-        self.e.lhbm(True)
+        try:
+            self.e.lhbm(True)
+        except OSError as ex:                 # the panel driver refuses while the panel is off/switching (-EAGAIN)
+            self.log('spot refused', ex)
+            return False
         # the panel needs a frame or two to light the spot (an image taken at once is dim and does not match), and on
         # the lock screen the shell draws the black ring around the circle only once the finger is down
         time.sleep(0.15 if wait and self.ui else 0.06)
@@ -204,7 +208,10 @@ class Sensor:
                 if not self.touch.poll(0):
                     break
         finally:
-            self.e.lhbm(False)
+            try:
+                self.e.lhbm(False)
+            except OSError as ex:
+                self.log('spot off refused', ex)
         return False
 
     def enroll(self):

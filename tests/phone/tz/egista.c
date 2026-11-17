@@ -353,6 +353,36 @@ static int dsi_seq_skip(struct mipi_dsi_device *dsi, const u8 *s, size_t len, un
 	return ret;
 }
 
+/* panel-lg-r66456: runs @fn under the panel lock while the panel is on (-EAGAIN otherwise) */
+int r66456_run_locked(struct mipi_dsi_device *dsi, int (*fn)(struct mipi_dsi_device *dsi, void *arg), void *arg);
+
+static int lhbm_seq_locked(struct mipi_dsi_device *dsi, void *arg)
+{
+	bool on = (uintptr_t)arg;
+	int ret = 0;
+
+	if (on) {
+		if (lhbm_mode == 0 || lhbm_mode == 3)
+			ret = dsi_seq_skip(dsi, lhbm_ready, sizeof(lhbm_ready), lhbm_skip);
+		if (lhbm_mode == 4) {
+			ret = dsi_seq(dsi, lhbm_ready, seq_until_bank80(lhbm_ready, sizeof(lhbm_ready)));
+			if (!ret)
+				ret = dsi_seq(dsi, lhbm_relock, sizeof(lhbm_relock));
+		}
+		if (!ret && lhbm_mode >= 2 && lhbm_mode <= 3)
+			ret = dsi_seq(dsi, lhbm_brlvl, sizeof(lhbm_brlvl));
+		if (!ret)
+			ret = dsi_seq(dsi, lhbm_on, sizeof(lhbm_on));
+	} else {
+		ret = dsi_seq(dsi, lhbm_off, sizeof(lhbm_off));
+		if (!ret)
+			ret = dsi_seq(dsi, lhbm_exit, sizeof(lhbm_exit));
+		if (!ret)
+			ret = dsi_seq(dsi, lhbm_exit_post, sizeof(lhbm_exit_post));
+	}
+	return ret;
+}
+
 static int set_lhbm(bool on)
 {
 	struct device_node *np = of_find_compatible_node(NULL, NULL, "lg,mh2lm-r66456");
@@ -365,26 +395,7 @@ static int set_lhbm(bool on)
 	of_node_put(np);
 	if (!dsi)
 		return -ENODEV;
-	if (on) {
-		ret = 0;
-		if (lhbm_mode == 0 || lhbm_mode == 3)
-			ret = dsi_seq_skip(dsi, lhbm_ready, sizeof(lhbm_ready), lhbm_skip);
-		if (lhbm_mode == 4) {
-			ret = dsi_seq(dsi, lhbm_ready, seq_until_bank80(lhbm_ready, sizeof(lhbm_ready)));
-			if (!ret)
-				ret = dsi_seq(dsi, lhbm_relock, sizeof(lhbm_relock));
-		}
-		if (!ret && lhbm_mode >= 2)
-			ret = dsi_seq(dsi, lhbm_brlvl, sizeof(lhbm_brlvl));
-		if (!ret)
-			ret = dsi_seq(dsi, lhbm_on, sizeof(lhbm_on));
-	} else {
-		ret = dsi_seq(dsi, lhbm_off, sizeof(lhbm_off));
-		if (!ret)
-			ret = dsi_seq(dsi, lhbm_exit, sizeof(lhbm_exit));
-		if (!ret)
-			ret = dsi_seq(dsi, lhbm_exit_post, sizeof(lhbm_exit_post));
-	}
+	ret = r66456_run_locked(dsi, lhbm_seq_locked, (void *)(uintptr_t)on);
 	put_device(&dsi->dev);
 	pr_info("egista: lhbm %s ret=%d\n", on ? "on" : "off", ret);
 	return ret;

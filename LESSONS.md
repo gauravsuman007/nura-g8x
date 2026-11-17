@@ -1825,3 +1825,33 @@ fprintd see the enrolled finger, fingerprint test group 6/6.
   gdm-fingerprint conversation and GNOME Shell does not start a new one on the same lock screen, so the circle stays
   but nothing listens (no IDENTIFY in the egistad log, no haptics). gdm-fingerprint now uses
   `pam_fprintd.so max-tries=100 timeout=86400`.
+
+## Fingerprint UI, sudo/polkit, LHBM and the panel lock (2026-11-17, kernel r8, tweaks r29)
+- Lock screen and polkit dialog hold a Clutter grab: anything drawn outside them cannot be touched, and a touch on the
+  circle reached the lock screen's tap gesture and opened the PIN pad. The extension draws one layer inside whichever
+  actor holds the grab (unlock dialog, polkit dialog, else uiGroup) and rebuilds it when that host is destroyed.
+- GNOME mobile lock screen: fingerprint mode = clock page + circle + "Use PIN"; PIN mode = pad + "Use fingerprint"
+  (follows `_promptBox` translation-y). egistad only captures while the shell reports the circle shown (UI socket
+  /run/egistad-ui.sock: WAIT/DOWN/UP/MATCH/NOMATCH/IDLE, SHOW/CANCEL). GNOME's "(or place finger on reader)" hint is
+  dropped in PIN mode via InjectionManager on AuthPrompt.setMessage. St: `children:` in a constructor is not accepted
+  in GNOME 48 (the error silently aborted the lock hook); a transparent CSS border still shows the background.
+- pam_fprintd default timeout (30 s) ends gdm-fingerprint and GNOME does not restart it on the same lock screen:
+  `max-tries=100 timeout=86400` there.
+- sudo-rs has no PAM file by default (falls back to "other"); pam_fprintd does not skip ssh for sudo-rs (no
+  PAM_RHOST): nura-fp-local walks the process tree for sshd. pam_exec runs helpers with the caller's real uid
+  (sudo/polkit: the user) unless `seteuid` is given. The test image's NOPASSWD rule hid all of this; the CI image
+  password is the workflow's IMAGE_PASSWORD.
+- Greeter: /etc/dconf/db/gdm.d only applies with DCONF_PROFILE=gdm, which the GDM 48 greeter shell (systemd user
+  service of the dynamic gdm-greeter user) does not get; nura-greeter-nofp writes the key into that user's own db.
+- Optical sensor: bright pixels next to the spot (terminal, keyboard) ruin captures; a black ring around the circle
+  fixed sudo matches (lock screen was dark already). Capture right after LHBM on is dim: wait 60-150 ms.
+- LHBM on the R66456: spot-only commands (lhbm_mode 1/2/4) give images too dim to use. LG's ready sequence: bank-0 cf
+  writes and the small bank-0x80 d3 table only add flicker; the large bank-0x80 d3 table is required and switches the
+  whole panel to HBM gamma (green, brighter) for the capture: there is no spot-only HBM, Android hides it with a dim
+  layer. Default now `lhbm_skip=0x27fe` + a 45 % dim layer while the finger is down (full black was too distracting).
+- Hard resets (pon_reason HR, journal just stops) on unlock: egista wrote DSI with no panel state check and no
+  coordination with backlight writes (auto-brightness). Kernel r8: panel-lg-r66456 has a lock around ready and all
+  writes after the on sequence, and exports r66456_run_locked(); egista sends the spot sequences only through it
+  (-EAGAIN when the panel is not on); egistad also checks DPMS. Repeated key presses on a hung phone also give HR.
+- Out-of-tree rebuild of one in-tree module for the running kernel: no MODVERSIONS, so a Module.symvers listing the
+  module's undefined symbols (any CRC) + `make modules_prepare` + `make M=<dir>` gives a loadable .ko.

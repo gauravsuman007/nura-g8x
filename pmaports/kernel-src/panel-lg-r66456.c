@@ -4,6 +4,7 @@
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/regulator/consumer.h>
 #include <video/mipi_display.h>
@@ -17,8 +18,29 @@ struct r66456 {
 	struct mipi_dsi_device *dsi;
 	struct gpio_desc *reset;
 	struct regulator_bulk_data supplies[2];
+	struct mutex lock;	/* ready and every DSI write after the on sequence (backlight, fingerprint spot) */
 	bool ready;
 };
+
+/*
+ * Run @fn (DSI writes to this panel, e.g. the fingerprint spot sequences of the egista driver) under the panel lock,
+ * only while the panel is on: DSI traffic while the panel is off or being switched hangs the SoC, and writes
+ * interleaved with backlight updates fight over the shared mode flags. Returns -EAGAIN when the panel is not on.
+ */
+int r66456_run_locked(struct mipi_dsi_device *dsi, int (*fn)(struct mipi_dsi_device *dsi, void *arg), void *arg);
+int r66456_run_locked(struct mipi_dsi_device *dsi, int (*fn)(struct mipi_dsi_device *dsi, void *arg), void *arg)
+{
+	struct r66456 *ctx = dsi ? mipi_dsi_get_drvdata(dsi) : NULL;
+	int ret;
+
+	if (!ctx)
+		return -ENODEV;
+	mutex_lock(&ctx->lock);
+	ret = ctx->ready ? fn(dsi, arg) : -EAGAIN;
+	mutex_unlock(&ctx->lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(r66456_run_locked);
 
 static int r66456_on_seq(struct r66456 *ctx)
 {
@@ -74,7 +96,9 @@ static int r66456_prepare(struct drm_panel *panel)
 		dev_info(&ctx->dsi->dev, "power mode 0x%02x (%d), dsi errors 0x%02x (%d)\n",
 			 pm, r1, err, r2);
 	}
+	mutex_lock(&ctx->lock);
 	ctx->ready = true;
+	mutex_unlock(&ctx->lock);
 	/* brightness writes before ready were dropped; send the current level */
 	if (ctx->panel.backlight)
 		backlight_update_status(ctx->panel.backlight);
@@ -88,7 +112,9 @@ static int r66456_unprepare(struct drm_panel *panel)
 	const u8 unlock[] = { 0xb0, 0x03 };
 	const u8 bl0[] = { MIPI_DCS_SET_DISPLAY_BRIGHTNESS, 0, 0 };
 
+	mutex_lock(&ctx->lock);	/* waits for a running fingerprint/backlight write */
 	ctx->ready = false;
+	mutex_unlock(&ctx->lock);
 	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
 	mipi_dsi_dcs_write_buffer(dsi, unlock, sizeof(unlock));
 	mipi_dsi_dcs_write_buffer(dsi, bl0, sizeof(bl0));
@@ -142,11 +168,15 @@ static int r66456_bl_update(struct backlight_device *bl)
 	u8 cmd[3] = { MIPI_DCS_SET_DISPLAY_BRIGHTNESS, lvl >> 8, lvl & 0xff };
 	int ret;
 
-	if (!ctx->ready)
+	mutex_lock(&ctx->lock);
+	if (!ctx->ready) {
+		mutex_unlock(&ctx->lock);
 		return 0;
+	}
 	dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
 	ret = mipi_dsi_dcs_write_buffer(dsi, cmd, sizeof(cmd));
 	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
+	mutex_unlock(&ctx->lock);
 	return ret < 0 ? ret : 0;
 }
 
@@ -180,6 +210,7 @@ static int r66456_probe(struct mipi_dsi_device *dsi)
 		return PTR_ERR(ctx->reset);
 
 	ctx->dsi = dsi;
+	mutex_init(&ctx->lock);
 	mipi_dsi_set_drvdata(dsi, ctx);
 	dsi->lanes = 4;
 	dsi->format = MIPI_DSI_FMT_RGB888;

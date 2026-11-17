@@ -360,6 +360,10 @@ export default class G8xFingerprint extends Extension {
         // black panel behind the whole request (outside the lock screen): nothing bright around the circle
         this._backdrop = new St.Widget({reactive: true, visible: false, style: 'background-color: black; border-radius: 28px;'});
         this._layer.add_child(this._backdrop);
+        // light dimming of the rest of the phone panel during a capture: the spot's HBM gamma briefly brightens and
+        // tints the whole panel (it has no spot-only HBM); this evens that out without blanking the screen
+        this._dim = new St.Widget({reactive: false, visible: false, style: 'background-color: rgba(0,0,0,0.45);'});
+        this._layer.add_child(this._dim);
         // the circle: reactive so a touch on it never reaches what is underneath (lock-screen tap, keyboard keys)
         this._ring = new St.Widget({reactive: true, visible: false});
         this._spot = new St.Widget({reactive: true, visible: false});
@@ -391,7 +395,7 @@ export default class G8xFingerprint extends Extension {
         }
         this._hostDestroyId = 0;
         this._layer?.destroy();
-        this._layer = this._spot = this._ring = this._card = this._backdrop = null;
+        this._layer = this._spot = this._ring = this._card = this._backdrop = this._dim = null;
         this._remote = [];
         this._host = null;
     }
@@ -432,7 +436,7 @@ export default class G8xFingerprint extends Extension {
             host.add_child(this._layer);
             // the lock screen and the polkit dialog are destroyed when done, taking the layer with them
             this._hostDestroyId = host.connect('destroy', () => {
-                this._layer = this._spot = this._ring = this._card = this._backdrop = null;
+                this._layer = this._spot = this._ring = this._card = this._backdrop = this._dim = null;
                 this._remote = [];
                 this._host = null;
                 this._hostDestroyId = 0;
@@ -502,6 +506,12 @@ export default class G8xFingerprint extends Extension {
         }
         this._ring.visible = showSpot;
         this._spot.visible = showSpot;
+        this._dim.visible = showSpot && Boolean(this._touching);
+        if (this._dim.visible) {
+            this._dim.set_position(g.m.x - ox, g.m.y - oy);
+            this._dim.set_size(g.m.width, g.m.height);
+            this._layer.set_child_above_sibling(this._dim, null);
+        }
         if (showSpot) {
             this._layer.set_child_above_sibling(this._ring, null);
             this._layer.set_child_above_sibling(this._spot, null);
