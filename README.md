@@ -1,129 +1,148 @@
 # Nura on the LG G8x ThinQ (mh2lm)
 
-Nura (a renamed postmarketOS) with GNOME Mobile on the LG G8x ThinQ
-(LM-G850EM, Snapdragon 855 / SM8150), running a mainline 7.0 kernel.
+A port of Nura (a renamed postmarketOS) with GNOME Mobile to the **LG G8x
+ThinQ (LM-G850EM, Snapdragon 855 / SM8150)**, running a mainline Linux 7.0
+kernel. It is hardware enablement work: a device tree, a handful of drivers
+and kernel patches, a device package and a tweaks package. Patches that belong
+in other projects are prepared for upstream (`pmaports/upstream-patches/`,
+`UPSTREAM.md`).
 
-See [LESSONS.md](LESSONS.md) for how each part was made to work, what went
-wrong, and how to recover a phone with both boot slots marked unbootable.
+This is community bring-up work, tested on one phone. Use it at your own risk
+and back up the phone first.
 
-## Status
+## What works
 
-Flashed to boot_b on 2026-11-14 as build #78 (`out/boot-flash.img`, #77 in `out/boot-flash-77.img`): the rear lens (LC898123 OIS/AF) is powered only while the main camera streams, off in suspend (it was always on: standby drain). Before that, build #77 (`out/boot-flash.img`; #68 in `out/boot-flash-prev.img`): whole-SoC deep sleep in suspend (PMIC wake via PDC, interconnect sync_state, GENI UART, WCD MCLK, SLIMbus channel removal, sound routing loop, GPU DDR votes). Flashed to boot_b on 2026-11-12 as build #68: battery hold at the charge limit, charge current/voltage settings (previous #67 in `out/boot-flash-prev.img`). Before that, build #67: the dock now survives a reboot while docked (clean Type-C detach at boot; previous #66 in `out/boot-flash-prev.img`). Before that, build #66 with USB-C dock support (`out/boot-flash.img`, previous #53 in `out/boot-flash-prev.img`). Flashed 2026-11-10 with hardware H.264/HEVC decode. Earlier: flashed on 2026-11-08 (`out/boot-flash.img`, built with
-`TEST=0 OUT=out/boot-flash.img python3 build-dtb.py`; previous image kept as
-`out/boot-nura-good.img`).
+| Area | State |
+|---|---|
+| Boot from flash, SSH over USB, storage, CPU scaling | works |
+| Display (OLED panel driver), touch, GPU (tiled rendering, no faults) | works |
+| Battery, charging, charge limit with hold, GNOME Preserve Battery Health | works |
+| Wi-Fi 2.4 and 5 GHz, Bluetooth | works |
+| Deep sleep in suspend (whole SoC, with Wi-Fi, audio and sensors loaded) | works |
+| Speakers (two CS35L41), built-in microphone | works |
+| Cameras: rear main, rear wide, front (30 fps through libcamera, GNOME Snapshot); manual focus | works, no autofocus |
+| Fingerprint (ET713): GNOME lock screen and admin (polkit) dialogs | works; login screen stays password-only |
+| Proximity, accelerometer, compass, gyroscope, ambient light (SLPI sensors) | works |
+| Auto-rotate, auto-brightness | works |
+| USB-C dock: external monitor over DisplayPort (up to 2560x1440 at 60 Hz), USB 3 devices, USB audio, Gigabit Ethernet | works, tested with a Dell Thunderbolt dock |
+| NFC (NXP NCI), flashlight, vibration, hardware H.264/HEVC decode | works |
+| Remote desktop (GNOME Settings, System, Remote Desktop) | works while unlocked |
+| Optional Assistant-key helpers (power button replacement, 8 s forced restart) | works, off by default |
+| 30 s hardware watchdog (a hung phone resets itself) | works |
 
-Working: boot from flash (slot b, marked successful every boot), SSH over USB,
-storage, CPU scaling, battery and charging, Bluetooth, GPU,
-touchscreen, real DSI panel driver (OLED), GNOME, 5-minute screen blank with
-volume-down wake, touch ignored while dark and volume keys ignored while
-dark and covered (pocket guard), proximity, accelerometer and compass
-(SLPI sensors; when the SLPI starts without its sensor service, about 1 boot in 10,
-`nura-sensor-check` restarts it automatically), ambient light with GNOME auto-brightness, speakers (two CS35L41),
-built-in microphone (boot race fixed 2026-11-09: codec MCLK held on, 8 of 8 boots good), Wi-Fi on 2.4 and 5 GHz, modem GPS engine (no fix tested yet), flashlight
-and vibration, GPU with tiled (GMEM) rendering and no faults or hangs
-(64 KiB GPU address alignment, `extra-msm-va-align.py`), NFC (`nfc0`, NXP NCI
-on I2C9, needs `gpi_dma1`), optional Assistant-key helpers
-(`/etc/nura/keys.conf`, both off by default: Assistant as power button; hold
-Assistant + Volume Down to restart a frozen phone, handled in the kernel).
-Kernel flashed to boot_b on 2026-11-08 (`out/boot-flash.img`; previous ones
-kept as `out/boot-flash-prev.img` and `out/boot-flash-prev2.img`).
-Flashed 2026-11-12 (build #66): **USB-C docks work**: external monitor over
-DisplayPort alt mode (up to 2560x1440 at 60 Hz on 2 lanes), automatic docked
-mode (the monitor becomes the GNOME desktop on plug-in, `nura-dock` user
-service), dock USB at 5 Gbit/s with keyboard, mouse, USB audio and Gigabit
-Ethernet; tested with a Dell Thunderbolt dock. See LESSONS.md "USB-C dock".
-Flashed 2026-11-09: gyroscope as an input motion device (`nura-gyro`),
-USB-C Type-C/PD with DisplayPort alt mode, auto-rotate (mount matrix on fastrpc-adsp), Assistant key as power plus
-Assistant + Volume Down 8 s restart. `out/probes/dpshot.sh` screenshots both
-screens; `out/probes/dpmode.py WxH` sets the DP mode.
-Untested: headphone jack and headset mic (WCD9340, set up), GPS fix.
-No flip-cover Hall sensor exists; the DualScreen case's is behind TrustZone.
-Remote desktop: stock GNOME (Settings > System > Remote Desktop), no custom
-code; port 3389 shares the phone's own screen (user `nura`, while unlocked;
-auto-lock is off). Needs the login keyring unlocked. Test: `out/probes/rdptest.sh`.
-Updates: run `nura-update` in a terminal on the phone (packages and kernel; restart when it says so).
+All of these are configurable under **Settings > LG G8x Tweaks**.
 
-Fingerprint: unlocks the GNOME lock screen and admin (polkit) dialogs; the login screen stays password-only. Packaged in kernel r7 and nura-g8x-tweaks r26 (egistad, libfprint egis_et713 driver). See plans/fingerprint.md. LG G8x Tweaks can switch to GNOME's own fingerprint handling only (FP_CUSTOM=0).
-Cameras (2026-11-09): rear main IMX363 4032x3024, front S5KGD1 3264x2448 and
-rear wide S5K3M3 4160x3120 (new drivers from LG's register tables) all stream at 30 fps through libcamera with
-the GPU soft ISP (`cam -l`, GNOME Snapshot through PipeWire). Rear lens focus
-works as a manual V4L2 control (LC898123F40, `focus_absolute`); libcamera's
-simple pipeline has no autofocus algorithm. Flashed to boot_b 2026-11-09 (`out/boot-charge-flash.img`, with the charge limit; previous in
-`out/boot-flash-prev7.img`): upstream-form CAMSS (no DT clock hacks), all three cameras with fixed rotation and brighter start exposure, focus lens, mic MCLK fix,
-Assistant key hold 300 ms; boot, audio and camera suite groups all pass.
-Camera quality work (2026-11-09): names Main/Wide/Front (WirePlumber rule),
-LG colour matrices as libcamera tuning files (`unit/camera/tuning/`), and a
-patched libcamera with sensor helpers for the three sensors
-(`pmaports/libcamera-nura-sensors.patch`, built on the phone).
+## What does not work, or is untested
 
-## Layout
+- **Calls and SMS** are not supported yet (no SIM has been tested). Do not
+  force the modem on without a SIM: it crashes the modem firmware and Wi-Fi
+  with it.
+- **GPS**: the engine runs and NMEA arrives, no fix has been tested.
+- **Headphone jack and headset microphone**: set up, untested.
+- **Camera autofocus**: libcamera's simple pipeline has none; focus is a
+  manual control.
+- **Ambient light sensor** stops after a suspend until the next reboot
+  (auto-brightness then stays put). Proximity and motion keep working.
+- **Sensors start race**: about 1 boot in 10 the SLPI starts without its
+  sensor service; `nura-sensor-check` restarts it automatically.
+- **Sound**: about 1 boot in 5 may start without sound (SLIMbus start race);
+  a reboot fixes it.
+- **Docks**: one external monitor; 4K only at 30 Hz when the dock also carries
+  USB 3.
+- **Flip-cover Hall sensor** of the DualScreen case: behind TrustZone, not
+  available.
+- **Fingerprint** is not accepted at the login screen (password only) and
+  needs the phone's own calibration, generated on the device.
 
-Grouped by where each part belongs (see "Scope" below).
+## Install (fresh, replaces everything in userdata)
 
-| Path | Group | What |
-|---|---|---|
-| `pmaports/sm8150-lg-mh2lm.dts` | kernel | device tree |
-| `pmaports/dsi-fragment.dtsi` | kernel | display nodes (default on; `DSI=0` to drop) |
-| `pmaports/audio-fragment.dtsi` | kernel | speakers, WCD9340 jack and mics (`AUDIO=0` to drop) |
-| `pmaports/kernel-src/` | kernel | touch and panel drivers, kernel patch scripts |
-| `pmaports/device/testing/device-lg-mh2lm/` | device package | deviceinfo, APKBUILD |
-| `.../device-lg-mh2lm/ucm/` | device package | ALSA UCM profile (speaker, headphones, mics) |
-| `.../device-lg-mh2lm/sensors/` | device package | hexagonrpcd and iio-sensor-proxy drop-ins |
-| `pmaports/upstream-patches/` | other projects | hexagonrpc and libssc fixes, to send upstream |
-| `unit/screen/` | this phone only | screen blank, suspend after 5 min idle on battery, pocket guard (frozen) |
-| `unit/battery/` | device package | udev rule that enables GNOME's Preserve Battery Health (75-80%) |
-| `unit/suspend/` | device package | systemd-sleep hook: Wi-Fi off across suspend (ath10k crash) |
-| `unit/firmware/` | tweaks package | first-boot copy of LG firmware from the phone's partitions; builds the ath10k `board-2.bin` from LG's Wi-Fi board data |
-| `unit/watchdog/` | tweaks package | 30 s hardware watchdog (a hung phone resets itself) |
-| `devtools/flash-release.sh` | release | flashes a CI release to the active slot (no `--set-active` on this bootloader) |
-| `unit/sensors/` | this phone only | boot check: restarts the SLPI if its sensor core did not start, alerts if that fails |
-| `tweaks/`, `pmaports/device/testing/nura-g8x-tweaks/` | one apk | every userspace tweak plus the "LG G8x Tweaks" settings app (`/etc/nura/tweaks.conf`); build with `sh tweaks/build-apk.sh` |
-| `unit/dock/` | device package | `nura-dock` user service: external monitor becomes the primary GNOME desktop on plug-in; power key off while docked; warns when the dock is stuck |
-| `devtools/testwd/` | development | auto-restart and watchdog for test images |
-| `devtools/bootok/` | retired | old boot slot marker, replaced by `qbootctl` on the phone |
-| `unit/usbmac/` | tweaks package | fixed MAC addresses for the USB network gadget (macOS names the interface reliably) |
-| `unit/usbreplug/` | tweaks package | software USB re-plug when the host does not bring up the link |
-| `tests/` | testing | automated hardware regression tests (`zsh tests/run.sh`) |
-| `build-dtb.py` | build | builds the DTB and packs `out/boot-test.img` |
-| `out/probes/` | build | kernel build, RAM boot test, phone shell helpers |
-| `out/backup/` | recovery | full partition backup, partition tables |
-
-## Scope
-
-The project is hardware enablement. Kernel, device package and the patches
-for other projects are the deliverable and go upstream. `unit/` holds
-workarounds for this particular phone (its power button is broken), and the
-pocket guard is OS behaviour, kept installed but no longer developed.
-`devtools/` is test and development tooling and is not packaged.
-
-## Releases and CI
-
-`.github/workflows/images.yml` builds flashable images on every `v*` tag (and
-on demand): pmbootstrap with the three packages in `pmaports/device/testing`
-(`linux-nura-lg-mh2lm`, `device-lg-mh2lm`, `nura-g8x-tweaks`) on an arm64
-GitHub runner. The release gets `boot.img`, a compressed userdata image, the
-packages and their signing key. Release notes: `release/README.md`; design:
-`IMAGES.md`. The kernel package patch is regenerated with
-`docker exec -i nura-kbd sh < out/probes/mkpatch.sh` after kernel-src changes.
-
-## Test cycle
-
-After any change, run the hardware tests: `zsh tests/run.sh` (see
-[tests/README.md](tests/README.md)).
-
+You need an unlocked bootloader, `fastboot`, and a phone you have backed up.
+Releases are on the
+[Releases page](https://github.com/gauravsuman007/nura-g8x/releases). Download
+`nura-lg-mh2lm-boot.img` and `nura-lg-mh2lm-userdata.img.xz`.
 
 ```bash
-zsh out/probes/kbuild.sh
+xz -d nura-lg-mh2lm-userdata.img.xz
+fastboot getvar current-slot
 ```
+
+The LG bootloader cannot switch slots (`--set-active` is unknown), so flash
+the slot that is already active (`a` or `b`):
 
 ```bash
-python3 build-dtb.py && rm -f pmaports/sm8150-lg-mh2lm.base.dtb
+fastboot flash boot_b nura-lg-mh2lm-boot.img
+fastboot flash userdata nura-lg-mh2lm-userdata.img
+fastboot reboot
 ```
+
+Or let the helper do it: `zsh devtools/flash-release.sh DIR`.
+
+- Log in as `user` with the password in the release notes, then change it
+  with `passwd` right away.
+- No LG firmware ships in the image. On first boot `nura-firmware-loader`
+  copies it from the phone's own partitions and reboots once by itself (about
+  a minute). Wi-Fi, sensors and audio come up on the second boot.
+- If both boot slots end up marked unbootable, see LESSONS.md.
+
+## Update
+
+Packages come from a signed repository on GitHub Pages, so a phone updates
+itself:
 
 ```bash
-zsh out/probes/ramtest.sh out/boot-test.img
+nura-update
 ```
 
-Rules: only userdata may be replaced on the phone; test from RAM, never
-flash an untested image; check slot flags with `fastboot getvar all` before
-RAM-booting.
+(or `sudo apk update && sudo apk upgrade`). It updates the kernel, device
+package and tweaks package; restart when it says so. Only the latest build is
+kept in the repository.
+
+Without network, copy the `.apk` files and `nura-ci.rsa.pub` from a release
+to the phone and run:
+
+```bash
+sudo cp nura-ci.rsa.pub /etc/apk/keys/
+sudo apk add ./linux-nura-lg-mh2lm-*.apk ./device-lg-mh2lm-*.apk ./nura-g8x-tweaks-*.apk
+```
+
+`apk` rebuilds the boot image; flash `/boot/boot.img` to `boot_<slot>` if your
+setup does not do that itself.
+
+## Packages
+
+| Package | What |
+|---|---|
+| `linux-nura-lg-mh2lm` | mainline 7.0 kernel with all G8x drivers built in |
+| `device-lg-mh2lm` | device info, UCM audio profile, sensor setup, firmware loader, dock service, battery and suspend rules |
+| `nura-g8x-tweaks` | every userspace tweak, fingerprint daemon, and the LG G8x Tweaks settings app (`/etc/nura/tweaks.conf`) |
+
+## Building and development
+
+Images are built by `.github/workflows/images.yml` on every `v*` tag (and on
+demand) with pmbootstrap on an arm64 runner. A tag creates the GitHub release
+with the images and packages; an on-demand run only publishes the package
+repository, not a release. Design notes: [IMAGES.md](IMAGES.md); release notes
+template: `release/README.md`.
+
+Repository layout:
+
+| Path | What |
+|---|---|
+| `pmaports/` | device tree, kernel source scripts and patches, APKBUILDs, upstream patches |
+| `unit/` | systemd units and rules for this phone (screen blank, dock, firmware loader, watchdog, sensors) |
+| `tweaks/` | the tweaks package and its settings app |
+| `tests/` | automated hardware regression tests: `zsh tests/run.sh` ([tests/README.md](tests/README.md)) |
+| `devtools/` | flashing, RAM-boot and test helpers (not packaged) |
+| `out/probes/` | kernel build and phone shell helpers |
+| `LESSONS.md` | how each part was made to work, what went wrong, recovery |
+
+Safe test cycle: build the kernel (`zsh out/probes/kbuild.sh`), build the
+image (`python3 build-dtb.py`), boot it from RAM
+(`zsh out/probes/ramtest.sh out/boot-test.img`), run the tests. Never flash an
+untested image, and only replace userdata on the phone.
+
+## Hardware notes
+
+The power button of the development phone is broken, which is why the
+Assistant-key helpers, the 30 s watchdog and several recovery paths exist. A
+hung phone otherwise needs a battery drain.
