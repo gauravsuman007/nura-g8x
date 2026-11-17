@@ -1,0 +1,43 @@
+#!/bin/sh
+# Over-the-air kernel updates: copy /boot/boot.img (rebuilt by boot-deploy after a kernel or initramfs update) to the
+# active boot partition. boot-deploy cannot do this here: the LG bootloader passes no androidboot.slot_suffix, so its
+# flash_kernel_on_update path would look for a partition called "boot" that does not exist.
+# Guards: Android boot image, fits the partition, carries the pmos root/boot UUIDs of the running system (an image
+# for other userdata leaves the phone stuck in the initramfs), previous partition kept for rollback, read back after.
+# Usage: nura-boot-update [--check]   (--check: report only). Exit 0 = up to date or flashed.
+set -u
+IMG=/boot/boot.img
+BK=/var/lib/nura-ota
+log() { echo "nura-boot-update: $*"; }
+[ -f /etc/nura/ota.conf ] && . /etc/nura/ota.conf
+[ "${NURA_BOOT_UPDATE:-1}" = 0 ] && { log "disabled in /etc/nura/ota.conf"; exit 0; }
+[ -f $IMG ] || { log "no $IMG"; exit 0; }
+
+slot=$(tr ' ' '\n' < /proc/cmdline | sed -n 's/^androidboot.slot_suffix=//p')
+[ -n "$slot" ] || slot=$(timeout 10 qbootctl 2>/dev/null | sed -n 's/^Current slot: //p')
+case "$slot" in _a|_b) ;; a|b) slot=_$slot ;; *) log "cannot tell the active slot ('$slot'), not flashing"; exit 1 ;; esac
+part=/dev/disk/by-partlabel/boot$slot
+[ -b "$part" ] || { log "no $part"; exit 1; }
+
+[ "$(head -c 8 $IMG)" = "ANDROID!" ] || { log "$IMG is not an Android boot image"; exit 1; }
+size=$(stat -c %s $IMG); psize=$(blockdev --getsize64 "$part")
+[ "$size" -le "$psize" ] || { log "$IMG ($size) larger than boot$slot ($psize)"; exit 1; }
+for k in pmos_root_uuid pmos_boot_uuid; do
+	want=$(tr ' ' '\n' < /proc/cmdline | grep "^$k=")
+	strings -n 8 $IMG | tr ' ' '\n' | grep -qx "$want" || { log "$IMG lacks $want of the running system, not flashing"; exit 1; }
+done
+
+if cmp -s -n "$size" $IMG "$part"; then log "boot$slot is up to date"; exit 0; fi
+[ "${1:-}" = --check ] && { log "boot$slot differs from $IMG (update pending)"; exit 0; }
+
+mkdir -p $BK; chmod 700 $BK
+head -c "$psize" "$part" > $BK/boot$slot.prev.img.tmp && mv $BK/boot$slot.prev.img.tmp $BK/boot$slot.prev.img
+dd if=$IMG of="$part" bs=1M conv=fsync 2>/dev/null
+if cmp -s -n "$size" $IMG "$part"; then
+	log "flashed $IMG to boot$slot (previous kept in $BK/boot$slot.prev.img); restart to use it"
+	touch /run/nura-reboot-required
+	exit 0
+fi
+log "read-back mismatch, restoring the previous boot$slot"
+dd if=$BK/boot$slot.prev.img of="$part" bs=1M conv=fsync 2>/dev/null
+exit 1

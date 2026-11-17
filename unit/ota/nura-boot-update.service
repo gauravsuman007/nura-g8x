@@ -1,0 +1,8 @@
+[Unit]
+Description=Copy an updated /boot/boot.img to the active boot partition
+
+[Service]
+Type=oneshot
+# let boot-deploy finish writing
+ExecStartPre=/bin/sleep 5
+ExecStart=/usr/libexec/nura-boot-update

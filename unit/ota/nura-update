@@ -1,0 +1,19 @@
+#!/bin/sh
+# Update the phone from the Nura package repository (OTA): packages, then the kernel on the boot partition.
+# usage: nura-update [--check]
+[ "$(id -u)" = 0 ] || exec sudo "$0" "$@"
+set -e
+echo "== package lists"; apk update
+if [ "${1:-}" = --check ]; then
+	apk version -l '<' || true
+	/usr/libexec/nura-boot-update --check
+	exit 0
+fi
+echo "== upgrade"; apk upgrade -a
+echo "== kernel"; /usr/libexec/nura-boot-update
+echo "== installed"; apk list -I 2>/dev/null | grep -E '^(linux-nura|device-lg-mh2lm|nura-g8x-tweaks)-' | cut -d' ' -f1
+if [ -e /run/nura-reboot-required ]; then
+	echo "Restart the phone to finish the update."
+else
+	echo "Up to date."
+fi

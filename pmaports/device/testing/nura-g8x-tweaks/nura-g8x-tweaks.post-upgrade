@@ -18,6 +18,9 @@ systemctl enable egistad.service 2>/dev/null
 grep -q pam_fprintd /etc/pam.d/polkit-1 2>/dev/null || \
 	sed -i 's/^auth\([[:space:]]*\)required\([[:space:]]*\)pam_unix.so/auth\1sufficient\2pam_fprintd.so max-tries=2 timeout=15\n&/' /etc/pam.d/polkit-1
 dconf update 2>/dev/null
+# OTA: watch /boot/boot.img and bring the boot partition up to date now (a kernel upgraded in this same apk run)
+systemctl enable --now nura-boot-update.path 2>/dev/null
+/usr/libexec/nura-boot-update 2>&1 | sed 's/^/  /'
 glib-compile-schemas /usr/share/glib-2.0/schemas 2>/dev/null
 /usr/libexec/nura-sensordaemon-fix >/dev/null 2>&1
 udevadm control --reload 2>/dev/null

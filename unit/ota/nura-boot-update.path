@@ -1,0 +1,8 @@
+[Unit]
+Description=Watch /boot/boot.img for kernel updates
+
+[Path]
+PathChanged=/boot/boot.img
+
+[Install]
+WantedBy=multi-user.target
