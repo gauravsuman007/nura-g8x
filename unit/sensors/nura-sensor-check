@@ -1,13 +1,46 @@
 #!/bin/sh
 # Boot check: the SLPI sometimes starts without publishing its QMI sensor
 # core service (400), which leaves auto-brightness, rotation and proximity
-# dead until a reboot. Wait up to 90 s for it; if it never appears, log an
-# error and show a notification in the user's GNOME session.
-for i in $(seq 90); do
-	qrtr-lookup 2>/dev/null | awk '$1==400{f=1} END{exit !f}' && { echo "sensor core up after ${i}s"; exit 0; }
+# dead (about 1 boot in 10). Wait up to 90 s for it; if it never appears,
+# restart the SLPI and the sensor stack (up to 2 tries). Only if that fails,
+# log an error and show a notification in the user's GNOME session.
+# NURA_SENSOR_FORCE=1 runs the recovery even when the service is up (testing).
+has400() { qrtr-lookup 2>/dev/null | awk '$1==400{f=1} END{exit !f}'; }
+waitfor() { # seconds, then the condition
+	n=$1; shift; i=0
+	while [ $i -lt "$n" ]; do i=$((i+1)); "$@" && return 0; sleep 1; done
+	return 1
+}
+sdsp_up() { [ -e /dev/fastrpc-sdsp ] && has400; }
+
+if [ -z "$NURA_SENSOR_FORCE" ] && waitfor 90 has400; then echo "sensor core up after ${i}s"; exit 0; fi
+
+# Order matters (tested 2026-11-17): hexagonrpcd must be stopped before the
+# SLPI restarts and started only after fastrpc-sdsp has re-probed. Restarting
+# it while the new SLPI is reading its registry through the old instance leaves
+# every sensor silent. The clients hold sessions to the old SLPI, so restart them.
+# The kernel keeps the SDSP region assigned across the restart ("sdsp assign
+# once" in fastrpc), otherwise the re-probe fails with SCM -22.
+R=/sys/class/remoteproc/remoteproc0
+[ "$(cat $R/name 2>/dev/null)" = slpi ] || R=$(grep -l '^slpi$' /sys/class/remoteproc/*/name 2>/dev/null | head -1 | xargs -r dirname)
+for try in 1 2; do
+	[ -n "$R" ] || break
+	echo "<4>SLPI sensor core (QMI service 400) missing: restarting the SLPI (try $try)"
+	systemctl stop iio-sensor-proxy nura-gyro hexagonrpcd-sdsp
+	[ "$(cat $R/state)" = running ] && echo stop > $R/state
 	sleep 1
+	echo start > $R/state
+	ok=0; waitfor 30 sdsp_up && ok=1
+	systemctl start hexagonrpcd-sdsp
+	sleep 3
+	systemctl start iio-sensor-proxy nura-gyro
+	if [ $ok = 1 ] && systemctl is-active -q hexagonrpcd-sdsp; then
+		echo "<5>sensor core recovered by an SLPI restart (try $try)"
+		exit 0
+	fi
 done
-echo "<3>SLPI sensor core (QMI service 400) missing: sensors dead until reboot"
+
+echo "<3>SLPI sensor core (QMI service 400) missing and an SLPI restart did not help: sensors dead until reboot"
 for u in $(loginctl list-sessions --no-legend | awk '{print $3}' | sort -u); do
 	uid=$(id -u "$u") || continue
 	[ -S /run/user/$uid/bus ] || continue
@@ -15,7 +48,7 @@ for u in $(loginctl list-sessions --no-legend | awk '{print $3}' | sort -u); do
 		gdbus call --session -d org.freedesktop.Notifications -o /org/freedesktop/Notifications \
 		-m org.freedesktop.Notifications.Notify "Sensors" 0 "dialog-warning" \
 		"Sensors did not start" \
-		"Auto-brightness, rotation and proximity will not work. Restart the phone to fix." \
+		"Auto-brightness, rotation and proximity will not work, and restarting the sensor processor did not help. Restart the phone to fix." \
 		"[]" "{'urgency': <byte 2>}" 0 >/dev/null
 done
 exit 1

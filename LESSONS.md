@@ -894,6 +894,25 @@ after graphical.target for service 400; if missing it logs an error and
 shows a critical GNOME notification asking for a restart. Alert path tested
 with a fake `qrtr-lookup`.
 
+**Sensor auto-recovery (2026-11-17).** The SCM -22 re-probe failure above is
+already fixed in the 7.0 kernel: 0001 carries "sdsp assign once" in
+fastrpc_rpmsg_probe since build #67 (the extra-fastrpc-sdsp-once.py script is
+the 7.4-rc1 form), so no new kernel patch was needed. A hot SLPI restart now
+works, but only in this order: stop iio-sensor-proxy, nura-gyro and
+hexagonrpcd-sdsp; `echo stop`/`echo start` to remoteproc0 (`slpi`); wait for
+/dev/fastrpc-sdsp and service 400 (about 2 s); start hexagonrpcd-sdsp; after
+3 s start the clients. Restarting hexagonrpcd after the SLPI is already up
+fails: the new SLPI reads its registry through the old hexagonrpcd, the restart
+cuts that off ("Unsupported handle"), and every sensor stays silent even after
+the clients restart. iio-sensor-proxy segfaults when stopped after a lost SLPI
+(harmless, systemd restarts it). nura-sensor-check now does this recovery (2
+tries) and alerts only if it fails; `NURA_SENSOR_FORCE=1` forces it for
+testing. Tested on a watchdog RAM boot of the installed r7 kernel: forced
+recovery twice in one boot, sensors group 7/7 after each. Once, after an
+earlier recovery in the wrong order, a third SLPI start in the same boot timed
+out (`start timed out`, -110) and stayed offline; the script then retries once
+and alerts. Root cause of the missing service 400 at boot is still unknown.
+
 **Idle drain (2026-11-09).** About 1.35 W screen-off (9%/h, 11 h full to
 empty): auto-suspend is off because the power button is broken. CPUs reach
 core sleep only; there is no cluster idle state. nura-gyro streamed 25 Hz

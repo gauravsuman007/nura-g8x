@@ -17,7 +17,8 @@ storage, CPU scaling, battery and charging, Bluetooth, GPU,
 touchscreen, real DSI panel driver (OLED), GNOME, 5-minute screen blank with
 volume-down wake, touch ignored while dark and volume keys ignored while
 dark and covered (pocket guard), proximity, accelerometer and compass
-(SLPI sensors), ambient light with GNOME auto-brightness, speakers (two CS35L41),
+(SLPI sensors; when the SLPI starts without its sensor service, about 1 boot in 10,
+`nura-sensor-check` restarts it automatically), ambient light with GNOME auto-brightness, speakers (two CS35L41),
 built-in microphone (boot race fixed 2026-11-09: codec MCLK held on, 8 of 8 boots good), Wi-Fi on 2.4 and 5 GHz, modem GPS engine (no fix tested yet), flashlight
 and vibration, GPU with tiled (GMEM) rendering and no faults or hangs
 (64 KiB GPU address alignment, `extra-msm-va-align.py`), NFC (`nfc0`, NXP NCI
@@ -73,7 +74,7 @@ Grouped by where each part belongs (see "Scope" below).
 | `unit/firmware/` | tweaks package | first-boot copy of LG firmware from the phone's partitions; builds the ath10k `board-2.bin` from LG's Wi-Fi board data |
 | `unit/watchdog/` | tweaks package | 30 s hardware watchdog (a hung phone resets itself) |
 | `devtools/flash-release.sh` | release | flashes a CI release to the active slot (no `--set-active` on this bootloader) |
-| `unit/sensors/` | this phone only | boot check: alerts if the SLPI sensor core did not start |
+| `unit/sensors/` | this phone only | boot check: restarts the SLPI if its sensor core did not start, alerts if that fails |
 | `tweaks/`, `pmaports/device/testing/nura-g8x-tweaks/` | one apk | every userspace tweak plus the "LG G8x Tweaks" settings app (`/etc/nura/tweaks.conf`); build with `sh tweaks/build-apk.sh` |
 | `unit/dock/` | device package | `nura-dock` user service: external monitor becomes the primary GNOME desktop on plug-in; power key off while docked; warns when the dock is stuck |
 | `devtools/testwd/` | development | auto-restart and watchdog for test images |
