@@ -18,7 +18,9 @@ import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {Extension, InjectionManager} from 'resource:///org/gnome/shell/extensions/extension.js';
+import * as AuthPrompt from 'resource:///org/gnome/shell/gdm/authPrompt.js';
+import * as GdmUtil from 'resource:///org/gnome/shell/gdm/util.js';
 
 // Sensor centre and radius in panel pixels (LineageOS config_udfps_sensor_props: 540, 2107, r 98; drawn a bit larger).
 const CX = 540, CY = 2107, R = 110, PW = 1080, PH = 2340;
@@ -54,11 +56,22 @@ export default class G8xFingerprint extends Extension {
             [Main.sessionMode, Main.sessionMode.connect('updated', () => this._onSessionMode())],
             [this._mm, this._mm.connect('power-save-mode-changed', () => this._onPowerSave())],
         ];
+        // GNOME runs gdm-fingerprint beside the PIN and hints "(or place finger on reader)" under it; in our PIN mode
+        // the sensor is off, so drop that hint there (official extension API, undone on disable)
+        this._injections = new InjectionManager();
+        const self = this;
+        this._injections.overrideMethod(AuthPrompt.AuthPrompt.prototype, 'setMessage', orig => function (message, type, ...rest) {
+            if (type === GdmUtil.MessageType.HINT && self._lockDialog())
+                message = null;
+            return orig.call(this, message, type, ...rest);
+        });
         this._connect();
         this._onSessionMode();
     }
 
     disable() {
+        this._injections?.clear();
+        this._injections = null;
         for (const [o, id] of this._ids)
             o.disconnect(id);
         this._ids = [];
@@ -137,21 +150,29 @@ export default class G8xFingerprint extends Extension {
 
     _onLine(line) {
         if (line.startsWith('WAIT ')) {
+            this._touching = false;
             const [svc, reason] = line.slice(5).split('\t');
             this._waiting = [svc, reason || ''];
             this._feedback = '';
             this._wakePanelIfDark();
+        } else if (line === 'DOWN') {
+            this._touching = true;
+        } else if (line === 'UP') {
+            this._touching = false;
         } else if (line === 'IDLE') {
             this._waiting = null;
+            this._touching = false;
             this._feedback = '';
             this._restorePanel();
         } else if (line === 'NOMATCH') {
+            this._touching = false;
             this._feedback = 'Not recognised. Try again.';
         } else if (line === 'RETRY') {
             this._feedback = 'Hold your finger still on the circle';
         } else if (line.startsWith('PROGRESS ')) {
             this._feedback = `${line.slice(9)}% - lift and touch again`;
         } else if (line === 'MATCH') {
+            this._touching = false;
             this._feedback = '';
         }
         this._sync();
@@ -159,6 +180,7 @@ export default class G8xFingerprint extends Extension {
 
     // ---- lock screen
     _onSessionMode() {
+        this._touching = false;
         if (Main.sessionMode.isLocked)
             this._hookLock();
         else
@@ -221,6 +243,7 @@ export default class G8xFingerprint extends Extension {
     }
 
     _onPowerSave() {
+        this._touching = false;
         // screen just came on while locked: start with the fingerprint, not the PIN pad
         if (this._mm.power_save_mode === 0 && this._lockDialog() && this._waiting)
             this._showFingerprintMode();
@@ -381,9 +404,15 @@ export default class G8xFingerprint extends Extension {
             this._touchOffId = 0;
             this._touching = true;
             this._sync();
-        } else if (type === Clutter.EventType.TOUCH_END || type === Clutter.EventType.TOUCH_CANCEL) {
-            if (!this._touchOffId) {
-                this._touchOffId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 400, () => {
+        }
+        if (type === Clutter.EventType.TOUCH_END || type === Clutter.EventType.TOUCH_CANCEL ||
+            type === Clutter.EventType.TOUCH_BEGIN) {
+            // lift normally arrives from egistad ("UP"); never leave the ring on if that is missed
+            if (this._touchOffId)
+                GLib.source_remove(this._touchOffId);
+            {
+                this._touchOffId = GLib.timeout_add(GLib.PRIORITY_DEFAULT,
+                    type === Clutter.EventType.TOUCH_BEGIN ? 8000 : 400, () => {
                     this._touchOffId = 0;
                     this._touching = false;
                     this._sync();

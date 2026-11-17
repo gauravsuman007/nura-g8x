@@ -10,7 +10,8 @@
 # One client at a time. Run as root after egista.ko is loaded. usage: egistad.py [--socket PATH] [--fb]
 #
 # Shell side (/run/egistad-ui.sock, any local user; the g8x-fingerprint GNOME Shell extension):
-#   egistad -> UI: "WAIT <service>\t<reason>" when a fingerprint is wanted, "TOUCH", "RETRY", "MATCH", "NOMATCH", "IDLE"
+#   egistad -> UI: "WAIT <service>\t<reason>" when a fingerprint is wanted, "DOWN"/"UP" (finger on the circle or not,
+#                  from the touchscreen), "RETRY", "MATCH", "NOMATCH", "PROGRESS <pct>", "IDLE"
 #   UI -> egistad: "SHOW 1" / "SHOW 0" (circle drawn or not; touches only start a capture while it is shown),
 #                  "CANCEL" (user chose the password/PIN instead)
 # While no UI client is connected every touch on the sensor counts (console, no GNOME session).
@@ -172,9 +173,11 @@ class Sensor:
         wait=False: the finger is already down (second try on the same touch)."""
         if wait:
             self.send('TOUCH')
+            self.ui_send('UP')
             if self.fbui: self.fbui.text(['TOUCH'])
             self.touch.reopen()
             self.wait_touch(True)
+            self.ui_send('DOWN')
         self.e.lhbm(True)
         # the panel needs a frame or two to light the spot (an image taken at once is dim and does not match), and on
         # the lock screen the shell draws the black ring around the circle only once the finger is down
