@@ -14,6 +14,7 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -177,15 +178,11 @@ export default class G8xFingerprint extends Extension {
         this._hooked = d;
         // PIN pad slides in and out with translation-y: follow it
         this._promptId = d._promptBox.connect('notify::translation-y', () => this._sync());
+        const row = new St.BoxLayout({style: 'spacing: 8px;'});
+        row.add_child(new St.Icon({icon_name: 'fingerprint-detection-symbolic', icon_size: 18}));
+        row.add_child(new St.Label({text: 'Use fingerprint', y_align: Clutter.ActorAlign.CENTER}));
         this._fpButton = new St.Button({
-            style: BUTTON_STYLE, x_align: Clutter.ActorAlign.CENTER, can_focus: true,
-            child: new St.BoxLayout({
-                style: 'spacing: 8px;',
-                children: [
-                    new St.Icon({icon_name: 'fingerprint-detection-symbolic', icon_size: 18}),
-                    new St.Label({text: 'Use fingerprint', y_align: Clutter.ActorAlign.CENTER}),
-                ],
-            }),
+            style: BUTTON_STYLE, x_align: Clutter.ActorAlign.CENTER, can_focus: true, child: row,
         });
         this._fpButton.connect('clicked', () => this._showFingerprintMode());
         d._promptBox.insert_child_at_index(this._fpButton, 0);
@@ -195,11 +192,16 @@ export default class G8xFingerprint extends Extension {
 
     _unhookLock() {
         if (this._hooked) {
+            const pb = this._hooked._promptBox;
             try {
-                this._hooked._promptBox.disconnect(this._promptId);
+                if (pb && this._promptId && GObject.signal_handler_is_connected(pb, this._promptId))
+                    pb.disconnect(this._promptId);
             } catch {}
-            this._fpButton?.destroy();
+            try {
+                this._fpButton?.destroy();
+            } catch {}
         }
+        this._promptId = 0;
         this._hooked = null;
         this._fpButton = null;
     }
@@ -336,11 +338,14 @@ export default class G8xFingerprint extends Extension {
         this._backdrop = new St.Widget({reactive: true, visible: false, style: 'background-color: black; border-radius: 28px;'});
         this._layer.add_child(this._backdrop);
         // the circle: reactive so a touch on it never reaches what is underneath (lock-screen tap, keyboard keys)
+        this._ring = new St.Widget({reactive: true, visible: false});
         this._spot = new St.Widget({reactive: true, visible: false});
-        this._spot.connect('touch-event', (a, ev) => this._onSpotTouch(ev.type()));
-        this._spot.connect('button-press-event', () => this._onSpotTouch(Clutter.EventType.TOUCH_BEGIN));
-        this._spot.connect('button-release-event', () => this._onSpotTouch(Clutter.EventType.TOUCH_END));
-        this._layer.add_child(this._spot);
+        for (const a of [this._ring, this._spot]) {
+            a.connect('touch-event', (_a, ev) => this._onSpotTouch(ev.type()));
+            a.connect('button-press-event', () => this._onSpotTouch(Clutter.EventType.TOUCH_BEGIN));
+            a.connect('button-release-event', () => this._onSpotTouch(Clutter.EventType.TOUCH_END));
+            this._layer.add_child(a);
+        }
         // text and button above the circle (lock-screen hint, or the request card)
         this._card = new St.BoxLayout({vertical: true, reactive: true, visible: false, style: CARD_STYLE});
         this._title = new St.Label({style: 'font-weight: bold; font-size: 13pt; text-align: center;'});
@@ -363,7 +368,7 @@ export default class G8xFingerprint extends Extension {
         }
         this._hostDestroyId = 0;
         this._layer?.destroy();
-        this._layer = this._spot = this._card = this._backdrop = null;
+        this._layer = this._spot = this._ring = this._card = this._backdrop = null;
         this._remote = [];
         this._host = null;
     }
@@ -398,7 +403,7 @@ export default class G8xFingerprint extends Extension {
             host.add_child(this._layer);
             // the lock screen and the polkit dialog are destroyed when done, taking the layer with them
             this._hostDestroyId = host.connect('destroy', () => {
-                this._layer = this._spot = this._card = this._backdrop = null;
+                this._layer = this._spot = this._ring = this._card = this._backdrop = null;
                 this._remote = [];
                 this._host = null;
                 this._hostDestroyId = 0;
@@ -456,11 +461,16 @@ export default class G8xFingerprint extends Extension {
         const ring = g ? g.r : 0;
         if (showSpot) {
             const o = g.r + ring;
-            const ringColor = !d || this._touching ? 'black' : 'transparent';
-            this._spot.set_position(g.x - o - ox, g.y - o - oy);
-            this._spot.set_size(2 * o, 2 * o);
-            this._spot.set_style(`background-color: white; border: ${ring}px solid ${ringColor}; border-radius: ${o}px;`);
+            // the ring disc is always there to catch touches; it is only painted black when needed
+            const ringColor = !d || this._touching ? 'black' : 'rgba(0,0,0,0)';
+            this._ring.set_position(g.x - o - ox, g.y - o - oy);
+            this._ring.set_size(2 * o, 2 * o);
+            this._ring.set_style(`background-color: ${ringColor}; border-radius: ${o}px;`);
+            this._spot.set_position(g.x - g.r - ox, g.y - g.r - oy);
+            this._spot.set_size(2 * g.r, 2 * g.r);
+            this._spot.set_style(`background-color: white; border-radius: ${g.r}px;`);
         }
+        this._ring.visible = showSpot;
         this._spot.visible = showSpot;
 
         // card above the circle (beside it in landscape)
