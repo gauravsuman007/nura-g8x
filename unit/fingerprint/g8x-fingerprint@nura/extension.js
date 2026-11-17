@@ -25,6 +25,8 @@ import * as GdmUtil from 'resource:///org/gnome/shell/gdm/util.js';
 // Sensor centre and radius in panel pixels (LineageOS config_udfps_sensor_props: 540, 2107, r 98; drawn a bit larger).
 const CX = 540, CY = 2107, R = 110, PW = 1080, PH = 2340;
 const UI_SOCK = '/run/egistad-ui.sock';
+// capture dim layer: ~60 % dark, tinted towards magenta to cancel the HBM gamma's green
+const DIM_COLOR = 'rgba(28,0,24,0.6)';
 const BL_POWER = '/sys/class/backlight/r66456-bl/bl_power';
 
 const CARD_STYLE = 'background-color: rgba(30,30,30,0.96); border-radius: 24px; padding: 18px 22px; ' +
@@ -360,9 +362,10 @@ export default class G8xFingerprint extends Extension {
         // black panel behind the whole request (outside the lock screen): nothing bright around the circle
         this._backdrop = new St.Widget({reactive: true, visible: false, style: 'background-color: black; border-radius: 28px;'});
         this._layer.add_child(this._backdrop);
-        // light dimming of the rest of the phone panel during a capture: the spot's HBM gamma briefly brightens and
-        // tints the whole panel (it has no spot-only HBM); this evens that out without blanking the screen
-        this._dim = new St.Widget({reactive: false, visible: false, style: 'background-color: rgba(0,0,0,0.45);'});
+        // dimming of the rest of the phone panel during a capture: the spot's HBM gamma briefly brightens the whole
+        // panel and tints it green (it has no spot-only HBM). A dark layer with a little magenta (green's complement)
+        // evens out both without blanking the screen.
+        this._dim = new St.Widget({reactive: false, visible: false, style: `background-color: ${DIM_COLOR};`});
         this._layer.add_child(this._dim);
         // the circle: reactive so a touch on it never reaches what is underneath (lock-screen tap, keyboard keys)
         this._ring = new St.Widget({reactive: true, visible: false});
