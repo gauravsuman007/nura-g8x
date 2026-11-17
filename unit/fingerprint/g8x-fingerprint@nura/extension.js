@@ -27,6 +27,7 @@ const CX = 540, CY = 2107, R = 110, PW = 1080, PH = 2340;
 const UI_SOCK = '/run/egistad-ui.sock';
 // capture dim layer: ~60 % dark, tinted towards magenta to cancel the HBM gamma's green
 const DIM_COLOR = 'rgba(28,0,24,0.6)';
+const TWEAKS_CONF = '/etc/nura/tweaks.conf';   // FP_CUSTOM=0 (LG G8x Tweaks): stock GNOME only, this UI stays off
 const BL_POWER = '/sys/class/backlight/r66456-bl/bl_power';
 
 const CARD_STYLE = 'background-color: rgba(30,30,30,0.96); border-radius: 24px; padding: 18px 22px; ' +
@@ -38,8 +39,45 @@ function stop() {
     return Clutter.EVENT_STOP;
 }
 
+function customWanted() {
+    try {
+        const [, bytes] = GLib.file_get_contents(TWEAKS_CONF);
+        return !/^\s*FP_CUSTOM=0/m.test(new TextDecoder().decode(bytes));
+    } catch {
+        return true;
+    }
+}
+
 export default class G8xFingerprint extends Extension {
+    // The tweaks setting is watched so the switch applies without a restart. Off: no socket, no overlay, no
+    // injection, so egistad (with no UI connected) captures on its own and GNOME's own fingerprint prompt is all there is.
     enable() {
+        this._running = false;
+        this._confMon = Gio.File.new_for_path(TWEAKS_CONF).monitor_file(Gio.FileMonitorFlags.NONE, null);
+        this._confMon.connect('changed', () => this._applyConf());
+        this._applyConf();
+    }
+
+    disable() {
+        this._confMon?.cancel();
+        this._confMon = null;
+        if (this._running)
+            this._stop();
+        this._running = false;
+    }
+
+    _applyConf() {
+        const want = customWanted();
+        if (want === this._running)
+            return;
+        this._running = want;
+        if (want)
+            this._start();
+        else
+            this._stop();
+    }
+
+    _start() {
         this._waiting = null;        // [service, reason] while egistad wants a finger
         this._shown = false;
         this._feedback = '';
@@ -71,7 +109,7 @@ export default class G8xFingerprint extends Extension {
         this._onSessionMode();
     }
 
-    disable() {
+    _stop() {
         this._injections?.clear();
         this._injections = null;
         for (const [o, id] of this._ids)

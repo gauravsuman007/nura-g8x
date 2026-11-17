@@ -1855,3 +1855,11 @@ fprintd see the enrolled finger, fingerprint test group 6/6.
   (-EAGAIN when the panel is not on); egistad also checks DPMS. Repeated key presses on a hung phone also give HR.
 - Out-of-tree rebuild of one in-tree module for the running kernel: no MODVERSIONS, so a Module.symvers listing the
   module's undefined symbols (any CRC) + `make modules_prepare` + `make M=<dir>` gives a loadable .ko.
+
+### Stock-GNOME fingerprint switch (tweaks r30)
+- LG G8x Tweaks > Fingerprint > "Nura fingerprint experience" (`FP_CUSTOM`, default 1). Off keeps the whole sensor
+  stack (egista, egistad, libfprint driver, fprintd, gdm-fingerprint PAM) and only turns off our additions: the shell
+  extension watches /etc/nura/tweaks.conf and stops (no socket, no overlay, no setMessage injection), and
+  nura-fp-local fails, so sudo and polkit skip pam_fprintd. With no UI connected egistad captures on any touch and lights
+  the spot itself, so GNOME's own lock-screen prompt ("or place finger on reader") works unaided.
+- polkit-1 now also gets the nura-fp-local gate line (the same helper skips ssh for admin requests).

@@ -2,6 +2,6 @@
 systemctl disable nura-tweaks-apply.service nura-standby.service nura-gyro.service nura-touch-guard.service \
 	nura-sensor-check.service 2>/dev/null
 systemctl --global disable nura-dock.service 2>/dev/null
-sed -i "/nura-fp-reason/d; /pam_fprintd.so max-tries/d" /etc/pam.d/polkit-1 2>/dev/null
+sed -i "/nura-fp-reason/d; /nura-fp-local/d; /pam_fprintd.so max-tries/d" /etc/pam.d/polkit-1 2>/dev/null
 systemctl disable egistad.service 2>/dev/null
 exit 0

@@ -38,6 +38,11 @@ PAGES = [
         ('AUTOLOGIN', 'switch', 'Sign in automatically',
          'Skip the password screen at boot. Off: type your password at the greeter. Applies at the next boot'),
     ]),
+    ('Fingerprint', None, [
+        ('FP_CUSTOM', 'switch', 'Nura fingerprint experience',
+         'Circle with dimming, fingerprint or PIN on the lock screen, sudo and admin dialogs. '
+         'Off: only GNOME\'s own fingerprint handling (lock screen), the sensor stays working'),
+    ]),
     ('Dock', 'USB-C DisplayPort docks and adapters', [
         ('DOCK_AUTO', 'switch', 'Docked desktop',
          'The external monitor becomes the main desktop'),
