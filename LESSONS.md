@@ -1718,3 +1718,8 @@ Compared the dev rootfs backup (`out/backup-nura-20261112`) with the running rel
 - ET713 enroll needs get_image -> get_image_ipp (0x2e) -> do_enroll per touch; identify must follow the capture within
   1 s (no 0x2e in between). Calibrate with the LHBM spot lit, the same as the captures.
 - GP file listener (libdrmfs) reply: +4 errno, +8 byte count, data from +0xc; big files arrive in 0x7d000 chunks.
+
+## Package repository live, 2026-11-17
+- CI signing with the stable key failed indexing ("UNTRUSTED signature") until the public key was also copied to `$WORK/config_apk_keys/` so the build chroots trust it.
+- GitHub Pages had to be enabled (`gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow`); deploy-pages returns 404 otherwise.
+- Phones from before device r8 need the key and list installed by hand once: copy `nura-g8x-2026.rsa.pub` to `/etc/apk/keys/` and `nura-g8x.list` to `/etc/apk/repositories.d/`, then `apk update && apk add nura-g8x-tweaks && apk upgrade`. After that the system test group passes 3/3.
