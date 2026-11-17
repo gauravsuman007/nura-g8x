@@ -2,7 +2,8 @@
 # GNOME Shell's fingerprint conversation (lock screen, login): fprintd only, run in parallel with gdm-password.
 auth       required    pam_shells.so
 auth       requisite   pam_nologin.so
-auth       required    pam_fprintd.so
+# the lock screen does not restart this conversation after a timeout: wait for a finger as long as it is locked
+auth       required    pam_fprintd.so max-tries=100 timeout=86400
 auth       optional    pam_permit.so
 account    include     base-account
 password   required    pam_deny.so

@@ -1821,3 +1821,7 @@ fprintd see the enrolled finger, fingerprint test group 6/6.
   would miss the kernel of the same transaction. Check `journalctl -u nura-boot-update` after an upgrade.
 - Cosmetic: `tr: write error: Broken pipe` in the journal comes from `grep -q` closing the UUID pipe early.
 - glmark2 on a cold GPU clock still scores ~250-275 now and then in the full suite (520 on rerun); not a regression.
+- Lock-screen fingerprint went dead after 30 s (2026-11-17, tweaks r28): pam_fprintd's default timeout ends the
+  gdm-fingerprint conversation and GNOME Shell does not start a new one on the same lock screen, so the circle stays
+  but nothing listens (no IDENTIFY in the egistad log, no haptics). gdm-fingerprint now uses
+  `pam_fprintd.so max-tries=100 timeout=86400`.
