@@ -32,7 +32,7 @@ def say(*lines, color=b'\xff\xff\xff\xff'):
     print('    [screen] ' + ' / '.join(lines), flush=True)
     if UI: UI.text(list(lines), color)
 
-def wait_capture(e, finger, timeout=60):
+def wait_capture(e, finger, timeout=180):
     """Android's UDFPS flow: the touchscreen reports finger-down, then LHBM on and capture until get_image result 0
     (good; 8 = no finger, 2/7/9 = retry), LHBM off. finger=False waits for the touchscreen finger-up."""
     if not finger:
@@ -63,7 +63,7 @@ def enroll(e, touches):
         say(f'TOUCH {n+1}', f'{pct}%')
         st, q = wait_capture(e, True)
         if st is None:
-            say('TIMEOUT'); break
+            say('TIMEOUT'); print('enroll_uninit', e.cmd(E.ENROLL_UNINIT)[0]); return 1
         if st:
             say('TRY AGAIN', f'{pct}%'); TOUCH.wait(False, 20); continue
         ip = e.cmd(E.IPP_IMAGE, outlen=4)      # get_image_ipp: feeds the frame to the enroll (ukm_add_image)
@@ -94,9 +94,10 @@ def verify(e, tries):
         print('identify_start', e.cmd(E.IDENTIFY_START)[0], flush=True)
         say(f'VERIFY {i+1}', 'TOUCH')
         st, q = wait_capture(e, True)
+        if st == 0 and UI: UI.text(['CHECKING'])
         if st is None:
             print('timeout'); break
-        e.cmd(E.IPP_IMAGE, outlen=4)
+        # identify must follow the capture within 1 s (command_handler rate check), so no 0x2e here
         r = e.cmd(E.IDENTIFY, 0, 0, struct.pack('<Q', 0), outlen=0x200)
         print(f'identify status {r[0]} out {r[1][:32].hex()}', flush=True)
         e.cmd(E.IDENTIFY_FINISH)

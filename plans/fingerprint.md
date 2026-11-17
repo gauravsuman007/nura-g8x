@@ -335,3 +335,14 @@ captures for 30 s with the Android sequence, then restarts GNOME. Look for a bri
   calibration save returns 0 and a fresh session loads it (inline 0xd2/16 -> 0). The factory calibration.bin from the drm
   partition is still rejected (likely an older format); the generated one replaces it (the old file is kept as .orig).
 - Next: re-enroll (template save untested since the reply fix), then verify.
+
+### 2026-11-17: ENROLL + SAVE + VERIFY WORK (first real match)
+- Enrolled the user's finger to 100 % in 18 touches, saved (fid 1), reloaded in a new session, and identify returned
+  status 0 with out {1 (match), 2, fid 1, ...}: **MATCH** on the first try.
+- Fixes on the way: the calibration must be generated with the LHBM spot lit (an unlit one makes every lit capture fail
+  -> endless TRY AGAIN); the fs write kept a .orig copy on the *second* chunk and zeroed the first 0x7d000 bytes (only
+  back up at offset 0); identify (0x10) must follow the capture within 1 s (command_handler checks the time since the
+  last capture, else "permission denied (1)", status 9), so no 0x2e between get_image and identify; start the bench while
+  the display is on (stopping gdm with the panel asleep leaves the screen and touchscreen dead; recover by RAM-booting).
+- Next: libfprint driver (match-on-chip) over /dev/egista + fprintd, a proper UDFPS overlay instead of stopping gdm,
+  and moving the template/calibration store from /var/lib/egista into the user-data layout; DT node + kernel patches.

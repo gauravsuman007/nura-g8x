@@ -1715,3 +1715,6 @@ Compared the dev rootfs backup (`out/backup-nura-20261112`) with the running rel
 - egista TA addresses: use VAs from the segments (egista.mdt/.bNN), not offsets in a concatenated blob; the TA ships a full
   dynamic symbol table, so check DT_SYMTAB before hand-naming functions.
 - unicorn on macOS (2.1) crashes in its JIT; run it in the Linux container instead.
+- ET713 enroll needs get_image -> get_image_ipp (0x2e) -> do_enroll per touch; identify must follow the capture within
+  1 s (no 0x2e in between). Calibrate with the LHBM spot lit, the same as the captures.
+- GP file listener (libdrmfs) reply: +4 errno, +8 byte count, data from +0xc; big files arrive in 0x7d000 chunks.

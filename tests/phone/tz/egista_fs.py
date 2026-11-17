@@ -38,9 +38,9 @@ def handle(lid, req):
             open(f'/tmp/egista-fs-req{cmd}.bin', 'wb').write(req[:0x200 + a108])
             d = req[WRITE_DATA_OFF:WRITE_DATA_OFF + a108]
             os.makedirs(os.path.dirname(rp), exist_ok=True)
-            if os.path.exists(rp) and not os.path.exists(rp + '.orig'):
+            if a104 == 0 and os.path.exists(rp) and not os.path.exists(rp + '.orig'):
                 os.rename(rp, rp + '.orig')        # keep the first version (e.g. the factory copy)
-            with open(rp, 'r+b' if os.path.exists(rp) else 'wb') as f:
+            with open(rp, 'r+b' if a104 and os.path.exists(rp) else 'wb') as f:
                 f.seek(a104)
                 f.write(d)
             _log(f'  wrote {len(d)} (data[:8]={d[:8].hex()})')
