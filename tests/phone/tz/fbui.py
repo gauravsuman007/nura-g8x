@@ -56,9 +56,23 @@ class Touch:
             for blk in open('/proc/bus/input/devices').read().split('\n\n'):
                 if 'Touchscreen' in blk:
                     import re; dev = '/dev/input/' + re.search(r'\b(event\d+)', blk).group(1)
-        self.fd = os.open(dev, os.O_RDONLY | os.O_NONBLOCK); self.down = False
+        self.dev = dev
+        self.fd = os.open(dev, os.O_RDONLY | os.O_NONBLOCK)
+        self.down = self.touching = False
+        self.x = self.y = -1000
+
+    def reopen(self):
+        """Fresh fd: a handle opened before gdm (re)started can stop receiving events."""
+        try:
+            os.close(self.fd)
+        except OSError:
+            pass
+        self.fd = os.open(self.dev, os.O_RDONLY | os.O_NONBLOCK)
+        self.down = self.touching = False
 
     def poll(self, timeout):
+        """Finger state over the sensor: a touch counts only while its position is inside the spot (panel pixels,
+        the touchscreen reports 0..1079 x 0..2339, the same frame as the panel)."""
         r, _, _ = select.select([self.fd], [], [], timeout)
         if r:
             try:
@@ -68,7 +82,12 @@ class Touch:
             for i in range(0, len(data) - 23, 24):
                 _, _, t, c, v = struct.unpack_from('<qqHHi', data, i)
                 if t == 1 and c == 0x14a:
-                    self.down = bool(v)
+                    self.touching = bool(v)
+                elif t == 3 and c == 0x35:
+                    self.x = v
+                elif t == 3 and c == 0x36:
+                    self.y = v
+            self.down = self.touching and (self.x - CX) ** 2 + (self.y - CY) ** 2 <= (R * 1.6) ** 2
         return self.down
 
     def wait(self, down, timeout=60):
@@ -82,3 +101,38 @@ class Touch:
 if __name__ == '__main__':
     import sys
     Screen().text(sys.argv[1:] or ['READY'])
+
+
+class Haptics:
+    """Rumble on the dw7800 force-feedback input device (EVIOCSFF + EV_FF play)."""
+    def __init__(self):
+        import fcntl, re
+        self.fd = None
+        for blk in open('/proc/bus/input/devices').read().split('\n\n'):
+            if 'haptic' in blk.lower():
+                dev = '/dev/input/' + re.search(r'\b(event\d+)', blk).group(1)
+                self.fd = os.open(dev, os.O_RDWR)
+        self.ids = {}
+
+    def _effect(self, ms):
+        import fcntl
+        if ms not in self.ids:
+            # struct ff_effect (64-bit): type, id, direction, trigger{button, interval}, replay{length, delay},
+            # pad to 16, union (ff_rumble_effect: strong, weak), total 48 bytes
+            b = bytearray(struct.pack('<HhHHHHH2x', 0x50, -1, 0, 0, 0, ms, 0) + struct.pack('<HH', 0xffff, 0xffff))
+            b = b.ljust(48, b'\0')
+            fcntl.ioctl(self.fd, 0x40304580, b, True)       # EVIOCSFF
+            self.ids[ms] = struct.unpack_from('<h', b, 2)[0]
+        return self.ids[ms]
+
+    def buzz(self, ms=60, times=1, gap=0.12):
+        if self.fd is None:
+            return
+        import time
+        try:
+            eid = self._effect(ms)
+            for i in range(times):
+                os.write(self.fd, struct.pack('<qqHHi', 0, 0, 0x15, eid, 1))   # EV_FF, effect id, play once
+                time.sleep(ms / 1000 + gap)
+        except OSError:
+            pass

@@ -1,0 +1,9 @@
+#%PAM-1.0
+# GNOME Shell's fingerprint conversation (lock screen, login): fprintd only, run in parallel with gdm-password.
+auth       required    pam_shells.so
+auth       requisite   pam_nologin.so
+auth       required    pam_fprintd.so
+auth       optional    pam_permit.so
+account    include     base-account
+password   required    pam_deny.so
+session    include     base-session

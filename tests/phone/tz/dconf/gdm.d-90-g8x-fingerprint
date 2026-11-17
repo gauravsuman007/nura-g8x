@@ -1,0 +1,4 @@
+# GDM greeter (LG G8x): no fingerprint at the login screen. Extensions do not run in the greeter, so the sensor
+# spot cannot be drawn there, and a fingerprint login cannot unlock the keyring; fingerprint is for the lock screen.
+[org/gnome/login-screen]
+enable-fingerprint-authentication=false

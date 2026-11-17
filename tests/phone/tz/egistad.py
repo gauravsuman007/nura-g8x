@@ -26,6 +26,7 @@ class Sensor:
         self.e.verbose = False
         E.ListenerThread(self.e.fd, egista_fs.handle).start()
         self.touch = fbui.Touch()
+        self.haptics = fbui.Haptics()
         self.ui = fbui.Screen() if fb else None
         self.client = None
         self.start()
@@ -73,6 +74,7 @@ class Sensor:
         """Finger-down -> LHBM spot on -> captures until a good image (or the finger leaves). Returns True if good."""
         self.send('TOUCH')
         if self.ui: self.ui.text(['TOUCH'])
+        self.touch.reopen()
         self.wait_touch(True)
         self.e.lhbm(True)
         try:
@@ -105,6 +107,7 @@ class Sensor:
                 v = struct.unpack('<8i', r[1].ljust(32, b'\0'))
                 if r[0] == 0 and 0 <= v[1] <= 100 and v[1] > pct:
                     pct = v[1]
+                    self.haptics.buzz(25)
                     self.send(f'PROGRESS {pct}')
                 else:
                     self.send('RETRY similar')
@@ -114,6 +117,7 @@ class Sensor:
             self.e.cmd(E.ENROLL_UNINIT)
             return self.send('ERR cancelled')
         self.e.cmd(E.ENROLL_UNINIT)
+        self.haptics.buzz(60, 2)
         before = set(self.fids())
         for fid in range(1, 6):
             if fid not in before:
@@ -144,8 +148,10 @@ class Sensor:
         self.log('identify raw', r[0], r[1][:32].hex())
         # identify output: +0 matched fid, +4 ?, +8 match flag (1)
         if r[0] == 0 and v[2] == 1 and v[0]:
+            self.haptics.buzz(60)
             self.send(f'MATCH {v[0]}')
         else:
+            self.haptics.buzz(80, 2)
             self.send('NOMATCH')
         if self.ui: self.ui.text(['MATCH' if r[0] == 0 else 'NO MATCH'])
 
