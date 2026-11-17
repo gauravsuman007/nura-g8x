@@ -1806,3 +1806,18 @@ fprintd see the enrolled finger, fingerprint test group 6/6.
   projects) name them `.diff` and apply by hand.
 - No DT node: egista.ko has no of_match, so it is loaded by modules-load.d; the sensor GPIOs are hard-coded in the driver.
 - sudo is left password-only: pam_fprintd would wait for a finger on every ssh sudo.
+
+## OTA updates (kernel included), 2026-11-17
+- `nura-update` (tweaks r27) = `apk update` + `apk upgrade -a` + `nura-boot-update`; `nura-update --check` lists pending
+  updates. Tested from the phone itself: r6 -> r7 kernel and tweaks r26 -> r27 from the GitHub Pages repository, boot_b
+  updated, reboot came up on the OTA kernel (#8) with the in-tree egista driver; full suite 67 pass, 0 fail.
+- pmOS's own path (`deviceinfo_flash_kernel_on_update`) cannot work on the G8x: boot-deploy takes the slot from
+  `androidboot.slot_suffix`, which LG's bootloader does not pass, and would look for a partition named "boot".
+  nura-boot-update gets the slot from qbootctl, checks the ANDROID! magic, size, and that the image carries the running
+  system's pmos_root/boot UUIDs (the same guard as devtools/flash-boot-safe.sh), keeps the old partition in
+  /var/lib/nura-ota/boot_<slot>.prev.img, reads back and restores on mismatch.
+- apk runs package post-upgrade scripts before triggers, so mkinitfs/boot-deploy rewrite /boot/boot.img after the tweaks
+  post-upgrade has run. `nura-boot-update.path` (PathChanged=/boot/boot.img) catches it; the post-upgrade call alone
+  would miss the kernel of the same transaction. Check `journalctl -u nura-boot-update` after an upgrade.
+- Cosmetic: `tr: write error: Broken pipe` in the journal comes from `grep -q` closing the UUID pipe early.
+- glmark2 on a cold GPU clock still scores ~250-275 now and then in the full suite (520 on rerun); not a regression.
