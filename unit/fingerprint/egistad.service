@@ -1,0 +1,14 @@
+[Unit]
+Description=LG G8x ET713 fingerprint trustlet daemon (egistad)
+After=nura-firmware-loader.service systemd-modules-load.service
+Before=fprintd.service
+ConditionPathExists=/dev/egista
+
+[Service]
+ExecStartPre=/usr/libexec/nura-egista-seed
+ExecStart=/usr/bin/python3 -u /usr/lib/egistad/egistad.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

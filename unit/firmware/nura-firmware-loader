@@ -2,7 +2,7 @@
 # Copy the LG G8x firmware from the phone's own partitions (Nura images ship
 # no vendor firmware). Runs every boot before udev loads drivers; only copies
 # what is missing, so after the first boot it just checks and exits.
-#   modem_<slot>/image  -> remote processor + Wi-Fi DSP firmware, Wi-Fi board
+#   modem_<slot>/image  -> remote processor + Wi-Fi DSP firmware, Wi-Fi board, fingerprint trustlet
 #   vendor_<slot>       -> GPU zap shader, sensor registry config
 #   dsp_<slot>          -> DSP userspace libraries (hexagonrpcd)
 #   sns                 -> sensor calibration registry
@@ -44,6 +44,8 @@ if mnt "modem$slot" $M/modem; then
 		esac
 	done
 	cpn $M/modem/image/bdwlan.bin $WLAN/board.bin
+	# fingerprint trustlet (egista.ko loads it with request_firmware("egista/..."))
+	for f in $M/modem/image/egista.*; do cpn "$f" "$R/lib/firmware/egista/$(basename "$f")"; done
 	# ath10k prefers board-2.bin; linux-firmware's generic board-id=ff entry
 	# crashes the G8x Wi-Fi, so give it the LG data under the exact name
 	U=$R/lib/firmware/updates/ath10k/WCN3990/hw1.0

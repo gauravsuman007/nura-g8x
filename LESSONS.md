@@ -1774,5 +1774,16 @@ haptics; line protocol on `/run/egistad.sock`) -> libfprint `egis_et713` virtual
   session. Made the greeter password-only via a gdm dconf profile; fingerprint is lock-screen only (stock GNOME does
   the same on laptops). Back-to-back gdm restarts broke user@ (grey screen): `systemctl restart user@<uid>` then gdm.
 
-**Open:** packaging (libfprint patch in APKBUILD, egistad + module in the tweaks package, kernel patch + DT node),
-sudo/polkit fingerprint.
+**Packaged (2026-11-17).** Kernel r7: `0002-nura-egista-fingerprint.patch` (qseecom app-load + raw SCM, in-tree
+`drivers/misc/egista`, CONFIG_NURA_EGISTA=m), generated from pristine 7.0 + 0001 + extra-qseecom-*.py + extra-egista.py.
+Tweaks r26: egistad, a private libfprint 1.94.9 build (`-Ddrivers=egis_et713`) in /usr/lib/nura-g8x/lib that fprintd
+loads via LD_LIBRARY_PATH in its drop-in (system libfprint untouched, same pattern as hexagonrpc/libssc), modules-load,
+seed of the factory calibration from partition `drm`, firmware loader copies egista.* from modem, PAM, extension
+(enabled by gschema override), greeter dconf, polkit dialogs accept a finger. Tested on the phone: packaged egistad +
+fprintd see the enrolled finger, fingerprint test group 6/6.
+- Do not regenerate the whole 0001 kernel patch with mkpatch.sh: kernel-src scripts were already ported to 7.4-rc1 and
+  fail on 7.0. Put new kernel work in its own patch on top of 0001.
+- abuild's default_prepare applies every `*.patch` in source from $builddir; with builddir=$srcdir (several bundled
+  projects) name them `.diff` and apply by hand.
+- No DT node: egista.ko has no of_match, so it is loaded by modules-load.d; the sensor GPIOs are hard-coded in the driver.
+- sudo is left password-only: pam_fprintd would wait for a finger on every ssh sudo.

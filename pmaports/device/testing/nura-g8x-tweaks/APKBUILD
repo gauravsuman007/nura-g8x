@@ -4,9 +4,10 @@
 # tweaks/stage.sh packs unit/ and tweaks/ into nura-g8x-tweaks-files.tar.gz.
 pkgname=nura-g8x-tweaks
 pkgver=2026.11.12
-pkgrel=25
+pkgrel=26
 _hexver=0.5.0
 _sscver=0.4.4
+_fpver=1.94.9
 pkgdesc="LG G8x ThinQ tweaks: buttons, wake, pocket and dock modes, sensors, camera, settings app"
 url="https://github.com/gauravsuman007/nura-g8x"
 arch="aarch64"
@@ -28,11 +29,20 @@ depends="
 	libgudev
 	libcamera>=99990.8.0-r100
 	libcamera<99990.8.1
+	fprintd
+	fprintd-pam
+	libgusb
+	pixman
 	"
 makedepends="
 	eudev-dev
 	glib-dev
 	libgudev-dev
+	libgusb-dev
+	pixman-dev
+	cairo-dev
+	nss-dev
+	openssl-dev
 	libqmi-dev
 	linux-headers
 	meson
@@ -53,6 +63,8 @@ source="
 	hexagonrpc-0001-close-aliased-descriptor.diff
 	hexagonrpc-0002-lg-sns-registry.diff
 	libssc-0001-proximity-nonzero-is-near.diff
+	libfprint-$_fpver.tar.gz::https://gitlab.freedesktop.org/libfprint/libfprint/-/archive/v$_fpver/libfprint-v$_fpver.tar.gz
+	libfprint-0001-egis-et713.diff
 	"
 builddir="$srcdir"
 _prefix=/usr/lib/nura-g8x
@@ -64,6 +76,8 @@ prepare() {
 	patch -p0 < "$srcdir"/hexagonrpc-0002-lg-sns-registry.diff
 	cd "$srcdir"/libssc
 	patch -p1 < "$srcdir"/libssc-0001-proximity-nonzero-is-near.diff
+	cd "$srcdir"/libfprint-v$_fpver
+	patch -p1 < "$srcdir"/libfprint-0001-egis-et713.diff
 }
 
 build() {
@@ -74,11 +88,20 @@ build() {
 	cd "$srcdir"/libssc
 	meson setup --prefix=$_prefix --libdir=lib --buildtype=release -Dc_link_args=-Wl,-rpath,$_prefix/lib output
 	meson compile -C output
+	# libfprint with the ET713 driver, private copy: fprintd gets it through LD_LIBRARY_PATH (fprintd drop-in)
+	cd "$srcdir"/libfprint-v$_fpver
+	meson setup --prefix=$_prefix --libdir=lib --buildtype=release -Ddrivers=egis_et713 \
+		-Dintrospection=false -Ddoc=false -Dgtk-examples=false -Dinstalled-tests=false \
+		-Dudev_rules=disabled -Dudev_hwdb=disabled output
+	meson compile -C output
 }
 
 package() {
 	DESTDIR="$srcdir"/stage meson install --no-rebuild -C "$srcdir"/hexagonrpc-$_hexver/output
 	DESTDIR="$srcdir"/stage meson install --no-rebuild -C "$srcdir"/libssc/output
+	DESTDIR="$srcdir"/stage meson install --no-rebuild -C "$srcdir"/libfprint-v$_fpver/output
+	mkdir -p "$pkgdir"$_prefix/lib
+	cp -a "$srcdir"/stage$_prefix/lib/libfprint-2.so.* "$pkgdir"$_prefix/lib/
 	install -Dm755 "$srcdir"/stage$_prefix/bin/hexagonrpcd "$pkgdir"$_prefix/bin/hexagonrpcd
 	cp -a "$srcdir"/stage$_prefix/lib/libhexagonrpc.so.* "$srcdir"/stage$_prefix/lib/libssc.so.* \
 		"$pkgdir"$_prefix/lib/ 2>/dev/null || {
@@ -152,12 +175,27 @@ package() {
 	install -Dm755 $f/unit/firmware/nura-ath10k-board2 -t "$pkgdir"/usr/libexec/
 	# 30 s hardware watchdog: a hung phone resets itself (power button is broken)
 	install -Dm644 $f/unit/watchdog/50-nura-watchdog.conf -t "$pkgdir"/usr/lib/systemd/system.conf.d/
+	# fingerprint (ET713): egistad owns the trustlet, fprintd uses the private libfprint, lock-screen unlock
+	install -Dm644 $f/unit/fingerprint/egistad/*.py -t "$pkgdir"/usr/lib/egistad/
+	install -Dm644 $f/unit/fingerprint/egistad.service -t "$pkgdir"/usr/lib/systemd/system/
+	install -Dm755 $f/unit/fingerprint/nura-egista-seed -t "$pkgdir"/usr/libexec/
+	install -Dm644 $f/unit/fingerprint/nura-egista.conf -t "$pkgdir"/usr/lib/modules-load.d/
+	install -Dm644 $f/unit/fingerprint/fprintd-egista.conf \
+		"$pkgdir"/usr/lib/systemd/system/fprintd.service.d/50-nura-egista.conf
+	install -Dm644 $f/unit/fingerprint/gdm-fingerprint "$pkgdir"/etc/pam.d/gdm-fingerprint
+	install -Dm644 $f/unit/fingerprint/g8x-fingerprint@nura/* \
+		-t "$pkgdir"/usr/share/gnome-shell/extensions/g8x-fingerprint@nura/
+	install -Dm644 $f/unit/fingerprint/91_nura-fingerprint.gschema.override -t "$pkgdir"/usr/share/glib-2.0/schemas/
+	install -Dm644 $f/unit/fingerprint/profile-gdm "$pkgdir"/etc/dconf/profile/gdm
+	install -Dm644 $f/unit/fingerprint/gdm.d-90-g8x-fingerprint "$pkgdir"/etc/dconf/db/gdm.d/90-g8x-fingerprint
 }
 sha512sums="
-67706d013af2393a75e139fadc5029d1e8038081daa7b606d53d3a0c1d627eb62785118fd0ed711f2ee8331abea8462d86fd53de713722834975028746a129cb  nura-g8x-tweaks-files.tar.gz
+b32114e0eec476e6fbd20fcda2f3e50aedf15419468868ed55126e0cd3bf0ecff755ce6168710552b481ae4df290c82715e797542249d4494c1f13006666c297  nura-g8x-tweaks-files.tar.gz
 919146c9018e4b0cc271237c7200af0b7abcd4500227e0140e1e44fd2b412d29c1519ffe29ed06a5119b3a0218a3ef016af21a5be3c5898b0f0d35b44ac78b1b  hexagonrpc-0.5.0.tar.gz
 9240970f6a70f4900ef2d8fad337dac815ea2602b3b395943326fb086f59d24dcf59b76bdbc6014ebd3c450eaad5393465ca038c165845ffe99bf8e282a5c170  libssc-0.4.4.tar.gz
 385817bc2b8f4bfd2a06d67b63f420bb610092758f43391887eb8335c01d68aa1590301f8e060902c95ed20cd9075d6ef38ee71edac30f20008b44eddc3f51ce  hexagonrpc-0001-close-aliased-descriptor.diff
 0d339d00076615ed3c7e450b6a59cd9d4308a64a76c6d8414c6d09171ef011219e1ade08db68a12785473d8ce66ad8c941816b5bf465f998011786e7d4f41b9b  hexagonrpc-0002-lg-sns-registry.diff
 b711ff442b7cce48af4ffb7b265fdfdfdca32dda374a7ef0349ec86e26f019bd7f633774100a3c30b190ab22b1e5b9f1381b089935bd1ffb87716e64197e9fc5  libssc-0001-proximity-nonzero-is-near.diff
+f8debcc1277e6112ed450c04a40cf6113afd7b38377b3fd259bedb1f553b29db758f3519491940bf9cd4ade0f8e70b68040d5bef4c8dbf5f7c2afc1802086397  libfprint-1.94.9.tar.gz
+3c4e37797311465ef872ecc08eda6badfdbf33e3d6aa8f58253ef3db165ec87efcd74894aed07a4d2101476356c1308d9e38227cff011f6cb3f423fd91393917  libfprint-0001-egis-et713.diff
 "

@@ -516,7 +516,12 @@ def gpu_benchmark():
     # image (history in tests/results). Warm up first, then measure.
     cmd = ("glmark2-es2-drm --off-screen -b build:duration=3 -b texture:duration=3 "
            "-b shading:duration=3 -b refract:duration=3 2>&1 | tail -3")
-    sh("glmark2-es2-drm --off-screen -b refract:duration=6 >/dev/null 2>&1", timeout=60)
+    # Run the heavy refract scene until devfreq actually reports the top clock (a fixed 6 s
+    # warm-up sometimes ended at 257 MHz, giving 230-250 for the same image), then measure at once.
+    sh("d=/sys/class/devfreq/2c00000.gpu; mx=$(cat $d/max_freq); "
+       "glmark2-es2-drm --off-screen -b refract:duration=25 >/dev/null 2>&1 & p=$!; "
+       "for i in $(seq 50); do [ \"$(cat $d/cur_freq)\" = \"$mx\" ] && break; sleep 0.5; done; "
+       "kill $p 2>/dev/null; wait $p 2>/dev/null; true", timeout=60)
     out = sh(cmd, timeout=120)
     m = re.search(r"Score:\s*(\d+)", out)
     if not m:
@@ -1133,6 +1138,8 @@ def fp_unlock_integration():
     greeter = sh("grep -rh enable-fingerprint-authentication /etc/dconf/db/gdm.d 2>/dev/null")
     assert_("false" in greeter, "login screen still offers fingerprint (keyring would stay locked)")
     _, hap = input_dev("haptics")
+    if "pam_fprintd" not in rd("/etc/pam.d/polkit-1", ""):
+        raise Warn("lock-screen unlock wired up, but admin (polkit) dialogs do not accept a finger")
     if not hap:
         raise Warn("lock-screen unlock wired up, but no haptics input device")
     return "PAM, sensor-circle extension, password-only greeter and haptics in place"

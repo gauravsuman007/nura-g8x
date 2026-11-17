@@ -1,0 +1,16 @@
+#!/bin/sh
+# egistad's file service serves the trustlet's Android paths under /var/lib/egista. Seed the factory sensor
+# calibration (persist-lg = partition "drm", egis/) once; templates and the lit calibration are written later.
+D=/var/lib/egista/mnt/vendor/persist-lg/egis
+mkdir -p "$D" /var/lib/egista/data/vendor_de/0/fpdata
+chmod 700 /var/lib/egista
+[ -e "$D/.seeded" ] && exit 0
+M=/run/nura-egista-drm; mkdir -p $M
+if timeout 20 mount -o ro /dev/disk/by-partlabel/drm $M 2>/dev/null; then
+	for f in $M/egis/*; do [ -f "$f" ] && [ ! -e "$D/$(basename "$f")" ] && cp "$f" "$D/"; done
+	umount $M; touch "$D/.seeded"; echo "nura-egista-seed: seeded $D"
+else
+	echo "nura-egista-seed: cannot mount drm (persist-lg); the trustlet will generate a calibration"
+fi
+rmdir $M 2>/dev/null
+exit 0

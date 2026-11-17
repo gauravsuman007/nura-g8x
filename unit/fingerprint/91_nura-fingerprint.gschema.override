@@ -1,0 +1,3 @@
+# sensor circle on the lock screen (users who already chose extensions keep their own list)
+[org.gnome.shell]
+enabled-extensions=['g8x-fingerprint@nura']

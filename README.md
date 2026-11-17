@@ -40,7 +40,7 @@ No flip-cover Hall sensor exists; the DualScreen case's is behind TrustZone.
 Remote desktop: stock GNOME (Settings > System > Remote Desktop), no custom
 code; port 3389 shares the phone's own screen (user `nura`, while unlocked;
 auto-lock is off). Needs the login keyring unlocked. Test: `out/probes/rdptest.sh`.
-Fingerprint: in progress (TrustZone app loads and captures in a RAM-boot test kernel; see plans/fingerprint.md).
+Fingerprint: unlocks the GNOME lock screen and admin (polkit) dialogs; the login screen stays password-only. Packaged in kernel r7 and nura-g8x-tweaks r26 (egistad, libfprint egis_et713 driver). See plans/fingerprint.md.
 Cameras (2026-11-09): rear main IMX363 4032x3024, front S5KGD1 3264x2448 and
 rear wide S5K3M3 4160x3120 (new drivers from LG's register tables) all stream at 30 fps through libcamera with
 the GPU soft ISP (`cam -l`, GNOME Snapshot through PipeWire). Rear lens focus

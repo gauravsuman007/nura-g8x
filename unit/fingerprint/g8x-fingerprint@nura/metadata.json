@@ -1,0 +1,7 @@
+{
+  "uuid": "g8x-fingerprint@nura",
+  "name": "LG G8x fingerprint spot",
+  "description": "Draws a white circle over the in-display fingerprint sensor on the lock screen; the panel's LHBM spot only brightens lit pixels.",
+  "shell-version": ["48"],
+  "session-modes": ["user", "unlock-dialog"]
+}
