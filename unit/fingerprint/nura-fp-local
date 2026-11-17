@@ -1,0 +1,15 @@
+#!/bin/sh
+# pam_exec check before pam_fprintd: succeed only when the request comes from someone at the phone. Fails for ssh
+# (an sshd ancestor) and for requests without a terminal or session that we cannot show on screen (sudo -S from a
+# pipe), so those go straight to the password. Used as: auth [success=ignore default=1] pam_exec.so quiet <this>
+case "$PAM_SERVICE" in
+sudo|sudo-i) [ -n "$PAM_TTY" ] || exit 1 ;;
+esac
+p=$PPID
+for i in $(seq 40); do
+	[ "$p" -gt 1 ] 2>/dev/null || break
+	c=$(cat /proc/$p/comm 2>/dev/null)
+	case "$c" in sshd|sshd-session|sshd-auth|dropbear) exit 1 ;; esac
+	p=$(awk '{print $4}' /proc/$p/stat 2>/dev/null)
+done
+exit 0

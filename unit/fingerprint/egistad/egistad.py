@@ -8,11 +8,20 @@
 #   DELETE <fid>        -> "OK" or "ERR <msg>"
 #   CANCEL (while an ENROLL/IDENTIFY waits for a finger) -> the running command ends with "ERR cancelled"
 # One client at a time. Run as root after egista.ko is loaded. usage: egistad.py [--socket PATH] [--fb]
-import os, select, socket, struct, sys, time, traceback
+#
+# Shell side (/run/egistad-ui.sock, any local user; the g8x-fingerprint GNOME Shell extension):
+#   egistad -> UI: "WAIT <service>\t<reason>" when a fingerprint is wanted, "TOUCH", "RETRY", "MATCH", "NOMATCH", "IDLE"
+#   UI -> egistad: "SHOW 1" / "SHOW 0" (circle drawn or not; touches only start a capture while it is shown),
+#                  "CANCEL" (user chose the password/PIN instead)
+# While no UI client is connected every touch on the sensor counts (console, no GNOME session).
+# The reason comes from /run/nura-fp/reason, written by pam_exec (nura-fp-reason) just before pam_fprintd.
+import json, os, select, socket, struct, sys, time, traceback
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import egista as E, egista_fs, fbui
 
 SOCK = '/run/egistad.sock'
+UI_SOCK = '/run/egistad-ui.sock'
+REASON = '/run/nura-fp/reason'
 GOOD, NO_FINGER = 0, 8          # get_image result codes (libRbsFlow cpt state machine)
 
 
@@ -27,8 +36,12 @@ class Sensor:
         E.ListenerThread(self.e.fd, egista_fs.handle).start()
         self.touch = fbui.Touch()
         self.haptics = fbui.Haptics()
-        self.ui = fbui.Screen() if fb else None
+        self.fbui = fbui.Screen() if fb else None
         self.client = None
+        self.ui_srv = None
+        self.ui = []                      # UI client sockets
+        self.ui_shown = {}                # socket -> circle shown
+        self.ui_cancel = False
         self.start()
 
     def log(self, *a):
@@ -53,12 +66,93 @@ class Sensor:
         st, out, _ = self.e.cmd(E.GET_IDS, outlen=0x40)
         return [x for x in struct.unpack_from('<5I', out.ljust(20, b'\0')) if x] if st == 0 else []
 
+    # ---- shell UI socket
+    def ui_listen(self):
+        try:
+            os.unlink(UI_SOCK)
+        except FileNotFoundError:
+            pass
+        self.ui_srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.ui_srv.bind(UI_SOCK)
+        os.chmod(UI_SOCK, 0o666)
+        self.ui_srv.listen(4)
+
+    def ui_drop(self, c):
+        self.ui_shown.pop(c, None)
+        if c in self.ui:
+            self.ui.remove(c)
+        c.close()
+
+    def ui_send(self, line):
+        for c in list(self.ui):
+            try:
+                c.sendall((line + '\n').encode())
+            except OSError:
+                self.ui_drop(c)
+
+    def ui_poll(self, timeout=0):
+        """Accept UI clients and handle their lines. Returns quickly."""
+        r = select.select([self.ui_srv] + self.ui, [], [], timeout)[0]
+        for c in r:
+            if c is self.ui_srv:
+                n, _ = self.ui_srv.accept()
+                self.ui.append(n)
+                self.ui_shown[n] = False
+                if self.waiting:
+                    n.sendall(('WAIT %s\t%s\n' % self.waiting).encode())
+                continue
+            try:
+                d = c.recv(256)
+            except OSError:
+                d = b''
+            if not d:
+                self.ui_drop(c)
+                continue
+            for line in d.decode(errors='replace').split('\n'):
+                line = line.strip()
+                if line == 'SHOW 1':
+                    self.ui_shown[c] = True
+                elif line == 'SHOW 0':
+                    self.ui_shown[c] = False
+                elif line == 'CANCEL' and self.waiting:
+                    self.ui_cancel = True
+
+    def armed(self):
+        """A touch on the sensor starts a capture only while a UI shows the circle (or no UI is connected)."""
+        return not self.ui or any(self.ui_shown.values())
+
+    waiting = None
+
+    def reason(self):
+        try:
+            if time.time() - os.stat(REASON).st_mtime < 20:
+                r = json.load(open(REASON))
+                svc = r.get('service', '')
+                if svc == 'sudo' or svc == 'sudo-i':
+                    why = 'sudo ' + r.get('cmd', '') if r.get('cmd') else 'sudo'
+                    if r.get('tty'):
+                        why += ' (%s)' % r['tty']
+                elif svc == 'polkit-1':
+                    why = 'An app wants administrator rights'
+                elif svc.startswith('gdm'):
+                    why = 'Unlock'
+                else:
+                    why = svc
+                return svc, why
+        except (OSError, ValueError):
+            pass
+        return 'unknown', 'Fingerprint requested'
+
     def send(self, line):
         self.log('->', line)
         if self.client:
             self.client.sendall((line + '\n').encode())
 
     def check_cancel(self):
+        self.ui_poll(0)
+        if self.ui_cancel:
+            self.ui_cancel = False
+            raise Cancelled()
         if self.client and select.select([self.client], [], [], 0)[0]:
             d = self.client.recv(256)
             if not d or b'CANCEL' in d:
@@ -67,16 +161,24 @@ class Sensor:
     def wait_touch(self, down):
         while True:
             self.check_cancel()
-            if self.touch.poll(0.1) == down:
+            t = self.touch.poll(0.1)
+            if down and t and not self.armed():
+                continue                      # circle not shown (PIN pad, no request on screen): ignore
+            if t == down:
                 return
 
-    def capture(self):
-        """Finger-down -> LHBM spot on -> captures until a good image (or the finger leaves). Returns True if good."""
-        self.send('TOUCH')
-        if self.ui: self.ui.text(['TOUCH'])
-        self.touch.reopen()
-        self.wait_touch(True)
+    def capture(self, wait=True):
+        """Finger-down -> LHBM spot on -> captures until a good image (or the finger leaves). Returns True if good.
+        wait=False: the finger is already down (second try on the same touch)."""
+        if wait:
+            self.send('TOUCH')
+            if self.fbui: self.fbui.text(['TOUCH'])
+            self.touch.reopen()
+            self.wait_touch(True)
         self.e.lhbm(True)
+        # the panel needs a frame or two to light the spot (an image taken at once is dim and does not match), and on
+        # the lock screen the shell draws the black ring around the circle only once the finger is down
+        time.sleep(0.15 if wait and self.ui else 0.06)
         try:
             for _ in range(6):
                 st, q = self.e.capture()
@@ -89,6 +191,16 @@ class Sensor:
         return False
 
     def enroll(self):
+        self.waiting = ('enroll', 'Add a fingerprint: touch the sensor, lift, repeat')
+        self.ui_send('WAIT %s\t%s' % self.waiting)
+        try:
+            self._enroll()
+        finally:
+            self.waiting = None
+            self.ui_cancel = False
+            self.ui_send('IDLE')
+
+    def _enroll(self):
         self.e.cmd(0x37, outlen=8)
         self.e.cmd(E.WORK_MODE, 2)
         st = self.e.cmd(E.ENROLL_INIT)[0]
@@ -108,10 +220,11 @@ class Sensor:
                 if r[0] == 0 and 0 <= v[1] <= 100 and v[1] > pct:
                     pct = v[1]
                     self.haptics.buzz(25)
+                    self.ui_send(f'PROGRESS {pct}')
                     self.send(f'PROGRESS {pct}')
                 else:
                     self.send('RETRY similar')
-                if self.ui: self.ui.text(['LIFT', f'{pct}%'])
+                if self.fbui: self.fbui.text(['LIFT', f'{pct}%'])
                 self.wait_touch(False)
         except Cancelled:
             self.e.cmd(E.ENROLL_UNINIT)
@@ -128,6 +241,17 @@ class Sensor:
         self.send(f'DONE {fid}')
 
     def identify(self):
+        self.waiting = self.reason()
+        self.log('wanted for', self.waiting)
+        self.ui_send('WAIT %s\t%s' % self.waiting)
+        try:
+            self._identify()
+        finally:
+            self.waiting = None
+            self.ui_cancel = False
+            self.ui_send('IDLE')
+
+    def _identify(self):
         self.e.cmd(E.WORK_MODE, 1)
         st = self.e.cmd(E.IDENTIFY_START)[0]
         if st:
@@ -137,23 +261,31 @@ class Sensor:
                 if self.capture():
                     break
                 self.send('RETRY center')
+                self.ui_send('RETRY')
                 self.wait_touch(False)
-            # identify must follow the capture within 1 s
-            r = self.e.cmd(E.IDENTIFY, 0, 0, struct.pack('<Q', 0), outlen=0x200)
+            # identify must follow the capture within 1 s; on a miss with the finger still down, take one more image
+            # (a touch that landed while the finger was still settling) before reporting a failure
+            for attempt in range(2):
+                r = self.e.cmd(E.IDENTIFY, 0, 0, struct.pack('<Q', 0), outlen=0x200)
+                v = struct.unpack_from('<4I', r[1].ljust(16, b'\0'))
+                self.log('identify raw', attempt, r[0], r[1][:32].hex())
+                if (r[0] == 0 and v[2] == 1 and v[0]) or attempt or not self.touch.poll(0):
+                    break
+                if not self.capture(wait=False):
+                    break
         except Cancelled:
             self.e.cmd(E.IDENTIFY_FINISH)
             return self.send('ERR cancelled')
         self.e.cmd(E.IDENTIFY_FINISH)
-        v = struct.unpack_from('<4I', r[1].ljust(16, b'\0'))
-        self.log('identify raw', r[0], r[1][:32].hex())
         # identify output: +0 matched fid, +4 ?, +8 match flag (1)
         if r[0] == 0 and v[2] == 1 and v[0]:
             self.haptics.buzz(60)
+            self.ui_send('MATCH')
             self.send(f'MATCH {v[0]}')
         else:
             self.haptics.buzz(80, 2)
+            self.ui_send('NOMATCH')
             self.send('NOMATCH')
-        if self.ui: self.ui.text(['MATCH' if r[0] == 0 else 'NO MATCH'])
 
     def delete(self, fid):
         st = self.e.cmd(E.REMOVE, 0, fid)[0]
@@ -192,13 +324,18 @@ def main():
     srv.bind(path)
     os.chmod(path, 0o600)
     srv.listen(1)
-    s.log('listening on', path)
+    s.ui_listen()
+    s.log('listening on', path, 'and', UI_SOCK)
     while True:
+        while srv not in select.select([srv], [], [], 0)[0]:
+            s.ui_poll(1.0)
         c, _ = srv.accept()
         s.client = c
         buf = b''
         try:
             while True:
+                while c not in select.select([c], [], [], 0)[0]:
+                    s.ui_poll(0.5)
                 d = c.recv(256)
                 if not d:
                     break

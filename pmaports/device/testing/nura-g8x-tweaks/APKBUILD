@@ -184,7 +184,10 @@ package() {
 	# fingerprint (ET713): egistad owns the trustlet, fprintd uses the private libfprint, lock-screen unlock
 	install -Dm644 $f/unit/fingerprint/egistad/*.py -t "$pkgdir"/usr/lib/egistad/
 	install -Dm644 $f/unit/fingerprint/egistad.service -t "$pkgdir"/usr/lib/systemd/system/
-	install -Dm755 $f/unit/fingerprint/nura-egista-seed -t "$pkgdir"/usr/libexec/
+	install -Dm755 $f/unit/fingerprint/nura-egista-seed $f/unit/fingerprint/nura-fp-reason \
+		$f/unit/fingerprint/nura-fp-local -t "$pkgdir"/usr/libexec/
+	install -Dm644 $f/unit/fingerprint/sudo.pam "$pkgdir"/etc/pam.d/sudo
+	install -Dm644 $f/unit/fingerprint/sudo.pam "$pkgdir"/etc/pam.d/sudo-i
 	install -Dm644 $f/unit/fingerprint/nura-egista.conf -t "$pkgdir"/usr/lib/modules-load.d/
 	install -Dm644 $f/unit/fingerprint/fprintd-egista.conf \
 		"$pkgdir"/usr/lib/systemd/system/fprintd.service.d/50-nura-egista.conf

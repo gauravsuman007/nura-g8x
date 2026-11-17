@@ -1,0 +1,10 @@
+#%PAM-1.0
+# sudo (sudo-rs): a finger on the sensor or the password. Requests from ssh or without a terminal skip the
+# fingerprint (nura-fp-local) and go straight to the password. "Use password" in the overlay, or three misses, fall
+# through to the password prompt.
+auth       optional                      pam_exec.so quiet seteuid /usr/libexec/nura-fp-reason
+auth       [success=ignore default=1]    pam_exec.so quiet seteuid /usr/libexec/nura-fp-local
+auth       sufficient                    pam_fprintd.so max-tries=3 timeout=30
+auth       include                       base-auth
+account    include                       base-account
+session    include                       base-session-noninteractive

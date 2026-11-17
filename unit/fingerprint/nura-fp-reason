@@ -1,0 +1,16 @@
+#!/bin/sh
+# pam_exec helper (auth, before pam_fprintd): note why a fingerprint is about to be requested, for egistad and the
+# GNOME Shell overlay. Runs as root inside sudo / polkit-agent-helper-1 / the gdm worker. Never fails the stack.
+D=/run/nura-fp
+mkdir -p $D 2>/dev/null && chmod 755 $D
+cmd=""
+case "$PAM_SERVICE" in
+sudo|sudo-i)
+	# pam_exec's parent is sudo: its command line, minus the leading "sudo" and options
+	cmd=$(tr '\0' ' ' < /proc/$PPID/cmdline 2>/dev/null | sed 's/^[^ ]*sudo //; s/^\(-[^ ]* \)*//' | cut -c1-120);;
+esac
+esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+printf '{"service":"%s","user":"%s","ruser":"%s","tty":"%s","cmd":"%s"}\n' \
+	"$(esc "$PAM_SERVICE")" "$(esc "$PAM_USER")" "$(esc "$PAM_RUSER")" "$(esc "$PAM_TTY")" "$(esc "$cmd")" > $D/reason.tmp 2>/dev/null &&
+	chmod 644 $D/reason.tmp && mv $D/reason.tmp $D/reason
+exit 0

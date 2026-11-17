@@ -15,8 +15,9 @@ chmod 0644 /usr/share/qcom/sm8150/LG/mh2lm/sensors/registry/* 2>/dev/null
 # fingerprint: egistad, polkit dialogs accept a finger, greeter stays password-only (dconf)
 rm -f /etc/systemd/system/egistad.service /etc/systemd/system/fprintd.service.d/egista.conf 2>/dev/null	# bench installs
 systemctl enable egistad.service 2>/dev/null
-grep -q pam_fprintd /etc/pam.d/polkit-1 2>/dev/null || \
-	sed -i 's/^auth\([[:space:]]*\)required\([[:space:]]*\)pam_unix.so/auth\1sufficient\2pam_fprintd.so max-tries=2 timeout=15\n&/' /etc/pam.d/polkit-1
+# polkit-1 belongs to polkit: insert (once) the reason note and the fingerprint before the password
+sed -i '/nura-fp-reason/d; /pam_fprintd.so max-tries/d' /etc/pam.d/polkit-1 2>/dev/null
+sed -i 's/^auth\([[:space:]]*\)required\([[:space:]]*\)pam_unix.so/auth\1optional\2pam_exec.so quiet seteuid \/usr\/libexec\/nura-fp-reason\nauth\1sufficient\2pam_fprintd.so max-tries=3 timeout=30\n&/' /etc/pam.d/polkit-1
 dconf update 2>/dev/null
 # OTA: watch /boot/boot.img and bring the boot partition up to date now (a kernel upgraded in this same apk run)
 systemctl enable --now nura-boot-update.path 2>/dev/null

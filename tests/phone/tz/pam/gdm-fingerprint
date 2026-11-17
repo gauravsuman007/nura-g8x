@@ -1,5 +1,6 @@
 #%PAM-1.0
 # GNOME Shell's fingerprint conversation (lock screen, login): fprintd only, run in parallel with gdm-password.
+auth       optional    pam_exec.so quiet seteuid /usr/libexec/nura-fp-reason
 auth       required    pam_shells.so
 auth       requisite   pam_nologin.so
 # the lock screen does not restart this conversation after a timeout: wait for a finger as long as it is locked
