@@ -1035,6 +1035,106 @@ def remote_desktop():
     return "RDP listening on 3389"
 
 
+# ---------------------------------------------------------------- fingerprint
+# ET713 under-display sensor: egista.ko -> egistad (trustlet owner, /run/egistad.sock) -> libfprint
+# egis_et713 -> fprintd -> gdm-fingerprint PAM + the sensor-circle Shell extension. No finger needed.
+FP_SOCK = "/run/egistad.sock"
+
+
+def _fp_present():
+    if not os.path.exists("/dev/egista"):
+        raise Skip("no /dev/egista (egista.ko not loaded on this kernel)")
+
+
+def _fp_cmd(line, timeout=10):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    try:
+        s.connect(FP_SOCK)
+        s.sendall((line + "\n").encode())
+        buf = b""
+        while b"\n" not in buf:
+            d = s.recv(256)
+            if not d:
+                break
+            buf += d
+        return buf.decode(errors="replace").split("\n")[0]
+    finally:
+        s.close()
+
+
+@test("fingerprint")
+def fp_daemon():
+    _fp_present()
+    assert_(svc_active("egistad"), "egistad.service not active")
+    assert_(os.path.exists(FP_SOCK), f"{FP_SOCK} missing")
+    errs = sh("journalctl -b -u egistad --no-pager -q | grep -ci 'traceback\\|trustlet init failed'")
+    assert_(errs in ("", "0"), f"{errs} errors in the egistad journal")
+    return "egistad active, socket present, no errors this boot"
+
+
+@test("fingerprint")
+def fp_templates():
+    _fp_present()
+    r = _fp_cmd("LIST")
+    assert_(r.startswith("FIDS"), f"LIST answered {r!r}")
+    fids = [int(x) for x in r.split()[1:]]
+    assert_(all(1 <= f <= 5 for f in fids) and len(set(fids)) == len(fids), f"bad fids {fids}")
+    if not fids:
+        raise Warn("trustlet answers, but no finger is enrolled")
+    return f"trustlet answers, enrolled fids {fids}", {"fp_enrolled": len(fids)}
+
+
+@test("fingerprint")
+def fp_protocol():
+    _fp_present()
+    r = _fp_cmd("BOGUS")
+    assert_(r.startswith("ERR"), f"unknown command answered {r!r}")
+    r = _fp_cmd("LIST")
+    assert_(r.startswith("FIDS"), f"daemon not serving after a bad command: {r!r}")
+    return "rejects unknown commands and keeps serving"
+
+
+@test("fingerprint")
+def fp_calibration():
+    _fp_present()
+    files = glob.glob("/var/lib/egista*/**/calibration*", recursive=True) + glob.glob("/data/**/calibration*.bin", recursive=True)
+    if not files:
+        raise Warn("no saved sensor calibration found (regenerated at every daemon start)")
+    return f"calibration saved: {files[0]} ({os.path.getsize(files[0])} bytes)"
+
+
+@test("fingerprint")
+def fp_fprintd():
+    _fp_present()
+    env = rd("/etc/systemd/system/fprintd.service.d/egista.conf", "") or sh("systemctl show fprintd -p Environment")
+    assert_("FP_EGISTA" in env, "fprintd has no FP_EGISTA environment (egis_et713 not announced)")
+    out = sh(f"timeout 20 fprintd-list {USER} 2>&1", timeout=30)
+    m = re.search(r"found (\d+) devices", out)
+    assert_(m and int(m.group(1)) >= 1, f"fprintd does not see the sensor: {out[:160]}")
+    n = len(re.findall(r"^\s*-\s*#\d+", out, re.M))
+    if n == 0:
+        raise Warn(f"fprintd sees the sensor but {USER} has no enrolled finger")
+    return f"fprintd device present, {n} finger(s) for {USER}"
+
+
+@test("fingerprint")
+def fp_unlock_integration():
+    _fp_present()
+    pam = rd("/etc/pam.d/gdm-fingerprint", "")
+    assert_("pam_fprintd" in pam, "gdm-fingerprint PAM service missing pam_fprintd")
+    ext = "g8x-fingerprint@nura"
+    assert_(os.path.isdir(f"/usr/share/gnome-shell/extensions/{ext}"), "sensor-circle extension not installed")
+    en = as_user("gsettings get org.gnome.shell enabled-extensions")
+    assert_(ext in en, "sensor-circle extension not enabled")
+    greeter = sh("grep -rh enable-fingerprint-authentication /etc/dconf/db/gdm.d 2>/dev/null")
+    assert_("false" in greeter, "login screen still offers fingerprint (keyring would stay locked)")
+    _, hap = input_dev("haptics")
+    if not hap:
+        raise Warn("lock-screen unlock wired up, but no haptics input device")
+    return "PAM, sensor-circle extension, password-only greeter and haptics in place"
+
+
 # ---------------------------------------------------------------- dock
 # USB-C dock (Dell TB16 + monitor). Every test SKIPs when no dock is attached,
 # so the suite stays green undocked. Never reads debugfs dp_test_* (kernel oops).
