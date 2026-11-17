@@ -1,0 +1,20 @@
+#!/bin/sh
+# Login screen without fingerprint. /etc/dconf/db/gdm.d only reaches processes started with DCONF_PROFILE=gdm, but
+# GDM 48 runs the greeter's GNOME Shell as a systemd user service of the dynamic greeter user, which does not get that
+# variable (the greeter offered fingerprint although gdm.d says false). So also write the key into the greeter user's
+# own dconf database, which every profile reads first. Keeps the greeter's other settings.
+U=gdm-greeter
+H=$(getent passwd $U | cut -d: -f6)
+[ -n "$H" ] && [ -d "$H" ] || exit 0
+T=$(mktemp -d) || exit 0
+printf 'user-db:user\n' > $T/profile
+mkdir -p $T/keyfile.d
+chmod -R a+rX $T
+su -s /bin/sh $U -c "DCONF_PROFILE=$T/profile dconf dump /" > $T/keyfile.d/00-current 2>/dev/null
+if ! grep -q '^enable-fingerprint-authentication=false' $T/keyfile.d/00-current; then
+	printf '\n[org/gnome/login-screen]\nenable-fingerprint-authentication=false\n' > $T/keyfile.d/90-nofp
+	mkdir -p $H/.config/dconf
+	dconf compile $T/user $T/keyfile.d && install -o $U -g $(id -gn $U) -m 644 $T/user $H/.config/dconf/user
+fi
+rm -rf $T
+exit 0

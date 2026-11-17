@@ -19,6 +19,7 @@ systemctl enable egistad.service 2>/dev/null
 sed -i '/nura-fp-reason/d; /pam_fprintd.so max-tries/d' /etc/pam.d/polkit-1 2>/dev/null
 sed -i 's/^auth\([[:space:]]*\)required\([[:space:]]*\)pam_unix.so/auth\1optional\2pam_exec.so quiet seteuid \/usr\/libexec\/nura-fp-reason\nauth\1sufficient\2pam_fprintd.so max-tries=3 timeout=30\n&/' /etc/pam.d/polkit-1
 dconf update 2>/dev/null
+/usr/libexec/nura-greeter-nofp 2>/dev/null
 # OTA: watch /boot/boot.img and bring the boot partition up to date now (a kernel upgraded in this same apk run)
 systemctl enable --now nura-boot-update.path 2>/dev/null
 /usr/libexec/nura-boot-update 2>&1 | sed 's/^/  /'

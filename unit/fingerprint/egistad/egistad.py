@@ -30,6 +30,16 @@ class Cancelled(Exception):
     pass
 
 
+def panel_on():
+    import glob
+    for p in glob.glob('/sys/class/drm/card*-DSI-1/dpms'):
+        try:
+            return open(p).read().strip() == 'On'
+        except OSError:
+            return False
+    return True
+
+
 class Sensor:
     def __init__(self, fb=False):
         self.e = E.Egista()
@@ -178,6 +188,10 @@ class Sensor:
             self.touch.reopen()
             self.wait_touch(True)
             self.ui_send('DOWN')
+        # never send the spot's DSI commands while the panel is off or changing state (that hangs the SoC; the
+        # watchdog then resets the phone)
+        if not panel_on():
+            return False
         self.e.lhbm(True)
         # the panel needs a frame or two to light the spot (an image taken at once is dim and does not match), and on
         # the lock screen the shell draws the black ring around the circle only once the finger is down
