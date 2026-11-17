@@ -327,6 +327,31 @@ static const u8 lhbm_relock[] = { 0x15,1,0,0,0,0,2,0xb0,0x03 };
  * HBM gamma (green, bright); like Android, the shell paints everything but the spot black during a capture. */
 static int lhbm_mode;
 module_param(lhbm_mode, int, 0644);
+/* bit n set: leave out command n of lhbm_ready (0 b0 00, 1-10 bank-0 cf writes, 11 b0 80, 12-13 small d3, 14-15
+ * large d3 table, 16 b0 03). Tested 2026-11-17: the large bank-0x80 d3 table is what makes the spot bright enough
+ * (without it every image is too dim); it also brightens/tints the whole panel for the capture (the panel has no
+ * spot-only HBM). The bank-0 cf writes and the small d3 table only add a visible flicker, so they are left out. */
+static unsigned int lhbm_skip = 0x27fe;
+module_param(lhbm_skip, uint, 0644);
+
+/* dsi_seq() over the commands of @s whose bit is clear in @skip */
+static int dsi_seq_skip(struct mipi_dsi_device *dsi, const u8 *s, size_t len, unsigned int skip)
+{
+	size_t p = 0;
+	int i = 0, ret = 0;
+
+	while (p + 7 <= len && !ret) {
+		size_t n = 7 + ((s[p + 5] << 8) | s[p + 6]);
+
+		if (p + n > len)
+			break;
+		if (!(skip & (1u << i)))
+			ret = dsi_seq(dsi, s + p, n);
+		p += n;
+		i++;
+	}
+	return ret;
+}
 
 static int set_lhbm(bool on)
 {
@@ -343,7 +368,7 @@ static int set_lhbm(bool on)
 	if (on) {
 		ret = 0;
 		if (lhbm_mode == 0 || lhbm_mode == 3)
-			ret = dsi_seq(dsi, lhbm_ready, sizeof(lhbm_ready));
+			ret = dsi_seq_skip(dsi, lhbm_ready, sizeof(lhbm_ready), lhbm_skip);
 		if (lhbm_mode == 4) {
 			ret = dsi_seq(dsi, lhbm_ready, seq_until_bank80(lhbm_ready, sizeof(lhbm_ready)));
 			if (!ret)

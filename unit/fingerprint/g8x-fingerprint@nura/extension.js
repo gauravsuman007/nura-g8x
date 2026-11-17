@@ -491,18 +491,11 @@ export default class G8xFingerprint extends Extension {
         if (showSpot) {
             const o = g.r + ring;
             // the ring disc is always there to catch touches; it is only painted black when needed
-            if (this._touching) {
-                // capture: the panel runs in HBM gamma for the spot, which tints and brightens the whole screen; paint
-                // everything on the phone panel except the spot black until the scan ends (as Android does)
-                this._ring.set_position(g.m.x - ox, g.m.y - oy);
-                this._ring.set_size(g.m.width, g.m.height);
-                this._ring.set_style('background-color: black;');
-            } else {
-                const ringColor = !d ? 'black' : 'rgba(0,0,0,0)';
-                this._ring.set_position(g.x - o - ox, g.y - o - oy);
-                this._ring.set_size(2 * o, 2 * o);
-                this._ring.set_style(`background-color: ${ringColor}; border-radius: ${o}px;`);
-            }
+            // black ring while a finger is on the circle (always outside the lock screen)
+            const ringColor = !d || this._touching ? 'black' : 'rgba(0,0,0,0)';
+            this._ring.set_position(g.x - o - ox, g.y - o - oy);
+            this._ring.set_size(2 * o, 2 * o);
+            this._ring.set_style(`background-color: ${ringColor}; border-radius: ${o}px;`);
             this._spot.set_position(g.x - g.r - ox, g.y - g.r - oy);
             this._spot.set_size(2 * g.r, 2 * g.r);
             this._spot.set_style(`background-color: white; border-radius: ${g.r}px;`);
