@@ -1,0 +1,11 @@
+[Unit]
+Description=LG G8x ET713 fingerprint trustlet daemon (egistad)
+ConditionPathExists=/dev/egista
+Before=fprintd.service
+
+[Service]
+ExecStart=/usr/bin/python3 -u /usr/lib/egistad/egistad.py $EGISTAD_ARGS
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

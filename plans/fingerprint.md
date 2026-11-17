@@ -346,3 +346,17 @@ captures for 30 s with the Android sequence, then restarts GNOME. Look for a bri
   the display is on (stopping gdm with the panel asleep leaves the screen and touchscreen dead; recover by RAM-booting).
 - Next: libfprint driver (match-on-chip) over /dev/egista + fprintd, a proper UDFPS overlay instead of stopping gdm,
   and moving the template/calibration store from /var/lib/egista into the user-data layout; DT node + kernel patches.
+
+### 2026-11-17: fprintd works (enroll + verify-match through libfprint)
+- `tests/phone/tz/egistad.py`: root daemon owning /dev/egista, the file listener, touchscreen trigger and LHBM; line
+  protocol on /run/egistad.sock (LIST / ENROLL / IDENTIFY / DELETE / CANCEL). `--fb` draws prompts on fb0 (bench only).
+- `tests/phone/tz/libfprint/egis_et713.c`: libfprint 1.94.9 match-on-chip driver, virtual-device type announced by
+  `FP_EGISTA=/run/egistad.sock` in fprintd's environment (`systemd/fprintd-egista.conf`); socket I/O in GTask worker
+  threads, progress marshalled to libfprint's context. Built on the phone (meson), installed over /usr/lib/libfprint-2.so
+  (original kept as .orig). `systemd/egistad.service` runs the daemon from /usr/lib/egistad.
+- Identify output: +0 matched fid, +8 match flag 1. GET_IDS: 5 slot fids, then count. Remove (0x15, a2 0, a3 fid)
+  deletes the file through gpfs cmd 2 (now implemented).
+- Result: `fprintd-enroll` completed (20 stages, 3 not-centered retries), `fprintd-verify` -> verify-match.
+- Next: lock-screen use. Needs a GNOME Shell overlay that draws the white circle over the sensor while fprintd verifies
+  (the spot only brightens lit pixels), egistad without --fb, PAM (fprintd-pam) for gdm/sudo, and packaging (driver as a
+  patch to the libfprint APKBUILD, egistad + module in device/tweaks packages). Kernel: the qseecom patches + DT node.

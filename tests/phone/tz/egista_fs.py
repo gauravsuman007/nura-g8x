@@ -45,6 +45,10 @@ def handle(lid, req):
                 f.write(d)
             _log(f'  wrote {len(d)} (data[:8]={d[:8].hex()})')
             return _reply(len(d), 0)
+        if cmd == 2:        # remove
+            os.unlink(rp)
+            _log('  removed')
+            return _reply(0, 0)
         raise OSError(errno.ENOSYS, 'unknown cmd')
     except OSError as e:
         _log(f'  -> errno {e.errno}')
