@@ -344,25 +344,39 @@ def charge_limit():
     prop = sh("busctl get-property org.freedesktop.UPower /org/freedesktop/UPower/devices/battery_qcom_battery "
               "org.freedesktop.UPower.Device ChargeThresholdSupported 2>&1")
     assert_(prop.endswith("true"), f"UPower does not offer the charge limit ({prop}); check the CHARGE_LIMIT udev rule")
-    if rd(c + "/status", "") != "Charging":
-        return "thresholds present, UPower supports them; not charging, pause not tested"
+    if rd(c + "/online", "0") != "1":
+        return "thresholds present, UPower supports them; no charger, enforcement not tested"
     old = rd(st), rd(en)
     cap = int(rd(b + "/capacity"))
-    if cap < 3:
-        return "thresholds present, UPower supports them; battery too low to test pause"
+    stat = lambda: rd(b + "/status", "")
+    # The bug this guards: the charger resumed by itself (replug, input re-detection) while
+    # the driver still thought it was paused, and the battery charged past the limit (72% > 60%).
+    if int(old[1]) < 100:
+        assert_(not (cap >= int(old[1]) and stat() == "Charging"),
+                f"charging at {cap}% although the limit ends at {old[1]}%")
+
+    def settle(want, secs=20):
+        for _ in range(secs):
+            if stat() == want:
+                return True
+            time.sleep(1)
+        return False
     try:
-        open(st, "w").write(str(cap - 2))
-        open(en, "w").write(str(cap - 1))
-        time.sleep(8)
-        paused = rd(c + "/status", ""), rd(b + "/status", "")
+        if cap < 95:       # limit above the battery: must charge
+            open(en, "w").write("100"); open(st, "w").write(str(min(cap + 3, 95)))
+            charged = settle("Charging")
+        else:
+            charged = None
+        if cap > 3:        # limit below the battery: must stop (hold: "Not charging")
+            open(st, "w").write(str(cap - 3)); open(en, "w").write(str(cap - 2))
+            held = settle("Not charging") or stat() == "Discharging"
+        else:
+            held = None
     finally:
-        open(st, "w").write(old[0])
-        open(en, "w").write(old[1])
-    time.sleep(8)
-    now = rd(c + "/status", "")
-    assert_(paused == ("Discharging", "Discharging"), f"charging did not pause: {paused}")
-    assert_(now == "Charging", f"charging did not resume: {now}")
-    return "UPower supports the limit; charging paused and resumed"
+        open(st, "w").write("0"); open(en, "w").write(old[1]); open(st, "w").write(old[0])
+    assert_(charged is not False, f"raising the limit above {cap}% did not start charging ({stat()})")
+    assert_(held is not False, f"lowering the limit below {cap}% did not stop charging ({stat()})")
+    return f"limit {old[0]}-{old[1]}% at {cap}%: charging starts above it and stops below it"
 
 
 @test("power")
