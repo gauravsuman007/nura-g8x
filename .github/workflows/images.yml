@@ -20,6 +20,9 @@ permissions:
 
 env:
   PMB_TAG: "3.12.1"
+  # pmaports master moves under us (2026-11-22: systemd 262.2 rebuilds failed on mirror 404s); bump deliberately.
+  # be8f406 = master as built by the last good run (2026-11-17).
+  PMAPORTS_REV: "be8f406a6ea97bab300ded7f4bbd5b1241fa8007"
   PMB: python3 ${{ github.workspace }}/../pmbootstrap/pmbootstrap.py
   # absolute, without "..": actions/cache rejects relative parent paths (the
   # first run silently saved no cache at all)
@@ -45,7 +48,11 @@ jobs:
       - name: Get pmbootstrap and pmaports
         run: |
           git clone -q --depth 1 --branch "$PMB_TAG" https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git ../pmbootstrap
-          git clone -q --depth 1 https://gitlab.postmarketos.org/postmarketOS/pmaports.git ../pmaports
+          git init -q ../pmaports
+          git -C ../pmaports fetch -q --depth 1 https://gitlab.postmarketos.org/postmarketOS/pmaports.git "$PMAPORTS_REV"
+          git -C ../pmaports checkout -q -b master FETCH_HEAD
+          git -C ../pmaports remote add origin https://gitlab.postmarketos.org/postmarketOS/pmaports.git
+          git -C ../pmaports log -1 --format='pmaports %h %cI %s'
           for p in device-lg-mh2lm linux-nura-lg-mh2lm nura-g8x-tweaks; do
             rm -rf "$APORTS/device/testing/$p"
             cp -r "pmaports/device/testing/$p" "$APORTS/device/testing/"
