@@ -50,8 +50,10 @@ jobs:
           git clone -q --depth 1 --branch "$PMB_TAG" https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git ../pmbootstrap
           git init -q ../pmaports
           git -C ../pmaports fetch -q --depth 1 https://gitlab.postmarketos.org/postmarketOS/pmaports.git "$PMAPORTS_REV"
-          git -C ../pmaports checkout -q -b master FETCH_HEAD
+          git -C ../pmaports checkout -q -b main FETCH_HEAD
           git -C ../pmaports remote add origin https://gitlab.postmarketos.org/postmarketOS/pmaports.git
+          # pmbootstrap reads channels.cfg from origin/main
+          git -C ../pmaports update-ref refs/remotes/origin/main FETCH_HEAD
           git -C ../pmaports log -1 --format='pmaports %h %cI %s'
           for p in device-lg-mh2lm linux-nura-lg-mh2lm nura-g8x-tweaks; do
             rm -rf "$APORTS/device/testing/$p"
