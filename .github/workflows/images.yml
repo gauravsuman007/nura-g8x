@@ -15,6 +15,19 @@ on:
 
 permissions:
   contents: write
+
+      - name: Save ccache, distfiles and apk downloads
+        # always: a failed later step must not throw away a 50 minute kernel compile
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.WORK }}/cache_ccache_aarch64
+            ${{ env.WORK }}/cache_distfiles
+            ${{ env.WORK }}/cache_http
+            ${{ env.WORK }}/cache_apk_aarch64
+          key: pmb-${{ runner.arch }}-${{ github.run_id }}
+
   pages: write
   id-token: write
 
@@ -74,8 +87,9 @@ jobs:
           printf 8 > "$WORK/version"
           $PMB --version
 
-      - name: Cache ccache, distfiles and apk downloads
-        uses: actions/cache@v4
+      - name: Restore ccache, distfiles and apk downloads
+        id: pmbcache
+        uses: actions/cache/restore@v4
         with:
           path: |
             ${{ env.WORK }}/cache_ccache_aarch64
