@@ -1,0 +1,52 @@
+From 4afe744b3be245407adfa10480fdadd17ffc9572 Mon Sep 17 00:00:00 2001
+From: Nura G8x <nura-g8x@users.noreply.github.com>
+Date: Sun, 22 Nov 2026 21:44:00 +0100
+Subject: [PATCH] misc: fastrpc: don't free a pending context's maps under a
+ late DSP answer
+
+Closing /dev/fastrpc-sdsp right before suspend (nura-sensors-sleep) let a
+late DSP answer run put_work after fastrpc_device_release() had freed the
+maps and fl: NULL deref in fastrpc_context_put, or a hard reset.
+Release now removes pending contexts from the idr and flushes their
+put_work before dropping them; context_free only removes its own id.
+---
+ drivers/misc/fastrpc.c | 16 +++++++++++++++-
+ 1 file changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/misc/fastrpc.c b/drivers/misc/fastrpc.c
+index dc30303..6f0c737 100644
+--- a/drivers/misc/fastrpc.c
++++ b/drivers/misc/fastrpc.c
+@@ -514,7 +514,9 @@ static void fastrpc_context_free(struct kref *ref)
+ 		fastrpc_buf_free(ctx->buf);
+ 
+ 	spin_lock_irqsave(&cctx->lock, flags);
+-	idr_remove(&cctx->ctx_idr, ctx->ctxid >> 4);
++	/* release may have removed it already and the id been reused */
++	if (idr_find(&cctx->ctx_idr, ctx->ctxid >> 4) == ctx)
++		idr_remove(&cctx->ctx_idr, ctx->ctxid >> 4);
+ 	spin_unlock_irqrestore(&cctx->lock, flags);
+ 
+ 	kfree(ctx->maps);
+@@ -1595,6 +1597,18 @@ static int fastrpc_device_release(struct inode *inode, struct file *file)
+ 
+ 	list_for_each_entry_safe(ctx, n, &fl->pending, node) {
+ 		list_del(&ctx->node);
++		/*
++		 * The DSP may still answer this call. Take the context out of
++		 * the idr so a late answer finds nothing, and let an answer that
++		 * already arrived finish its put_work while the maps and fl it
++		 * touches are still alive. A call that is never answered keeps
++		 * its DSP reference and is leaked instead of freed under us.
++		 */
++		spin_lock_irqsave(&cctx->lock, flags);
++		if (idr_find(&cctx->ctx_idr, ctx->ctxid >> 4) == ctx)
++			idr_remove(&cctx->ctx_idr, ctx->ctxid >> 4);
++		spin_unlock_irqrestore(&cctx->lock, flags);
++		flush_work(&ctx->put_work);
+ 		fastrpc_context_put(ctx);
+ 	}
+ 
+-- 
+2.50.1 (Apple Git-155)
+

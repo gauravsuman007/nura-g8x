@@ -1876,3 +1876,10 @@ fprintd see the enrolled finger, fingerprint test group 6/6.
 - Test: `power/charge_limit` checks enforcement both ways (raise limit: must charge; lower below capacity: must stop).
 - Build env (devtools/kbuild): the kernel release must be exactly `7.0.0-sm8150` or the phone's /lib/modules does not match and wifi, audio, camera and remoteprocs all fail. The git tree adds `-g<hash>` (LOCALVERSION_AUTO) and `+`; build.sh disables the first and sets `LOCALVERSION=`. A killed build can leave a truncated `.cmd` file (delete it).
 - `repack-ci-ram.py ... --prod` makes the flashable image without the test watchdog.
+
+## Crash on suspend: fastrpc use-after-free (kernel r10, 2026-11-22)
+- Symptom: the overnight standby test died on the first suspend; that evening the phone reset about every 20-30 min on idle suspend (USB or battery). Last journal line `PM: suspend entry`; when pstore caught it: NULL deref at 0x5e8 in `fastrpc_context_put` from `fastrpc_context_put_wq`. Some resets left no log, and once the SLPI crashed (`err_qdi.c ... sensor_process`).
+- Cause: the `nura-sensors-sleep` hook stops hexagonrpcd-sdsp right before suspend. `fastrpc_device_release()` dropped pending calls and freed the session's maps and `fl`, but the DSP still answered an in-flight call; the answer queued `put_work`, which then freed the context's already freed maps.
+- Fix (patch 0004): release removes each pending context from the idr (late answers find nothing), flushes its `put_work`, then drops it; `fastrpc_context_free` only removes its own id. A call that is never answered is leaked (small) instead of freed under us.
+- Test: `devtools/power/suspend-cycles.sh` (real `systemctl suspend` with a sensor client, RTC wake). Old module: reset on cycle 5. Patched: 15/15, then 30/30.
+- Pitfall: /tmp is cleared on reboot; keep test scripts in /var/lib on the phone.

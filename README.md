@@ -43,6 +43,8 @@ All of these are configurable under **Settings > LG G8x Tweaks**.
   manual control.
 - **Ambient light sensor** stops after a suspend until the next reboot
   (auto-brightness then stays put). Proximity and motion keep working.
+- **Resets on suspend** (fixed in kernel r10): before r10 the phone could
+  reset on entering suspend, often every 20-30 minutes when idle.
 - **Sensors start race**: about 1 boot in 10 the SLPI starts without its
   sensor service; `nura-sensor-check` restarts it automatically.
 - **Sound**: about 1 boot in 5 may start without sound (SLIMbus start race);
