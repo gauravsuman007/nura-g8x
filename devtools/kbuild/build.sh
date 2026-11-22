@@ -31,6 +31,8 @@ M='make -C '\$T' O='\$O' ARCH=arm64 LLVM=1'
 # a changed config replaces the build config (otherwise keep it: incremental)
 cmp -s /cfg \$O/.config.src || { cp /cfg \$O/.config; cp /cfg \$O/.config.src; }
 echo \"tree: \$(git -C \$T log --oneline -1)  (\$(git -C \$T status --short | wc -l) uncommitted)\"
+# the package build has no git history, so no -g<hash> suffix: the release must stay 7.0.0-sm8150 (module directory)
+\$T/scripts/config --file \$O/.config --disable LOCALVERSION_AUTO
 \$M olddefconfig >/dev/null
 if [ -f \$O/.nura-complete ]; then
 	TOTAL=\$(\$M CC='ccache clang' -n $TARGETS 2>/dev/null | grep -oE ' -c -o [^ ]+\.o ' | grep -v '\.mod\.o' | sort -u | wc -l)
@@ -40,7 +42,7 @@ else
 	echo \"fresh build directory: about \$TOTAL objects (last complete build)\"
 fi
 ccache -z >/dev/null
-\$M CC='ccache clang' KBUILD_BUILD_VERSION=$VER -j8 $TARGETS 2>&1 | tee /o/build-$V.log | awk -v t=\$TOTAL '
+\$M CC='ccache clang' LOCALVERSION= KBUILD_BUILD_VERSION=$VER -j8 $TARGETS 2>&1 | tee /o/build-$V.log | awk -v t=\$TOTAL '
 	/^  CC/ && !/\.mod\.o\$/ { n++; p = t ? int(100 * n / t) : 0; if (p > 100) p = 100
 		printf \"\r\033[K[%d/%d %d%%] %s\", n, t, p, \$NF; fflush() }
 	/error:|Error [0-9]/ { print \"\n\" \$0; fflush() }

@@ -6,7 +6,7 @@
 _flavor="nura-lg-mh2lm"
 pkgname=linux-$_flavor
 pkgver=7.0.0
-pkgrel=8
+pkgrel=9
 pkgdesc="Mainline kernel for the LG G8x ThinQ (SM8150) with Nura G8x drivers"
 arch="aarch64"
 _carch="arm64"
@@ -38,6 +38,7 @@ source="
 	linux-$_tag.tar.gz::https://gitlab.postmarketos.org/soc/qualcomm-sm8150/linux/-/archive/$_tag/linux-$_tag.tar.gz
 	0001-nura-lg-mh2lm.patch
 	0002-nura-egista-fingerprint.patch
+	0003-power-qcom_fg-repause-above-limit.patch
 	config-$_flavor.$arch
 "
 builddir="$srcdir/linux-$_tag"
@@ -71,5 +72,6 @@ sha512sums="
 c1bdb11a9ad8be826ec5781e239c60ad92d6bb3a2d6b0adff8ef1f1e334bc6889ab91683257691ba3155f976011cd37969be379d509c9f928f4f85753e95635e  linux-v7.0.0-sm8150.tar.gz
 ce2ca40f3727777397b173187c7bbdb2b1f2aa3f9dc5295af25809791c474b9f30eaa00e529f28a33cc02eafb7705696b1f7d35b53a7c3cd0cec5470e2ea9fad  0001-nura-lg-mh2lm.patch
 f0c34775374e04281aac51cf694c2b5f01a36c6b3309478e403eafac61c3aa9cc9ee6edf1a60738d1786be1159e4f34316fa38f5e9c070cc48edc3fdd6c47b1f  0002-nura-egista-fingerprint.patch
+d4fb03e1f5011111cfbd8b37f11afeb9c65f3a4ba2ece0757026ee3d67beb1376e12a3cbad6dba7d83d6b10bdf88eeaa923664f9e9fbf1dc18d97d0e106599da  0003-power-qcom_fg-repause-above-limit.patch
 ff0f5584cbe7ba94f63664f7fbe5b511d834bd62a8a9edd8cc9cc9d52a295066cb7b78627520bfe06b70bb8929aea4a37207a3a5046b568204cf8f59f268323f  config-nura-lg-mh2lm.aarch64
 "

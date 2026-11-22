@@ -1869,3 +1869,10 @@ fprintd see the enrolled finger, fingerprint test group 6/6.
 - Not reproducible on demand: ~100 libcamera captures, 60 pipewire streams into a GL window, 190 full-size offscreen `render_texture` shots and all three together with a glmark2 loop gave 0 faults. Scripts were throwaway (cam loops, gst `pipewiresrc ! glimagesink`, a GTK4 `render_texture` loop).
 - Mitigation shipped in tweaks r32: `/usr/lib/environment.d/50-nura-nogmem.conf` (FD_MESA_DEBUG=nogmem for the whole user session; glmark2 score unchanged). Off switch: `FD_MESA_DEBUG=` in /etc/environment.d/50-nura-nogmem.conf. Test: gpu/gmem_workaround_active.
 - Separate bug, not fixed: reopening a camera right after a capture hangs about 1 in 3 times with no gap (0 of 9 with 1 s or more). `cam` waits for frames, V4L2 buffers queued, no kernel message, but the VFE interrupt counter jumped by ~550 000 during the hung run (IRQ storm in vfe0). Recovers on the next open. The camera tests now open each camera twice and fail on any new GPU fault, so they catch it.
+
+## Charge limit overshoot (kernel r9, 2026-11-22)
+- Cause: the `qcom_fg` limit worker paused charging once, but the charger could resume above the end threshold and nothing paused it again (battery reached 72% with a 60% limit).
+- Fix (kernel package r9, patch 0003, git commit in the 7.0 tree): the worker re-pauses whenever STATUS reads Charging while paused, polling every 30 s.
+- Test: `power/charge_limit` checks enforcement both ways (raise limit: must charge; lower below capacity: must stop).
+- Build env (devtools/kbuild): the kernel release must be exactly `7.0.0-sm8150` or the phone's /lib/modules does not match and wifi, audio, camera and remoteprocs all fail. The git tree adds `-g<hash>` (LOCALVERSION_AUTO) and `+`; build.sh disables the first and sets `LOCALVERSION=`. A killed build can leave a truncated `.cmd` file (delete it).
+- `repack-ci-ram.py ... --prod` makes the flashable image without the test watchdog.

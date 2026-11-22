@@ -1,0 +1,57 @@
+From ed099c0f5cd652cf7f8e20ce8904907a65669be0 Mon Sep 17 00:00:00 2001
+From: Nura G8x <nura-g8x@users.noreply.github.com>
+Date: Fri, 20 Nov 2026 08:12:27 +0000
+Subject: [PATCH] power: qcom_fg: re-pause when the charger resumes above the
+ limit
+
+The limit worker only told the charger to pause when its own paused state
+changed. When the charger turned charging back on by itself (cable replug,
+input re-detection, charger reset) the driver still believed it was paused
+and never corrected it: the G8x charged to 72% with a 60% end threshold.
+
+Re-check the charger status on every run and pause again when it reports
+Charging above the limit; poll every 30 s instead of 60 s.
+---
+ drivers/power/supply/qcom_fg.c | 18 ++++++++++++++++--
+ 1 file changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/power/supply/qcom_fg.c b/drivers/power/supply/qcom_fg.c
+index d258862..7ebb7ae 100644
+--- a/drivers/power/supply/qcom_fg.c
++++ b/drivers/power/supply/qcom_fg.c
+@@ -900,7 +900,7 @@ static enum power_supply_property qcom_fg_props[] = {
+ 	POWER_SUPPLY_PROP_CHARGE_CONTROL_END_THRESHOLD,
+ };
+ 
+-#define QCOM_FG_LIMIT_POLL_MS	60000
++#define QCOM_FG_LIMIT_POLL_MS	30000
+ 
+ static void qcom_fg_set_charge_paused(struct qcom_fg_chip *chip, bool pause)
+ {
+@@ -942,8 +942,22 @@ static void qcom_fg_charge_limit_worker(struct work_struct *work)
+ 	else if (cap <= start)
+ 		pause = false;
+ 
+-	if (pause != chip->charge_paused || !chip->charge_applied)
++	if (pause != chip->charge_paused || !chip->charge_applied) {
+ 		qcom_fg_set_charge_paused(chip, pause);
++	} else if (pause &&
++		   !power_supply_get_property(chip->chg_psy, POWER_SUPPLY_PROP_STATUS,
++					      &status) &&
++		   status.intval == POWER_SUPPLY_STATUS_CHARGING) {
++		/*
++		 * The charger turned charging back on by itself (cable replug,
++		 * input re-detection, charger reset) while we still think it is
++		 * paused: the battery charged past the limit (G8x, 72% with a
++		 * 60% end, 2026-11-20). Pause it again.
++		 */
++		dev_info(chip->dev, "charger resumed above the limit (%d%% >= %d%%), pausing again\n",
++			 cap, end);
++		qcom_fg_set_charge_paused(chip, true);
++	}
+ 
+ 	/* The charger reports its new status a moment after the input changes */
+ 	if (!power_supply_get_property(chip->chg_psy, POWER_SUPPLY_PROP_STATUS,
+-- 
+2.50.1 (Apple Git-155)
+
