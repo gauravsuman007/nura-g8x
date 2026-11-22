@@ -15,19 +15,6 @@ on:
 
 permissions:
   contents: write
-
-      - name: Save ccache, distfiles and apk downloads
-        # always: a failed later step must not throw away a 50 minute kernel compile
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ${{ env.WORK }}/cache_ccache_aarch64
-            ${{ env.WORK }}/cache_distfiles
-            ${{ env.WORK }}/cache_http
-            ${{ env.WORK }}/cache_apk_aarch64
-          key: pmb-${{ runner.arch }}-${{ github.run_id }}
-
   pages: write
   id-token: write
 
@@ -210,6 +197,18 @@ jobs:
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
             gh release create "$GITHUB_REF_NAME" --title "Nura LG G8x $GITHUB_REF_NAME" --notes-file release/README.md
           gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+
+      - name: Save ccache, distfiles and apk downloads
+        # always: a failed later step must not throw away a 50 minute kernel compile
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.WORK }}/cache_ccache_aarch64
+            ${{ env.WORK }}/cache_distfiles
+            ${{ env.WORK }}/cache_http
+            ${{ env.WORK }}/cache_apk_aarch64
+          key: pmb-${{ runner.arch }}-${{ github.run_id }}
 
   pages:
     needs: image
