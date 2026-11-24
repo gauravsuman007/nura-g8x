@@ -3,7 +3,7 @@
 # watchdog.open_timeout resets a hang before userspace). usage: repack-boot.py Image.gz OUT [extra cmdline]
 import struct, sys, hashlib
 N='/Users/hellonfire/Coding/nura/'
-d=open(N+'out/boot-flash-78.img','rb').read(); pg=2048
+d=open(__import__('os').environ.get('BASE',N+'out/boot-flash-78.img'),'rb').read(); pg=2048
 ks,_,rs=struct.unpack('<III',d[8:20]); rdo=pg+(ks+pg-1)//pg*pg; rd=d[rdo:rdo+rs]
 nk=open(sys.argv[1],'rb').read()+open(__import__('os').environ.get('DTB',N+'out/probes/final.dtb'),'rb').read()
 h=bytearray(d[:pg]); struct.pack_into('<I',h,8,len(nk))

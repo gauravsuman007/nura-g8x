@@ -1,0 +1,20 @@
+diff --git a/drivers/gpu/drm/msm/dsi/dsi_host.c b/drivers/gpu/drm/msm/dsi/dsi_host.c
+index db6da99..25f4d1c 100644
+--- a/drivers/gpu/drm/msm/dsi/dsi_host.c
++++ b/drivers/gpu/drm/msm/dsi/dsi_host.c
+@@ -1584,6 +1584,7 @@ static void dsi_timeout_status(struct msm_dsi_host *msm_host)
+ 	status = dsi_read(msm_host, REG_DSI_TIMEOUT_STATUS);
+ 
+ 	if (status) {
++		pr_err_ratelimited("dsi: TIMEOUT_STATUS=%08x\n", status);
+ 		dsi_write(msm_host, REG_DSI_TIMEOUT_STATUS, status);
+ 		msm_host->err_work_state |= DSI_ERR_STATE_TIMEOUT;
+ 	}
+@@ -1613,6 +1614,7 @@ static void dsi_fifo_status(struct msm_dsi_host *msm_host)
+ 
+ 	/* fifo underflow, overflow */
+ 	if (status) {
++		pr_err_ratelimited("dsi: FIFO_STATUS=%08x\n", status);
+ 		dsi_write(msm_host, REG_DSI_FIFO_STATUS, status);
+ 		msm_host->err_work_state |= DSI_ERR_STATE_FIFO;
+ 		if (status & DSI_FIFO_STATUS_CMD_MDP_FIFO_UNDERFLOW)

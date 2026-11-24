@@ -40,6 +40,7 @@ source="
 	0002-nura-egista-fingerprint.patch
 	0003-power-qcom_fg-repause-above-limit.patch
 	0004-misc-fastrpc-pending-context-release.patch
+	0005-drm-msm-dsi-log-error-status.patch
 	config-$_flavor.$arch
 "
 builddir="$srcdir/linux-$_tag"
@@ -75,5 +76,6 @@ ce2ca40f3727777397b173187c7bbdb2b1f2aa3f9dc5295af25809791c474b9f30eaa00e529f28a3
 f0c34775374e04281aac51cf694c2b5f01a36c6b3309478e403eafac61c3aa9cc9ee6edf1a60738d1786be1159e4f34316fa38f5e9c070cc48edc3fdd6c47b1f  0002-nura-egista-fingerprint.patch
 d4fb03e1f5011111cfbd8b37f11afeb9c65f3a4ba2ece0757026ee3d67beb1376e12a3cbad6dba7d83d6b10bdf88eeaa923664f9e9fbf1dc18d97d0e106599da  0003-power-qcom_fg-repause-above-limit.patch
 29171b69a2c480b80b101ab7371d44c0aaa1d009add6796709d137378ad1553ae91e66470429b4eef57dfaa653eb3b995a16f588feb1ac6276f69204d3e9639b  0004-misc-fastrpc-pending-context-release.patch
-ff0f5584cbe7ba94f63664f7fbe5b511d834bd62a8a9edd8cc9cc9d52a295066cb7b78627520bfe06b70bb8929aea4a37207a3a5046b568204cf8f59f268323f  config-nura-lg-mh2lm.aarch64
+4cb8e878b4a2a7804756537b975c97443be831849132dc2ed49b6f35a248f769e71e0f3aac798dc283ec7254276b00267aa3eab4a3d97f91f3c42e9b4e038c19  config-nura-lg-mh2lm.aarch64
+4221a0392e2d36ced48b5545f93c01b8917c4c736cd2c767993bf1d941e84a3039b01f5aedbce4bc5d30d65b987a967c7382c48dbc89dcb5f02494c5037dae2c  0005-drm-msm-dsi-log-error-status.patch
 "
