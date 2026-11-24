@@ -15,6 +15,11 @@ It does not suspend while:
   - a USB host is talking to the phone (usb0 up: development, tethering),
   - something holds a sleep block inhibitor (SSH sessions, package manager,
     players that ask for it): logind refuses and we retry later.
+Maintenance windows (STANDBY_WINDOW_MIN > 0, like Android Doze): before every
+suspend an RTC alarm is armed STANDBY_WINDOW_MIN minutes ahead. That wake lets
+timers, mail sync and other periodic work run for STANDBY_WINDOW_S seconds in
+one burst; a network (WoWLAN) wake keeps the normal grace time. Together with
+WIFI_STANDBY=0 (Wi-Fi off in suspend) the radio is only on during the windows.
 Settings: /etc/nura/tweaks.conf (LG G8x Tweaks > Standby).
 """
 import glob
@@ -25,6 +30,26 @@ import time
 CONF = '/etc/nura/tweaks.conf'
 DEFAULTS = '/usr/share/nura-g8x-tweaks/tweaks.conf'
 POLL = 2.0
+RTC = '/sys/class/rtc/rtc0/wakealarm'
+
+
+def arm_rtc(minutes, wake_at=0):
+    """Wake the system in `minutes` minutes (0 clears); returns the target time.
+    `wake_at` (epoch seconds, STANDBY_WAKE_AT, used by the drain test) is an extra deadline: the
+    earlier of the two wins, so a test can end a phase without waking the phone every few minutes."""
+    now = time.time()
+    target = now + minutes * 60 if minutes else 0
+    if wake_at > now + 5 and (not target or wake_at < target):
+        target = wake_at
+    try:
+        open(RTC, 'w').write('0')
+        if target:
+            # relative: the PMIC RTC is not set to wall-clock time (it reads 1970 here), so an absolute epoch never fires
+            open(RTC, 'w').write('+%d' % max(1, int(target - now)))
+            return target
+    except OSError:
+        pass
+    return 0
 
 
 def conf():
@@ -82,17 +107,34 @@ def boottime():
     return time.clock_gettime(time.CLOCK_BOOTTIME)
 
 
+_last = ['']
+
+
+def why(msg):
+    """Log a decision to the journal when its kind changes (no spam at every poll)."""
+    k = msg.split(' ', 1)[0] if msg.startswith('wait') else msg
+    if k != _last[0]:
+        _last[0] = k
+        print(msg, flush=True)
+
+
 def main():
     off_since = None
     resumed = time.monotonic()
     retry_at = 0.0
     last_m, last_b = time.monotonic(), boottime()
+    rtc_target = 0
+    grace_s = None
     while True:
         time.sleep(POLL)
         m, b = time.monotonic(), boottime()
         if (b - last_b) - (m - last_m) > 1.0:
             resumed = m			# the system slept in between
             retry_at = 0.0
+            # woken by our own RTC alarm: a short maintenance window, not a user wake
+            grace_s = (num(conf(), 'STANDBY_WINDOW_S', 30, 5, 600)
+                       if rtc_target and time.time() >= rtc_target - 5 else None)
+            rtc_target = 0
         last_m, last_b = m, b
 
         c = conf()
@@ -103,13 +145,21 @@ def main():
             continue
         if off_since is None:
             off_since = m
+        if grace_s is not None:
+            grace = grace_s
         if not delay or m - off_since < delay or m - resumed < grace or m < retry_at:
+            why('wait delay=%s off=%d grace=%d' % (delay, m - off_since, m - resumed))
             continue
-        if external_display() or usb_host() or audio_running():
+        if external_display() or (usb_host() and c.get('STANDBY_IGNORE_USB') != '1') or audio_running():
+            why('blocked ext=%s usb=%s audio=%s' % (external_display(), usb_host(), audio_running()))
             continue
+        rtc_target = arm_rtc(num(c, 'STANDBY_WINDOW_MIN', 0, 0, 240), num(c, 'STANDBY_WAKE_AT', 0, 0, 2 ** 31))
         r = subprocess.run(['systemctl', 'suspend'], capture_output=True, text=True)
+        why('suspend rc=%d %s' % (r.returncode, r.stderr.strip()))
         if r.returncode != 0:
             retry_at = time.monotonic() + 30	# inhibited: look again later
+            arm_rtc(0)
+            rtc_target = 0
         else:
             resumed = time.monotonic()
         last_m, last_b = time.monotonic(), boottime()

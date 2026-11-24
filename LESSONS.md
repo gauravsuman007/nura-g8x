@@ -1883,3 +1883,20 @@ fprintd see the enrolled finger, fingerprint test group 6/6.
 - Fix (patch 0004): release removes each pending context from the idr (late answers find nothing), flushes its `put_work`, then drops it; `fastrpc_context_free` only removes its own id. A call that is never answered is leaked (small) instead of freed under us.
 - Test: `devtools/power/suspend-cycles.sh` (real `systemctl suspend` with a sensor client, RTC wake). Old module: reset on cycle 5. Patched: 15/15, then 30/30.
 - Pitfall: /tmp is cleared on reboot; keep test scripts in /var/lib on the phone.
+
+## Standby follow-ups (2026-11-24)
+- fastrpc crash on suspend came back with the r10 patch: `fastrpc_rpmsg_callback` completed the caller before queueing
+  `put_work`, so the caller could return, close the fd and free `fl` while the work was still unqueued (flush found
+  nothing). Queue first, then `complete()`, and `flush_scheduled_work()` in `fastrpc_device_release()` (patch 0004,
+  kernel r11). 30/30 suspend cycles and the short standby test ran without a reset.
+- The PMIC RTC does not hold wall-clock time (it reads 1970 here). An absolute epoch in `wakealarm` never fires; the
+  daemon now writes `+N` seconds. A 10 minute test phase slept 53 minutes until USB woke it.
+- A deploy with `cp` over `/usr/libexec/nura-standby` left it mode 644: systemd retried 270 times (status 203/EXEC).
+  `nura-standby` now logs why it waits, is blocked or fails to suspend (`journalctl -u nura-standby`).
+- The phone's Wi-Fi address changes (DHCP): use `lg-g8x.local` (avahi), never a fixed 192.168.2.x.
+- Lock-screen fingerprint died on the first suspend while locked: libfprint 1.94 cancels a running verify with
+  "Cannot run while suspended" when the driver has no suspend/resume vfuncs, pam_fprintd then ends and GNOME does not
+  restart it. The egis_et713 driver now implements both (the wait lives in egistad, a socket read that continues after
+  resume). Tweaks r33. Verified: verify survives a suspend while locked; a real finger after resume still to be confirmed.
+- `dsi_err_worker: status=5` (TIMEOUT|FIFO) shows up about 10 s after a panel enable, i.e. around the idle blank. The
+  worker recovers it, no visible effect; not fixed, link to the earlier unplug-time reset unproven.

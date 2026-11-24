@@ -15,7 +15,8 @@ L=/var/log/nura-ab.log; CONF=/etc/nura/tweaks.conf
 # the test phase's settings behind (2026-11-22: STANDBY_DELAY_S=5, so the phone suspended and woke in a loop).
 # After a reboot restore by hand: cp /var/lib/nura-ab.conf.orig /etc/nura/tweaks.conf
 cp -n $CONF /var/lib/nura-ab.conf.orig 2>/dev/null
-trap 'cp /var/lib/nura-ab.conf.orig $CONF' EXIT INT TERM
+trap 'cp /var/lib/nura-ab.conf.orig $CONF; rm -f /var/lib/nura-ab.active' EXIT INT TERM
+touch /var/lib/nura-ab.active   # nura-ab-restore.service puts the config back after a crash/reboot mid-test
 st() { awk '/Accumulated/{print $NF}' /sys/kernel/debug/qcom_stats/$1 2>/dev/null; }
 row() { echo "$(date +%s) $PHASE cap=$(cat $B/capacity) uv=$(cat $B/voltage_now) ua=$(cat $B/current_now) usb=$(cat $C/online) cxsd=$(st cxsd) ddr=$(st ddr) susp=$(cat /sys/power/suspend_stats/success) wlan=$(cat /sys/class/net/wlan0/operstate) up=$(cut -d. -f1 /proc/uptime) tag=$1" >> $L; }
 setconf() { # key=value ...
@@ -29,12 +30,12 @@ screen() { # off|on
 phase() { # name minutes key=value...
 	PHASE=$1; mins=$2; shift 2
 	[ "$mins" -gt 0 ] || return 0
-	setconf "$@"; echo "# phase $PHASE $mins min: $*" >> $L
+	setconf "$@" STANDBY_WAKE_AT=$(( $(date +%s) + mins*60 )); echo "# phase $PHASE $mins min: $*" >> $L
 	screen off; sleep 3; row start
 	end=$(( $(date +%s) + mins*60 ))
 	while [ $(date +%s) -lt $end ]; do
 		[ "$(cat $C/online)" = 0 ] || { row plugged; echo "# aborted: USB plugged in" >> $L; return 1; }
-		sleep 30; row tick
+		sleep 30; row tick   # while suspended this loop is frozen; the RTC alarm at the phase end (STANDBY_WAKE_AT) wakes it
 	done
 	row end
 }
@@ -48,4 +49,7 @@ phase D $PH_D STANDBY_DELAY_S=5 STANDBY_WINDOW_MIN=15 STANDBY_WINDOW_S=30 WIFI_S
 phase E $PH_E STANDBY_DELAY_S=5 STANDBY_WINDOW_MIN=15 STANDBY_WINDOW_S=30 WIFI_STANDBY=1
 PHASE=done; screen on
 cp /var/lib/nura-ab.conf.orig $CONF   # restore the user's settings
+rm -f /var/lib/nura-ab.active
+nmcli radio wifi on 2>/dev/null
+journalctl -u nura-standby -b --no-pager >> $L 2>/dev/null
 row finished; echo "# ab-standby finished $(date)" >> $L

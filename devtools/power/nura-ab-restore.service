@@ -1,0 +1,10 @@
+[Unit]
+Description=Restore the user's tweaks.conf after an interrupted drain test
+ConditionPathExists=/var/lib/nura-ab.active
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'cp /var/lib/nura-ab.conf.orig /etc/nura/tweaks.conf; rm -f /var/lib/nura-ab.active; echo "# $(date): restored config after reboot" >> /var/log/nura-ab.log'
+
+[Install]
+WantedBy=multi-user.target

@@ -426,6 +426,21 @@ dev_cancel (FpDevice *dev)
   on_op_cancelled (NULL, FPI_DEVICE_EGIS_ET713 (dev));
 }
 
+/* Without these libfprint cancels a running verify when the system suspends ("Cannot run while suspended"):
+ * the lock screen's fingerprint conversation then ended and was not restarted. The wait lives in egistad
+ * (a socket read), which simply continues after resume, so suspend and resume only have to say yes. */
+static void
+dev_suspend (FpDevice *dev)
+{
+  fpi_device_suspend_complete (dev, NULL);
+}
+
+static void
+dev_resume (FpDevice *dev)
+{
+  fpi_device_resume_complete (dev, NULL);
+}
+
 static void
 fpi_device_egis_et713_finalize (GObject *obj)
 {
@@ -465,6 +480,8 @@ fpi_device_egis_et713_class_init (FpiDeviceEgisEt713Class *klass)
   dev_class->list = dev_list;
   dev_class->delete = dev_delete;
   dev_class->cancel = dev_cancel;
+  dev_class->suspend = dev_suspend;
+  dev_class->resume = dev_resume;
 
   fpi_device_class_auto_initialize_features (dev_class);
 }

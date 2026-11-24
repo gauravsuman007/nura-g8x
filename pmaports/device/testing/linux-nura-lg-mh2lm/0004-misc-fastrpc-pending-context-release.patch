@@ -1,8 +1,7 @@
 From 4afe744b3be245407adfa10480fdadd17ffc9572 Mon Sep 17 00:00:00 2001
 From: Nura G8x <nura-g8x@users.noreply.github.com>
 Date: Sun, 22 Nov 2026 21:44:00 +0100
-Subject: [PATCH] misc: fastrpc: don't free a pending context's maps under a
- late DSP answer
+Subject: [PATCH] misc: fastrpc: don't free maps under a late DSP answer
 
 Closing /dev/fastrpc-sdsp right before suspend (nura-sensors-sleep) let a
 late DSP answer run put_work after fastrpc_device_release() had freed the
@@ -10,11 +9,8 @@ maps and fl: NULL deref in fastrpc_context_put, or a hard reset.
 Release now removes pending contexts from the idr and flushes their
 put_work before dropping them; context_free only removes its own id.
 ---
- drivers/misc/fastrpc.c | 16 +++++++++++++++-
- 1 file changed, 15 insertions(+), 1 deletion(-)
-
 diff --git a/drivers/misc/fastrpc.c b/drivers/misc/fastrpc.c
-index dc30303..6f0c737 100644
+index dc30303..a9a50c8 100644
 --- a/drivers/misc/fastrpc.c
 +++ b/drivers/misc/fastrpc.c
 @@ -514,7 +514,9 @@ static void fastrpc_context_free(struct kref *ref)
@@ -28,7 +24,17 @@ index dc30303..6f0c737 100644
  	spin_unlock_irqrestore(&cctx->lock, flags);
  
  	kfree(ctx->maps);
-@@ -1595,6 +1597,18 @@ static int fastrpc_device_release(struct inode *inode, struct file *file)
+@@ -1586,6 +1588,9 @@ static int fastrpc_device_release(struct inode *inode, struct file *file)
+ 
+ 	fastrpc_release_current_dsp_process(fl);
+ 
++	/* answered calls of this fl may still have a put_work queued that touches fl and its maps */
++	flush_scheduled_work();
++
+ 	spin_lock_irqsave(&cctx->lock, flags);
+ 	list_del(&fl->user);
+ 	spin_unlock_irqrestore(&cctx->lock, flags);
+@@ -1595,6 +1600,18 @@ static int fastrpc_device_release(struct inode *inode, struct file *file)
  
  	list_for_each_entry_safe(ctx, n, &fl->pending, node) {
  		list_del(&ctx->node);
@@ -47,6 +53,25 @@ index dc30303..6f0c737 100644
  		fastrpc_context_put(ctx);
  	}
  
+@@ -2532,14 +2549,17 @@ static int fastrpc_rpmsg_callback(struct rpmsg_device *rpdev, void *data,
+ 	}
+ 
+ 	ctx->retval = rsp->retval;
+-	complete(&ctx->work);
+ 
+ 	/*
+ 	 * The DMA buffer associated with the context cannot be freed in
+ 	 * interrupt context so schedule it through a worker thread to
+-	 * avoid a kernel BUG.
++	 * avoid a kernel BUG. Queue it before waking the caller: the caller
++	 * still holds a reference until then, and once it returns the work
++	 * is already queued, so fastrpc_device_release() can flush it before
++	 * it frees the fl and maps the work still touches.
+ 	 */
+ 	schedule_work(&ctx->put_work);
++	complete(&ctx->work);
+ 
+ 	return 0;
+ }
 -- 
-2.50.1 (Apple Git-155)
-
+2.50.1
