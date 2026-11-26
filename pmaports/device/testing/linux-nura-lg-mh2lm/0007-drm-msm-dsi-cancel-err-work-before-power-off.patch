@@ -1,0 +1,18 @@
+diff --git a/drivers/gpu/drm/msm/dsi/dsi_host.c b/drivers/gpu/drm/msm/dsi/dsi_host.c
+index 25f4d1c..5017baa 100644
+--- a/drivers/gpu/drm/msm/dsi/dsi_host.c
++++ b/drivers/gpu/drm/msm/dsi/dsi_host.c
+@@ -2388,6 +2388,13 @@ void msm_dsi_host_disable_irq(struct mipi_dsi_host *host)
+ 	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
+ 
+ 	disable_irq(msm_host->irq);
++	/*
++	 * The error irq may have queued err_work just before; the worker writes
++	 * DSI registers (interrupt mask, soft reset). It must not run after
++	 * msm_dsi_host_power_off() has cut the clocks and the GDSC: an access to
++	 * the unclocked block stalls the bus and the SoC resets with no log.
++	 */
++	cancel_work_sync(&msm_host->err_work);
+ }
+ 
+ int msm_dsi_host_enable(struct mipi_dsi_host *host)

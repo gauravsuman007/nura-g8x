@@ -1,77 +1,284 @@
-From 4afe744b3be245407adfa10480fdadd17ffc9572 Mon Sep 17 00:00:00 2001
-From: Nura G8x <nura-g8x@users.noreply.github.com>
-Date: Sun, 22 Nov 2026 21:44:00 +0100
-Subject: [PATCH] misc: fastrpc: don't free maps under a late DSP answer
-
-Closing /dev/fastrpc-sdsp right before suspend (nura-sensors-sleep) let a
-late DSP answer run put_work after fastrpc_device_release() had freed the
-maps and fl: NULL deref in fastrpc_context_put, or a hard reset.
-Release now removes pending contexts from the idr and flushes their
-put_work before dropping them; context_free only removes its own id.
----
 diff --git a/drivers/misc/fastrpc.c b/drivers/misc/fastrpc.c
-index dc30303..a9a50c8 100644
+index dc30303..2f3a058 100644
 --- a/drivers/misc/fastrpc.c
 +++ b/drivers/misc/fastrpc.c
-@@ -514,7 +514,9 @@ static void fastrpc_context_free(struct kref *ref)
+@@ -310,8 +310,12 @@ struct fastrpc_user {
+ 	spinlock_t lock;
+ 	/* lock for allocations */
+ 	struct mutex mutex;
++	/* the open file and every invoke context hold a reference */
++	struct kref refcount;
+ };
+ 
++static struct workqueue_struct *fastrpc_wq;
++
+ /* Extract SMMU PA from consolidated IOVA */
+ static inline dma_addr_t fastrpc_ipa_to_dma_addr(struct fastrpc_channel_ctx *cctx, dma_addr_t iova)
+ {
+@@ -497,10 +501,13 @@ static void fastrpc_channel_ctx_put(struct fastrpc_channel_ctx *cctx)
+ 	kref_put(&cctx->refcount, fastrpc_channel_ctx_free);
+ }
+ 
++static void fastrpc_user_put(struct fastrpc_user *fl);
++
+ static void fastrpc_context_free(struct kref *ref)
+ {
+ 	struct fastrpc_invoke_ctx *ctx;
+ 	struct fastrpc_channel_ctx *cctx;
++	struct fastrpc_user *fl;
+ 	unsigned long flags;
+ 	int i;
+ 
+@@ -513,14 +520,22 @@ static void fastrpc_context_free(struct kref *ref)
+ 	if (ctx->buf)
  		fastrpc_buf_free(ctx->buf);
  
++	/*
++	 * An answered context was taken out of the idr by the answer, and its
++	 * id may already belong to a newer context.
++	 */
  	spin_lock_irqsave(&cctx->lock, flags);
 -	idr_remove(&cctx->ctx_idr, ctx->ctxid >> 4);
-+	/* release may have removed it already and the id been reused */
 +	if (idr_find(&cctx->ctx_idr, ctx->ctxid >> 4) == ctx)
 +		idr_remove(&cctx->ctx_idr, ctx->ctxid >> 4);
  	spin_unlock_irqrestore(&cctx->lock, flags);
  
++	fl = ctx->fl;
  	kfree(ctx->maps);
-@@ -1586,6 +1588,9 @@ static int fastrpc_device_release(struct inode *inode, struct file *file)
+ 	kfree(ctx->olaps);
+ 	kfree(ctx);
  
- 	fastrpc_release_current_dsp_process(fl);
++	/* the maps and the buffer above point at fl, drop it last */
++	fastrpc_user_put(fl);
+ 	fastrpc_channel_ctx_put(cctx);
+ }
  
-+	/* answered calls of this fl may still have a put_work queued that touches fl and its maps */
-+	flush_scheduled_work();
+@@ -542,6 +557,23 @@ static void fastrpc_context_put_wq(struct work_struct *work)
+ 	fastrpc_context_put(ctx);
+ }
+ 
++/*
++ * fastrpc_invoke_send() takes a reference for the DSP's answer. Whoever takes
++ * the context out of the idr owns that reference: the answer, a release that
++ * gives up on the call, or the channel going away. Called with cctx->lock held.
++ */
++static bool fastrpc_context_take_answer(struct fastrpc_channel_ctx *cctx,
++					struct fastrpc_invoke_ctx *ctx)
++{
++	lockdep_assert_held(&cctx->lock);
 +
- 	spin_lock_irqsave(&cctx->lock, flags);
- 	list_del(&fl->user);
- 	spin_unlock_irqrestore(&cctx->lock, flags);
-@@ -1595,6 +1600,18 @@ static int fastrpc_device_release(struct inode *inode, struct file *file)
++	if (idr_find(&cctx->ctx_idr, ctx->ctxid >> 4) != ctx)
++		return false;
++
++	idr_remove(&cctx->ctx_idr, ctx->ctxid >> 4);
++	return true;
++}
++
+ #define CMP(aa, bb) ((aa) == (bb) ? 0 : (aa) < (bb) ? -1 : 1)
+ static int olaps_cmp(const void *a, const void *b)
+ {
+@@ -626,8 +658,9 @@ static struct fastrpc_invoke_ctx *fastrpc_context_alloc(
+ 		fastrpc_get_buff_overlaps(ctx);
+ 	}
  
- 	list_for_each_entry_safe(ctx, n, &fl->pending, node) {
- 		list_del(&ctx->node);
-+		/*
-+		 * The DSP may still answer this call. Take the context out of
-+		 * the idr so a late answer finds nothing, and let an answer that
-+		 * already arrived finish its put_work while the maps and fl it
-+		 * touches are still alive. A call that is never answered keeps
-+		 * its DSP reference and is leaked instead of freed under us.
-+		 */
+-	/* Released in fastrpc_context_put() */
++	/* Released in fastrpc_context_free() */
+ 	fastrpc_channel_ctx_get(cctx);
++	kref_get(&user->refcount);
+ 
+ 	ctx->sc = sc;
+ 	ctx->retval = -1;
+@@ -658,6 +691,7 @@ static struct fastrpc_invoke_ctx *fastrpc_context_alloc(
+ 	spin_lock(&user->lock);
+ 	list_del(&ctx->node);
+ 	spin_unlock(&user->lock);
++	fastrpc_user_put(user);
+ 	fastrpc_channel_ctx_put(cctx);
+ 	kfree(ctx->maps);
+ 	kfree(ctx->olaps);
+@@ -1575,29 +1609,16 @@ static int fastrpc_release_current_dsp_process(struct fastrpc_user *fl)
+ 				       sc, &args[0]);
+ }
+ 
+-static int fastrpc_device_release(struct inode *inode, struct file *file)
++static void fastrpc_user_free(struct kref *ref)
+ {
+-	struct fastrpc_user *fl = (struct fastrpc_user *)file->private_data;
++	struct fastrpc_user *fl = container_of(ref, struct fastrpc_user, refcount);
+ 	struct fastrpc_channel_ctx *cctx = fl->cctx;
+-	struct fastrpc_invoke_ctx *ctx, *n;
+ 	struct fastrpc_map *map, *m;
+ 	struct fastrpc_buf *buf, *b;
+-	unsigned long flags;
+-
+-	fastrpc_release_current_dsp_process(fl);
+-
+-	spin_lock_irqsave(&cctx->lock, flags);
+-	list_del(&fl->user);
+-	spin_unlock_irqrestore(&cctx->lock, flags);
+ 
+ 	if (fl->init_mem)
+ 		fastrpc_buf_free(fl->init_mem);
+ 
+-	list_for_each_entry_safe(ctx, n, &fl->pending, node) {
+-		list_del(&ctx->node);
+-		fastrpc_context_put(ctx);
+-	}
+-
+ 	list_for_each_entry_safe(map, m, &fl->maps, node)
+ 		fastrpc_map_put(map);
+ 
+@@ -1611,7 +1632,46 @@ static int fastrpc_device_release(struct inode *inode, struct file *file)
+ 
+ 	mutex_destroy(&fl->mutex);
+ 	kfree(fl);
++}
++
++static void fastrpc_user_put(struct fastrpc_user *fl)
++{
++	kref_put(&fl->refcount, fastrpc_user_free);
++}
++
++static int fastrpc_device_release(struct inode *inode, struct file *file)
++{
++	struct fastrpc_user *fl = (struct fastrpc_user *)file->private_data;
++	struct fastrpc_channel_ctx *cctx = fl->cctx;
++	struct fastrpc_invoke_ctx *ctx, *n;
++	unsigned long flags;
++	bool answer;
++
++	/* the DSP process is gone after this, it answers nothing more */
++	fastrpc_release_current_dsp_process(fl);
++
++	spin_lock_irqsave(&cctx->lock, flags);
++	list_del(&fl->user);
++	spin_unlock_irqrestore(&cctx->lock, flags);
++
++	/*
++	 * Calls whose caller was interrupted or timed out. If the answer has
++	 * not arrived, take its reference here; a late answer then finds no
++	 * context. If it has, its put_work drops that reference. Either way
++	 * the context keeps fl alive until it is freed.
++	 */
++	list_for_each_entry_safe(ctx, n, &fl->pending, node) {
++		list_del(&ctx->node);
 +		spin_lock_irqsave(&cctx->lock, flags);
-+		if (idr_find(&cctx->ctx_idr, ctx->ctxid >> 4) == ctx)
-+			idr_remove(&cctx->ctx_idr, ctx->ctxid >> 4);
++		answer = fastrpc_context_take_answer(cctx, ctx);
 +		spin_unlock_irqrestore(&cctx->lock, flags);
-+		flush_work(&ctx->put_work);
- 		fastrpc_context_put(ctx);
- 	}
- 
-@@ -2532,14 +2549,17 @@ static int fastrpc_rpmsg_callback(struct rpmsg_device *rpdev, void *data,
- 	}
- 
- 	ctx->retval = rsp->retval;
--	complete(&ctx->work);
- 
- 	/*
- 	 * The DMA buffer associated with the context cannot be freed in
- 	 * interrupt context so schedule it through a worker thread to
--	 * avoid a kernel BUG.
-+	 * avoid a kernel BUG. Queue it before waking the caller: the caller
-+	 * still holds a reference until then, and once it returns the work
-+	 * is already queued, so fastrpc_device_release() can flush it before
-+	 * it frees the fl and maps the work still touches.
- 	 */
- 	schedule_work(&ctx->put_work);
-+	complete(&ctx->work);
++		if (answer)
++			fastrpc_context_put(ctx);
++		fastrpc_context_put(ctx);
++	}
++
+ 	file->private_data = NULL;
++	fastrpc_user_put(fl);
  
  	return 0;
  }
--- 
-2.50.1
+@@ -1640,6 +1700,7 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
+ 	INIT_LIST_HEAD(&fl->maps);
+ 	INIT_LIST_HEAD(&fl->mmaps);
+ 	INIT_LIST_HEAD(&fl->user);
++	kref_init(&fl->refcount);
+ 	fl->cctx = cctx;
+ 	fl->is_secure_dev = fdevice->secure;
+ 
+@@ -2384,9 +2445,27 @@ static int fastrpc_rpmsg_probe(struct rpmsg_device *rpdev)
+ 	}
+ 
+ 	if (domain_id == SDSP_DOMAIN_ID && vmcount) {
++		struct device_node *rmem_np;
+ 		struct resource res;
++		bool reusable;
+ 		u64 src_perms;
+ 
++		/*
++		 * The whole region is handed to the DSP VMs below and never
++		 * given back. A reusable (CMA) region stays in use by the page
++		 * allocator, so its pages would end up as page cache, user
++		 * memory or kernel data that HLOS may not execute and the DSP
++		 * may write. The region must be a no-map carveout.
++		 */
++		rmem_np = of_parse_phandle(rdev->of_node, "memory-region", 0);
++		reusable = of_property_read_bool(rmem_np, "reusable");
++		of_node_put(rmem_np);
++		if (reusable) {
++			dev_err(rdev, "reusable memory-region cannot be assigned to the DSP\n");
++			err = -EINVAL;
++			goto err_free_data;
++		}
++
+ 		err = of_reserved_mem_region_to_resource(rdev->of_node, 0, &res);
+ 		if (!err) {
+ 			src_perms = BIT(QCOM_SCM_VMID_HLOS);
+@@ -2469,9 +2548,14 @@ static void fastrpc_notify_users(struct fastrpc_user *user)
+ {
+ 	struct fastrpc_invoke_ctx *ctx;
+ 
++	lockdep_assert_held(&user->cctx->lock);
++
+ 	spin_lock(&user->lock);
+ 	list_for_each_entry(ctx, &user->pending, node) {
+ 		ctx->retval = -EPIPE;
++		/* the channel is gone, no answer will drop this reference */
++		if (fastrpc_context_take_answer(user->cctx, ctx))
++			queue_work(fastrpc_wq, &ctx->put_work);
+ 		complete(&ctx->work);
+ 	}
+ 	spin_unlock(&user->lock);
+@@ -2524,6 +2608,8 @@ static int fastrpc_rpmsg_callback(struct rpmsg_device *rpdev, void *data,
+ 
+ 	spin_lock_irqsave(&cctx->lock, flags);
+ 	ctx = idr_find(&cctx->ctx_idr, ctxid);
++	if (ctx && !fastrpc_context_take_answer(cctx, ctx))
++		ctx = NULL;
+ 	spin_unlock_irqrestore(&cctx->lock, flags);
+ 
+ 	if (!ctx) {
+@@ -2536,10 +2622,11 @@ static int fastrpc_rpmsg_callback(struct rpmsg_device *rpdev, void *data,
+ 
+ 	/*
+ 	 * The DMA buffer associated with the context cannot be freed in
+-	 * interrupt context so schedule it through a worker thread to
+-	 * avoid a kernel BUG.
++	 * interrupt context so drop the answer's reference through a worker
++	 * thread to avoid a kernel BUG. That reference keeps ctx alive here
++	 * after the caller has been woken, and ctx keeps its fl alive.
+ 	 */
+-	schedule_work(&ctx->put_work);
++	queue_work(fastrpc_wq, &ctx->put_work);
+ 
+ 	return 0;
+ }
+@@ -2565,9 +2652,15 @@ static int fastrpc_init(void)
+ {
+ 	int ret;
+ 
++	/* freeing contexts may sleep and must finish before module unload */
++	fastrpc_wq = alloc_workqueue("fastrpc", WQ_UNBOUND, 0);
++	if (!fastrpc_wq)
++		return -ENOMEM;
++
+ 	ret = platform_driver_register(&fastrpc_cb_driver);
+ 	if (ret < 0) {
+ 		pr_err("fastrpc: failed to register cb driver\n");
++		destroy_workqueue(fastrpc_wq);
+ 		return ret;
+ 	}
+ 
+@@ -2575,6 +2668,7 @@ static int fastrpc_init(void)
+ 	if (ret < 0) {
+ 		pr_err("fastrpc: failed to register rpmsg driver\n");
+ 		platform_driver_unregister(&fastrpc_cb_driver);
++		destroy_workqueue(fastrpc_wq);
+ 		return ret;
+ 	}
+ 
+@@ -2586,6 +2680,7 @@ static void fastrpc_exit(void)
+ {
+ 	platform_driver_unregister(&fastrpc_cb_driver);
+ 	unregister_rpmsg_driver(&fastrpc_driver);
++	destroy_workqueue(fastrpc_wq);
+ }
+ module_exit(fastrpc_exit);
+ 

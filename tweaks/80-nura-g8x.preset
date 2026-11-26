@@ -7,6 +7,5 @@ enable nura-standby.service
 enable nura-firmware-loader.service
 enable nura-usb-mac.service
 enable nura-charge-limit.service
-enable nura-usb-replug.service
 enable egistad.service
 enable nura-boot-update.path

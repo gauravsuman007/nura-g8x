@@ -1,0 +1,230 @@
+diff --git a/drivers/power/supply/qcom_fg.c b/drivers/power/supply/qcom_fg.c
+index 7ebb7ae..3676ad7 100644
+--- a/drivers/power/supply/qcom_fg.c
++++ b/drivers/power/supply/qcom_fg.c
+@@ -900,8 +900,6 @@ static enum power_supply_property qcom_fg_props[] = {
+ 	POWER_SUPPLY_PROP_CHARGE_CONTROL_END_THRESHOLD,
+ };
+ 
+-#define QCOM_FG_LIMIT_POLL_MS	30000
+-
+ static void qcom_fg_set_charge_paused(struct qcom_fg_chip *chip, bool pause)
+ {
+ 	union power_supply_propval val = { .intval = !pause };
+@@ -929,7 +927,6 @@ static void qcom_fg_charge_limit_worker(struct work_struct *work)
+ 	int end = READ_ONCE(chip->charge_end);
+ 	bool pause = chip->charge_paused;
+ 	union power_supply_propval status;
+-	unsigned long delay;
+ 	int cap;
+ 
+ 	if (!chip->chg_psy || chip->ops->get_capacity(chip, &cap))
+@@ -942,22 +939,9 @@ static void qcom_fg_charge_limit_worker(struct work_struct *work)
+ 	else if (cap <= start)
+ 		pause = false;
+ 
+-	if (pause != chip->charge_paused || !chip->charge_applied) {
++	/* The charger keeps the pause across input re-detection itself */
++	if (pause != chip->charge_paused || !chip->charge_applied)
+ 		qcom_fg_set_charge_paused(chip, pause);
+-	} else if (pause &&
+-		   !power_supply_get_property(chip->chg_psy, POWER_SUPPLY_PROP_STATUS,
+-					      &status) &&
+-		   status.intval == POWER_SUPPLY_STATUS_CHARGING) {
+-		/*
+-		 * The charger turned charging back on by itself (cable replug,
+-		 * input re-detection, charger reset) while we still think it is
+-		 * paused: the battery charged past the limit (G8x, 72% with a
+-		 * 60% end, 2026-11-20). Pause it again.
+-		 */
+-		dev_info(chip->dev, "charger resumed above the limit (%d%% >= %d%%), pausing again\n",
+-			 cap, end);
+-		qcom_fg_set_charge_paused(chip, true);
+-	}
+ 
+ 	/* The charger reports its new status a moment after the input changes */
+ 	if (!power_supply_get_property(chip->chg_psy, POWER_SUPPLY_PROP_STATUS,
+@@ -968,13 +952,9 @@ static void qcom_fg_charge_limit_worker(struct work_struct *work)
+ out:
+ 	if (chip->charge_resync > 0) {
+ 		chip->charge_resync--;
+-		delay = msecs_to_jiffies(3000);
+-	} else if (end < 100) {
+-		delay = msecs_to_jiffies(QCOM_FG_LIMIT_POLL_MS);
+-	} else {
+-		return;
++		mod_delayed_work(system_wq, &chip->charge_limit_work,
++				 msecs_to_jiffies(3000));
+ 	}
+-	mod_delayed_work(system_wq, &chip->charge_limit_work, delay);
+ }
+ 
+ static int qcom_fg_get_property(struct power_supply *psy,
+@@ -1217,6 +1197,10 @@ static irqreturn_t qcom_fg_handle_soc_delta(int irq, void *data)
+ 
+ 	/* Signal change in state of charge */
+ 	power_supply_changed(chip->batt_psy);
++
++	/* Capacity moved: check it against the charge limit */
++	if (chip->chg_psy && READ_ONCE(chip->charge_end) < 100)
++		mod_delayed_work(system_wq, &chip->charge_limit_work, 0);
+ 	dev_dbg(chip->dev, "SOC changed");
+ 
+ 	return IRQ_HANDLED;
+diff --git a/drivers/power/supply/qcom_smbx.c b/drivers/power/supply/qcom_smbx.c
+index 4ef3314..54f1292 100644
+--- a/drivers/power/supply/qcom_smbx.c
++++ b/drivers/power/supply/qcom_smbx.c
+@@ -231,6 +231,8 @@ struct smb_init_register {
+  * @usb_in_i_chan:	USB_IN current measurement channel
+  * @usb_in_v_chan:	USB_IN voltage measurement channel
+  * @chg_psy:		Charger power supply instance
++ * @pause_lock:		Serialises @charge_paused and the registers it drives
++ * @charge_paused:	Charging is paused on request (status set to 0)
+  */
+ struct smb_chip {
+ 	struct device *dev;
+@@ -248,6 +250,9 @@ struct smb_chip {
+ 	struct iio_channel *usb_in_v_chan;
+ 
+ 	struct power_supply *chg_psy;
++
++	struct mutex pause_lock;
++	bool charge_paused;
+ };
+ 
+ struct smb_match_data {
+@@ -433,6 +438,43 @@ static int smb_set_current_limit(struct smb_chip *chip, unsigned int val)
+ 			    val_raw);
+ }
+ 
++static bool hold_mode = true;
++
++/*
++ * Program the charge pause the user asked for. The driver owns this state:
++ * the PMIC does not keep a paused charger paused across input re-detection
++ * (cable replug, APSD rerun), so this is called again from the plug-in
++ * interrupt and after every charger type detection.
++ *
++ * In hold mode charging is paused with CHARGING_ENABLE_CMD and the USB input
++ * stays on (the device runs from the charger); otherwise the USB input is
++ * suspended and the battery supplies the device.
++ */
++static int smb_apply_charge_pause(struct smb_chip *chip)
++{
++	bool paused, hold;
++	int rc;
++
++	mutex_lock(&chip->pause_lock);
++	paused = chip->charge_paused;
++	hold = READ_ONCE(hold_mode);
++
++	rc = regmap_update_bits(chip->regmap, chip->base + USBIN_CMD_IL,
++				USBIN_SUSPEND_BIT,
++				paused && !hold ? USBIN_SUSPEND_BIT : 0);
++	if (!rc)
++		rc = regmap_update_bits(chip->regmap,
++					chip->base + CHARGING_ENABLE_CMD,
++					CHARGING_ENABLE_CMD_BIT,
++					paused && hold ? 0 : CHARGING_ENABLE_CMD_BIT);
++	mutex_unlock(&chip->pause_lock);
++
++	if (rc)
++		dev_err(chip->dev, "Couldn't %s charging: %d\n",
++			paused ? "pause" : "enable", rc);
++	return rc;
++}
++
+ static void smb_status_change_work(struct work_struct *work)
+ {
+ 	unsigned int charger_type, current_ua;
+@@ -442,6 +484,8 @@ static void smb_status_change_work(struct work_struct *work)
+ 
+ 	chip = container_of(work, struct smb_chip, status_change_work.work);
+ 
++	smb_apply_charge_pause(chip);
++
+ 	smb_get_prop_usb_online(chip, &usb_online);
+ 	if (!usb_online)
+ 		return;
+@@ -482,6 +526,8 @@ static void smb_status_change_work(struct work_struct *work)
+ 	}
+ 
+ 	smb_set_current_limit(chip, current_ua);
++	/* Detection is complete: make sure the pause survived it */
++	smb_apply_charge_pause(chip);
+ 	power_supply_changed(chip->chg_psy);
+ }
+ 
+@@ -632,11 +678,24 @@ static int smb_get_property(struct power_supply *psy,
+ }
+ 
+ /* nura: smbx hold */
+-static bool hold_mode = true;
+-module_param(hold_mode, bool, 0644);
+-MODULE_PARM_DESC(hold_mode, "Pause charging with USB input kept on (0: suspend input)");
+-
+ static struct smb_chip *smb_hold_chip;
++
++static int hold_mode_set(const char *val, const struct kernel_param *kp)
++{
++	struct smb_chip *chip;
++	int ret = param_set_bool(val, kp);
++
++	if (ret)
++		return ret;
++	/* Move an active pause over to the newly selected mechanism */
++	chip = READ_ONCE(smb_hold_chip);
++	return chip ? smb_apply_charge_pause(chip) : 0;
++}
++static const struct kernel_param_ops hold_mode_ops = {
++	.set = hold_mode_set, .get = param_get_bool,
++};
++module_param_cb(hold_mode, &hold_mode_ops, &hold_mode, 0644);
++MODULE_PARM_DESC(hold_mode, "Pause charging with USB input kept on (0: suspend input)");
+ static unsigned int smb_float_max_mv;
+ 
+ static int smb_write_fcc(unsigned int ma)
+@@ -712,21 +771,10 @@ static int smb_set_property(struct power_supply *psy,
+ 
+ 	switch (psp) {
+ 	case POWER_SUPPLY_PROP_STATUS:
+-		if (READ_ONCE(hold_mode)) {
+-			int rc = regmap_update_bits(chip->regmap,
+-						    chip->base + USBIN_CMD_IL,
+-						    USBIN_SUSPEND_BIT, 0);
+-			if (rc)
+-				return rc;
+-			return regmap_update_bits(chip->regmap,
+-						  chip->base + CHARGING_ENABLE_CMD,
+-						  CHARGING_ENABLE_CMD_BIT,
+-						  val->intval ? CHARGING_ENABLE_CMD_BIT : 0);
+-		}
+-		regmap_update_bits(chip->regmap, chip->base + CHARGING_ENABLE_CMD,
+-				   CHARGING_ENABLE_CMD_BIT, CHARGING_ENABLE_CMD_BIT);
+-		return regmap_update_bits(chip->regmap, chip->base + USBIN_CMD_IL,
+-					  USBIN_SUSPEND_BIT, !val->intval);
++		mutex_lock(&chip->pause_lock);
++		chip->charge_paused = !val->intval;
++		mutex_unlock(&chip->pause_lock);
++		return smb_apply_charge_pause(chip);
+ 	case POWER_SUPPLY_PROP_CURRENT_MAX:
+ 		return smb_set_current_limit(chip, val->intval);
+ 	default:
+@@ -764,6 +812,8 @@ static irqreturn_t smb_handle_usb_plugin(int irq, void *data)
+ {
+ 	struct smb_chip *chip = data;
+ 
++	/* Plug-in and re-detection must not undo a requested pause */
++	smb_apply_charge_pause(chip);
+ 	power_supply_changed(chip->chg_psy);
+ 
+ 	schedule_delayed_work(&chip->status_change_work,
+@@ -1072,6 +1122,7 @@ static int smb_probe(struct platform_device *pdev)
+ 
+ 	chip->dev = &pdev->dev;
+ 	chip->name = pdev->name;
++	mutex_init(&chip->pause_lock);
+ 
+ 	chip->regmap = dev_get_regmap(pdev->dev.parent, NULL);
+ 	if (!chip->regmap)

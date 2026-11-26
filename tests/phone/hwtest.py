@@ -766,7 +766,7 @@ def usb_gadget():
     assert_(udc == "a600000.usb", f"gadget not bound (UDC={udc!r})")
     if state != "configured":
         raise Warn(f"USB {state} (cable unplugged?)")
-    for s in ("nura-usb-mac", "nura-usb-replug"):
+    for s in ("nura-usb-mac",):
         assert_(sh(f"systemctl is-enabled {s} 2>/dev/null") == "enabled", f"{s} not enabled")
     return f"NCM gadget bound, {state}, usb0 {mac}"
 
@@ -928,7 +928,7 @@ def auto_brightness():
     if amb.strip() != "true":
         raise Warn(f"auto-brightness setting off ({amb.strip()})")
     nan = int(sh("journalctl -b --no-pager | grep -c 'Invalid release of sensor ambient-light'") or 0)
-    # nura-sensors-sleep restarts iio-sensor-proxy around every suspend; GNOME's
+    # a restart of iio-sensor-proxy (older tweaks did one per suspend) leaves GNOME's
     # SensorDaemon logs one such error per restart and then reclaims the sensor
     restarts = int(sh("journalctl -b --no-pager -u iio-sensor-proxy | grep -c 'Stopped'") or 0)
     assert_(nan <= restarts, f"SensorDaemon failing to hold the light sensor "

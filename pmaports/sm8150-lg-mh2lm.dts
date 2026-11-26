@@ -142,7 +142,13 @@
 			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
 			alignment = <0x0 0x400000>;
 			size = <0x0 0x1000000>;
-			reusable;
+			/*
+			 * no-map, not reusable: fastrpc hands the whole range to the SLPI
+			 * and ADSP VMs and never takes it back. As a CMA pool the kernel kept
+			 * using its pages for page cache and user memory, which stage-2
+			 * faulted in the hypervisor (silent SoC resets at suspend entry).
+			 */
+			no-map;
 		};
 
 		/* Tail of LG xbl_aop_mem not covered by the upstream xbl/aop regions */

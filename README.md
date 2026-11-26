@@ -34,17 +34,23 @@ All of these are configurable under **Settings > LG G8x Tweaks**.
 
 ## What does not work, or is untested
 
-- **Calls and SMS** are not supported yet (no SIM has been tested). Do not
-  force the modem on without a SIM: it crashes the modem firmware and Wi-Fi
-  with it.
+- **SIM, calls, SMS and mobile data** do not work yet. The cause of the SIM
+  start-up hang is found (LESSONS.md, "SIM initialisation SOLVED"; the helper
+  is not packaged yet) and the radio still does not register. Do not force the
+  modem on without a SIM: it crashes the modem firmware.
 - **GPS**: the engine runs and NMEA arrives, no fix has been tested.
 - **Headphone jack and headset microphone**: set up, untested.
 - **Camera autofocus**: libcamera's simple pipeline has none; focus is a
   manual control.
 - **Ambient light sensor** stops after a suspend until the next reboot
   (auto-brightness then stays put). Proximity and motion keep working.
-- **Resets on suspend** (fixed in kernel r11): before r11 the phone could
-  reset on entering suspend, often every 20-30 minutes when idle.
+- **Resets on suspend** are fixed in kernel r13 (150 suspend cycles without a
+  reset). A rare modem firmware watchdog at suspend entry is not explained;
+  r13 recovers a modem crash instead of resetting the phone (tested with
+  injected crashes).
+- **Bluetooth after heavy suspend use**: once in 150 cycles the chip stopped
+  responding until a reboot.
+- **Camera hang**: now and then a camera delivers no frames when reopened.
 - **Sensors start race**: about 1 boot in 10 the SLPI starts without its
   sensor service; `nura-sensor-check` restarts it automatically.
 - **Sound**: about 1 boot in 5 may start without sound (SLIMbus start race);

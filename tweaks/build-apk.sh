@@ -11,6 +11,7 @@ docker run --rm -v "$PWD":/n -w /n alpine:3.22 sh -c '
 	cp -r unit tweaks $T/files/
 	find $T/files -name __pycache__ -prune -exec rm -rf {} +
 	find $T/files -name "._*" -delete
+	rm -rf $T/files/unit/modem  # unfinished cellular work, not shipped yet
 	tar --sort=name --mtime=2026-01-01 --owner=0 --group=0 --numeric-owner \
 		-C $T -cf - files | gzip -n > '$A'/nura-g8x-tweaks-files.tar.gz'
 mkdir -p out/apk

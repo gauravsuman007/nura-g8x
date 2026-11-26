@@ -1,0 +1,148 @@
+diff --git a/drivers/net/ipa/gsi.c b/drivers/net/ipa/gsi.c
+index 4c3227e..9ccfa4e 100644
+--- a/drivers/net/ipa/gsi.c
++++ b/drivers/net/ipa/gsi.c
+@@ -547,6 +547,12 @@ gsi_channel_command(struct gsi_channel *channel, enum gsi_ch_cmd_opcode opcode)
+ 
+ 	dev_err(dev, "GSI command %u for channel %u timed out, state %u\n",
+ 		opcode, channel_id, gsi_channel_state(channel));
++	dev_err(dev, "GSI status %#x glob_irq %#x gsi_irq %#x type_irq %#x error_log %#x\n",
++		ioread32(gsi->virt + reg_offset(gsi_reg(gsi, GSI_STATUS))),
++		ioread32(gsi->virt + reg_offset(gsi_reg(gsi, CNTXT_GLOB_IRQ_STTS))),
++		ioread32(gsi->virt + reg_offset(gsi_reg(gsi, CNTXT_GSI_IRQ_STTS))),
++		ioread32(gsi->virt + reg_offset(gsi_reg(gsi, CNTXT_TYPE_IRQ))),
++		ioread32(gsi->virt + reg_offset(gsi_reg(gsi, ERROR_LOG))));
+ }
+ 
+ /* Allocate GSI channel in NOT_ALLOCATED state */
+diff --git a/drivers/net/ipa/ipa_endpoint.c b/drivers/net/ipa/ipa_endpoint.c
+index 0bd9b9f..5d62d98 100644
+--- a/drivers/net/ipa/ipa_endpoint.c
++++ b/drivers/net/ipa/ipa_endpoint.c
+@@ -1881,24 +1881,29 @@ void ipa_endpoint_suspend_one(struct ipa_endpoint *endpoint)
+ 			endpoint->channel_id);
+ }
+ 
+-void ipa_endpoint_resume_one(struct ipa_endpoint *endpoint)
++int ipa_endpoint_resume_one(struct ipa_endpoint *endpoint)
+ {
+ 	struct device *dev = endpoint->ipa->dev;
+ 	struct gsi *gsi = &endpoint->ipa->gsi;
+ 	int ret;
+ 
+ 	if (!test_bit(endpoint->endpoint_id, endpoint->ipa->enabled))
+-		return;
++		return 0;
+ 
+ 	if (!endpoint->toward_ipa)
+ 		(void)ipa_endpoint_program_suspend(endpoint, false);
+ 
+ 	ret = gsi_channel_resume(gsi, endpoint->channel_id);
+-	if (ret)
++	if (ret) {
+ 		dev_err(dev, "error %d resuming channel %u\n", ret,
+ 			endpoint->channel_id);
+-	else if (!endpoint->toward_ipa)
++		return ret;
++	}
++
++	if (!endpoint->toward_ipa)
+ 		ipa_endpoint_replenish_enable(endpoint);
++
++	return 0;
+ }
+ 
+ void ipa_endpoint_suspend(struct ipa *ipa)
+@@ -1913,16 +1918,35 @@ void ipa_endpoint_suspend(struct ipa *ipa)
+ 	ipa_endpoint_suspend_one(ipa->name_map[IPA_ENDPOINT_AP_COMMAND_TX]);
+ }
+ 
+-void ipa_endpoint_resume(struct ipa *ipa)
++int ipa_endpoint_resume(struct ipa *ipa)
+ {
++	struct ipa_endpoint *command_tx;
++	int ret;
++
+ 	if (!ipa->setup_complete)
+-		return;
++		return 0;
+ 
+-	ipa_endpoint_resume_one(ipa->name_map[IPA_ENDPOINT_AP_COMMAND_TX]);
+-	ipa_endpoint_resume_one(ipa->name_map[IPA_ENDPOINT_AP_LAN_RX]);
++	/* The AP command TX channel carries the immediate commands the
++	 * driver waits for synchronously (gsi_trans_commit_wait()), and
++	 * completions for them arrive on the AP LAN RX channel.  If either
++	 * fails to restart, a transaction committed later would never
++	 * complete, so report the failure rather than resume "successfully".
++	 */
++	command_tx = ipa->name_map[IPA_ENDPOINT_AP_COMMAND_TX];
++	ret = ipa_endpoint_resume_one(command_tx);
++	if (ret)
++		return ret;
++
++	ret = ipa_endpoint_resume_one(ipa->name_map[IPA_ENDPOINT_AP_LAN_RX]);
++	if (ret) {
++		ipa_endpoint_suspend_one(command_tx);
++		return ret;
++	}
+ 
+ 	if (ipa->modem_netdev)
+ 		ipa_modem_resume(ipa->modem_netdev);
++
++	return 0;
+ }
+ 
+ static void ipa_endpoint_setup_one(struct ipa_endpoint *endpoint)
+diff --git a/drivers/net/ipa/ipa_endpoint.h b/drivers/net/ipa/ipa_endpoint.h
+index e7d8ae6..cec9bf3 100644
+--- a/drivers/net/ipa/ipa_endpoint.h
++++ b/drivers/net/ipa/ipa_endpoint.h
+@@ -181,10 +181,10 @@ int ipa_endpoint_enable_one(struct ipa_endpoint *endpoint);
+ void ipa_endpoint_disable_one(struct ipa_endpoint *endpoint);
+ 
+ void ipa_endpoint_suspend_one(struct ipa_endpoint *endpoint);
+-void ipa_endpoint_resume_one(struct ipa_endpoint *endpoint);
++int ipa_endpoint_resume_one(struct ipa_endpoint *endpoint);
+ 
+ void ipa_endpoint_suspend(struct ipa *ipa);
+-void ipa_endpoint_resume(struct ipa *ipa);
++int ipa_endpoint_resume(struct ipa *ipa);
+ 
+ void ipa_endpoint_setup(struct ipa *ipa);
+ void ipa_endpoint_teardown(struct ipa *ipa);
+diff --git a/drivers/net/ipa/ipa_modem.c b/drivers/net/ipa/ipa_modem.c
+index 9b136f6..7b0d0ef 100644
+--- a/drivers/net/ipa/ipa_modem.c
++++ b/drivers/net/ipa/ipa_modem.c
+@@ -288,8 +288,8 @@ void ipa_modem_resume(struct net_device *netdev)
+ 		return;
+ 
+ 	priv = netdev_priv(netdev);
+-	ipa_endpoint_resume_one(priv->tx);
+-	ipa_endpoint_resume_one(priv->rx);
++	(void)ipa_endpoint_resume_one(priv->tx);
++	(void)ipa_endpoint_resume_one(priv->rx);
+ 
+ 	/* Arrange for the TX queue to be restarted */
+ 	(void)queue_pm_work(&priv->work);
+diff --git a/drivers/net/ipa/ipa_power.c b/drivers/net/ipa/ipa_power.c
+index c572da9..f0e1e56 100644
+--- a/drivers/net/ipa/ipa_power.c
++++ b/drivers/net/ipa/ipa_power.c
+@@ -148,7 +148,15 @@ static int ipa_runtime_resume(struct device *dev)
+ 	/* Endpoints aren't usable until setup is complete */
+ 	if (ipa->setup_complete) {
+ 		gsi_resume(&ipa->gsi);
+-		ipa_endpoint_resume(ipa);
++		ret = ipa_endpoint_resume(ipa);
++		if (ret) {
++			/* Don't report the device active with the command
++			 * channel stopped; callers would wait forever.
++			 */
++			gsi_suspend(&ipa->gsi);
++			ipa_power_disable(ipa);
++			return ret;
++		}
+ 	}
+ 
+ 	return 0;

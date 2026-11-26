@@ -1900,3 +1900,117 @@ fprintd see the enrolled finger, fingerprint test group 6/6.
   resume). Tweaks r33. Verified: verify survives a suspend while locked; a real finger after resume still to be confirmed.
 - `dsi_err_worker: status=5` (TIMEOUT|FIFO) shows up about 10 s after a panel enable, i.e. around the idle blank. The
   worker recovers it, no visible effect; not fixed, link to the earlier unplug-time reset unproven.
+
+## Suspend resets: two real causes, and the workarounds replaced (kernel r12, 2026-11-25)
+
+How the resets were finally caught:
+- pstore (ramoops) works and systemd-pstore moves the records to /var/lib/systemd/pstore at boot, but it overwrites them on the next boot: copy them right away. With `no_console_suspend pm_debug_messages ignore_loglevel` and a 3 s `pm_freeze_timeout` the console shows the last suspend steps.
+- Test traps that looked like resets: the RAM-test watchdog (nura-testwd) only sees established ssh connections, so short polling sessions let it reboot the phone (hold an unauthenticated TCP connection to port 22 open instead, out/ncloop.sh); an open ssh session is a sleep block inhibitor; a module copy over USB can be cut short (verify the .ko count); `monitor-sensor` run with `su` gets no sensor claims (run it in the user manager: `systemd-run --machine=user@.host --user`).
+- Silent resets at suspend entry (no panic, no lockup report): the sensor DSP region `fastrpc_mem` was a reusable CMA pool. fastrpc hands the whole range to the SLPI/ADSP VMs with qcom_scm_assign_mem and never takes it back, while the kernel kept using those pages for page cache and user memory. A hypervisor stage-2 fault resets the SoC with no log. The sensors sleep hook stops hexagonrpcd right before suspend, which churns memory, so the last console line was always the fastrpc release. Evidence: 60/60 cycles with the hook disabled vs. a reset after 3 with it. Fix: the region is `no-map` (DTS), and fastrpc refuses a reusable region (patch 0004). Correction 2026-11-26: this ended only this one cause; suspend resets continued until patches 0010-0014 (see the sections below).
+- Modem watchdog at WoWLAN suspend entry, followed by hangs (watchdog bark, hard lockup, hung task): the WCN3990 firmware runs on the modem and sends HTC control messages ath10k did not know (NACK_SUSPEND 7, WAKEUP_FROM_SUSPEND 8; ath11k/ath12k handle them). ath10k dropped them ("ignoring unsolicited htc ep0 event") and slept while the firmware expected a wake. Patch 0011 aborts the suspend on either. Evidence: 51 cycles with WoWLAN off, no modem crash; with it on, a crash every 3 to 40 cycles.
+- The modem crash recovery then hung in IPA: the GSI refused to restart the AP command channel, ipa_runtime_resume only logged it, and the crash cleanup waited forever on the stopped channel, blocking every later suspend (freezer wq_busy) until the hung-task panic. Patch 0010 fails the resume instead and logs the GSI state.
+- NetworkManager takes WoWLAN devices down and up on every wake (nm-manager.c do_sleep_wake, on purpose): that is the "deauthenticating by local choice" and the "failed to remove key -110" after every resume. Open: it drops every Wi-Fi connection at each wake.
+
+Workarounds replaced by fixes (audit: research_notes/patch-audit.md):
+- DSI `dsi_err_worker status=5` at every blank: the panel sent display-off/sleep from `.unprepare`, which (with prepare_prev_first) runs after the interface stopped but before the DSI video engine is stopped. Moved to `.disable` (patch 0006). The DSI error worker could also write registers after the host was powered off; it is now cancelled first (0007). Status 5 still appears at suspend entry: open, logged by 0005.
+- fastrpc: contexts now hold a reference on their user, and whoever takes a context out of the idr owns the DSP-answer reference; no system-wide flush (0004).
+- SLIMbus: the NGD controller is brought up from the QMI service and SSR/PDR events instead of a one-shot timed wait, which lost the race on about 1 boot in 5 (0008).
+- Charge limit: the charger keeps a requested pause and re-applies it after every re-detection; the 30 s re-pause poll is gone (0009).
+- nura-usb-replug removed: its cause (random NCM MAC) was fixed by nura-usb-mac, and it toggled usb0 for no reason.
+- Reboots that hang forever (seen after RAM tests, blamed on "mismatched modules"): a failed rpmsg probe deadlocked. rpmsg_dev_probe destroys its endpoint on failure, and qcom_glink_destroy_ept unregistered the rpdev being probed, so device_del waited for the device lock held around that same probe. The stuck probe then blocks wait_for_device_probe in every reboot. A fastrpc probe failure (new module refusing the old DTB's reusable region) triggered it. Patch 0012 leaves the rpdev to qcom_glink_rx_close, where the remote's close removes it.
+- A Bluetooth "firmware download" failure seen once was caused by a test that disabled a CPU idle state; not a bug.
+
+## SIM bring-up, 2026-11-26 (kernel r9; SIM still not usable)
+Found and fixed:
+- No carrier profile (MCFG) could be selected. qmicli 1.39.1 segfaults in `--pdc-load-config`;
+  `devtools/modem/nura-mcfg.py` speaks QMI PDC over QRTR (list, selected, load, activate). All 25 profiles in the
+  modem's own list are North American or Korean; ROW_NA activates, and the modem restarts itself cleanly. Loading
+  another .mbn from the firmware directory is rejected by the modem (error 41, invalid id).
+- A selected profile was lost at every boot: rmtfs runs with `-r` (modem EFS writes stay in RAM). With a drop-in
+  (`unit/modem/rmtfs-writable.conf`) it persists across a verified reboot. The EFS partitions (modemst1, modemst2, fsg,
+  fsc) were backed up first to out/efs-backup/ (not in git: they hold the IMEI).
+Open:
+- Activating the USIM provisioning session wedges the modem's SIM software. Before it, `--uim-get-configuration`
+  answers ("personalization features: all disabled", so no carrier lock); from 2 s after it, that request times out,
+  the USIM stays in "detected" (or "check-personalization-state") and never reaches "ready". Same with the radio
+  offline or online, with ModemManager stopped, and with the PIN lock disabled. While it hangs the modem makes no
+  rmtfs, tftp or QRTR lookup requests and the kernel logs nothing (out/probes/simsteps.sh, simtrace.sh). Finding the
+  cause likely needs the modem's own (DIAG) logs. So SMS, data and calls are untested, and nothing for
+  automatic provisioning is packaged yet.
+- `qmicli --dms-set-operating-mode=reset` leaves the modem offline without restarting it. A manual SIM power
+  off/on leaves the card "power-down" until the modem restarts.
+- Test traps: a delayed `(sleep 1; reboot) &` over ssh never ran: verify a new /proc/sys/kernel/random/boot_id.
+  `systemctl daemon-reload` does not restart rmtfs, so a changed ExecStart only applies after a reboot.
+
+- Worldwide profiles (research_notes/mcfg-world-profiles.md): the G8x modem partitions only hold North American and
+  Korean MCFG_SW. The vayu (Poco X3 Pro, SM8150-AC) EEA ROM has 177, 70 of them European. Each .mbn names its ICCID
+  prefixes and PLMNs in its MCFG_TRL trailer; `devtools/modem/nura_mcfg_select.py` picks from that (fallback: common ROW).
+  Not yet tried: whether the LG modem accepts them (signed by Xiaomi). They are proprietary: import on the device, never
+  commit or package them.
+- Leading hypothesis for the wedge (unproven, research_notes/sim-hang-rootcause.md): LG's simlock code logs
+  "waiting vss init" until an LG Android client connects to the modem's VSS QMI service (800). The firmware ships its
+  F3 message database (qdsp6m.qdb), so DIAG logs would be readable (needs diag-router and SCAT).
+
+## Modem restart reset the whole phone: ath10k MSA ownership (2026-11-26, patch 0014)
+- Symptom: any crash of a running modem with Wi-Fi up reset the SoC with no log (the log ends at "ipa: received modem
+  starting event"); after a modem watchdog during suspend it showed as a CPU hard lockup (soft-lockup panic).
+- Reproduce: `echo 1 > /sys/kernel/debug/remoteproc/remoteproc1/crash` with Wi-Fi connected. Cause, shown by A/B on one
+  driver build: ath10k_qmi_event_server_exit() gives the WLAN MSA memory back to Linux during the crash.
+- Traps: earlier "unload ath10k, then restart the modem" tests did not exclude Wi-Fi. A driver reloaded by hand never
+  reruns the MSA setup (firmware says "already registered"), so a later crash logs "failed to assign msa map
+  permissions: -22" and Wi-Fi stays dead until reboot (unchanged upstream behaviour). `qcom,msa-fixed-perm` is wrong
+  here (modem crashes at boot). `ping` without `-I wlan0` can succeed over USB and hide dead Wi-Fi.
+- Still open: why the modem watchdog fires at suspend entry with WoWLAN (seen once in 75 cycles on r12).
+
+## Where suspend work stands (paused 2026-11-26, cellular first)
+Test setup, important: runs used kernel #13 RAM-booted (pkgrel 12 sources + 0013, plus the 0014 ath10k module
+installed by hand; DTB = the device r9 one). The phone's installed packages are old: linux r8 (what is flashed),
+device-lg-mh2lm r8, nura-g8x-tweaks r30, while the repo has r12/r9/r33. device r9 only changes the DTB; tweaks r31-r33
+(camera GPU workaround, fingerprint, standby) were NOT on the phone.
+- Run 1 (0001-0013, nura-sensors-sleep hook moved away): 74 cycles ok, reset at 75 = modem watchdog at WoWLAN suspend
+  entry, then the SSR reset fixed by 0014 (the link between the two is inferred from the matching signature).
+- Run 2 (with 0014): stopped by the user after 1 cycle. So not validated: 0013 and the hook removal over 150 cycles,
+  and 0014 with a real modem crash during suspend (verified only with injected crashes while awake).
+- Open: cause of the modem watchdog (0011 was already in and it still happened); DSI status=5; NetworkManager
+  cycling WoWLAN on wake.
+- linux pkgrel bumped to 13 for 0014 (not yet built as a package). Not yet done: tests/run.sh, flash, release. hook /var/lib/nura-sensors-sleep.off stays moved.
+
+## SIM initialisation SOLVED: LG vendor handshake (2026-11-26)
+Root cause (shown by modem F3 logs): LG's simlock.c loops on "waiting vss init" during USIM init until an AP client
+sends Android's "server connect" request to LG's QMI service 800: msg 0x602, TLV 0x01 u32 0
+(libril-qc-hal-qmi.so). With it the USIM goes straight to ready/ready. (0x602 answers with a QMI error but the
+modem then sends indications and the wait ends.) Not it: 0x600, 0x603, 0x604, 0x60e, 0x610, 0x612, and 0x705
+value 19 (lge_qcci_data.so's data-client connect). resim (706, msgs 0x601=1 + 0x600, used by /vendor/bin/ipd) alone
+does not release the wait either.
+Service: unit/modem/nura-lge-modem{,.service} (connects to 800 and 706, also after modem restarts). Verified on a
+fresh boot and across a modem restart: app ready. Installed by hand on the phone, not yet packaged.
+Open, radio: after the SIM is ready, setting DMS mode online leaves GSM/WCDMA/LTE in "power-save" and registration
+"not-registered". With ModemManager stopped and mode still "shutting-down" it reports "not-registered-searching"
+(no cells seen). A resim client connected late changes nothing. Active profile is still ROW_NA (deactivation did not
+survive a reboot); loading vayu ROW_Commercial is refused (PDC indication error 34 = QMI AuthenticationFailed): the LG modem
+presumably verifies the profile signature (inferred from the error name, one profile tried), so other vendors' MBNs may be unusable. nura_mcfg_select.py would then only
+helps with profiles LG signed (the 25 NA/Korea ones, or EU ones from an LG firmware if any exist).
+
+## Reading modem logs on this phone
+- On the phone: ~/diag (linux-msm/diag, built), ~/scatenv (fgsect/scat), ~/qdsp6m.qdb, ~/diagcap.sh
+  (out/probes/diagcap.sh SCRIPT: relay, diag-router, scat, then SCRIPT). diag-router must be running BEFORE the modem
+  starts: restart the modem inside SCRIPT (`echo 1 > .../remoteproc1/crash`, safe only with patch 0014).
+- Decode on the Mac: devtools/modem/diaglines.py (plain F3 from the pcap) and diagterse.py (QShrink4 terse messages
+  from the qmdl; SCAT misreads them; only offset-12 matches are reliable). qdb: zlib data at offset 64 of
+  qdsp6m.qdb. Captures hold IMSI/IMEI: out/diag*/ stays out of git.
+- LG's Android partitions are still on the phone (mount /dev/disk/by-partlabel/{system,vendor,product}_b read-only).
+  Blobs pulled for analysis are in out/vendx/ (proprietary, not in git).
+
+## Release validation, kernel r13 / tweaks r34 (2026-11-26)
+- RAM-booted, userspace equal to tweaks r34 (sensor sleep hook removed), full suite on two fresh boots: 66 pass,
+  0 fail. 150 suspend cycles with WoWLAN: 150 resumes in one boot, no oops, no modem restart; 4 suspend attempts
+  were refused because Bluetooth timed out (-110).
+- After those cycles: Bluetooth stayed dead ("SSR or FW download time out") until a reboot. Open.
+- Also after the cycles all three cameras hung: vfe0 raises about 1 million interrupts and no frames arrive, with
+  the GPU or CPU soft ISP alike (the reopen hang noted on 2026-11-17; two cameras failed the same way on r8). Open.
+- Two post-stress suite failures are test artefacts: gpu_driver reads a boot message that has rotated out of the
+  log, and the fingerprint tests time out while egistad waits for a touch on the lock screen.
+- glmark2 about 245 against a 534 baseline is not a kernel regression: the flashed r8 gave about 230 the same day.
+  The cause of the two score levels is not known.
+- The r8 module set on the development phone had a hand-installed test fastrpc.ko; flashing a packaged kernel
+  replaces it. devtools/modguard must be removed before relying on a packaged kernel (it has no module set for it).

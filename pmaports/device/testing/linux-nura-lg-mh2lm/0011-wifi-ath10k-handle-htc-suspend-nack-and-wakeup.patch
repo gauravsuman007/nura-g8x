@@ -1,0 +1,147 @@
+diff --git a/drivers/net/wireless/ath/ath10k/core.c b/drivers/net/wireless/ath/ath10k/core.c
+index c645f8d..609c1cc 100644
+--- a/drivers/net/wireless/ath/ath10k/core.c
++++ b/drivers/net/wireless/ath/ath10k/core.c
+@@ -811,13 +811,25 @@ void ath10k_core_get_fw_features_str(struct ath10k *ar,
+ 	}
+ }
+ 
+-static void ath10k_send_suspend_complete(struct ath10k *ar)
++static void ath10k_send_suspend_complete(struct ath10k *ar, bool ack)
+ {
+-	ath10k_dbg(ar, ATH10K_DBG_BOOT, "boot suspend complete\n");
++	ath10k_dbg(ar, ATH10K_DBG_BOOT, "boot suspend complete %d\n", ack);
+ 
++	ar->target_suspend_ack = ack;
+ 	complete(&ar->target_suspend);
+ }
+ 
++static void ath10k_wakeup_from_suspend(struct ath10k *ar)
++{
++	ath10k_dbg(ar, ATH10K_DBG_BOOT, "wakeup from suspend requested\n");
++
++	/* The target saw a wake event after it acked the suspend. Abort a
++	 * system suspend in progress so that resume tells the target the
++	 * host is awake again.
++	 */
++	pm_wakeup_dev_event(ar->dev, 0, true);
++}
++
+ static int ath10k_init_sdio(struct ath10k *ar, enum ath10k_firmware_mode mode)
+ {
+ 	bool mtu_workaround = ar->hw_params.credit_size_workaround;
+@@ -3043,6 +3055,8 @@ int ath10k_core_start(struct ath10k *ar, enum ath10k_firmware_mode mode,
+ 
+ 	ar->htc.htc_ops.target_send_suspend_complete =
+ 		ath10k_send_suspend_complete;
++	ar->htc.htc_ops.target_wakeup_from_suspend =
++		ath10k_wakeup_from_suspend;
+ 
+ 	status = ath10k_htc_init(ar);
+ 	if (status) {
+@@ -3310,6 +3324,7 @@ int ath10k_wait_for_suspend(struct ath10k *ar, u32 suspend_opt)
+ 	unsigned long time_left;
+ 
+ 	reinit_completion(&ar->target_suspend);
++	ar->target_suspend_ack = false;
+ 
+ 	ret = ath10k_wmi_pdev_suspend_target(ar, suspend_opt);
+ 	if (ret) {
+@@ -3324,6 +3339,11 @@ int ath10k_wait_for_suspend(struct ath10k *ar, u32 suspend_opt)
+ 		return -ETIMEDOUT;
+ 	}
+ 
++	if (!ar->target_suspend_ack) {
++		ath10k_warn(ar, "target refused suspend\n");
++		return -EBUSY;
++	}
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/net/wireless/ath/ath10k/core.h b/drivers/net/wireless/ath/ath10k/core.h
+index f68673b..fd4eb0a 100644
+--- a/drivers/net/wireless/ath/ath10k/core.h
++++ b/drivers/net/wireless/ath/ath10k/core.h
+@@ -1063,6 +1063,8 @@ struct ath10k {
+ 	} hif;
+ 
+ 	struct completion target_suspend;
++	/* target acked (true) or refused (false) the last suspend request */
++	bool target_suspend_ack;
+ 	struct completion driver_recovery;
+ 
+ 	const struct ath10k_hw_regs *regs;
+diff --git a/drivers/net/wireless/ath/ath10k/htc.c b/drivers/net/wireless/ath/ath10k/htc.c
+index ce9b248..a117c16 100644
+--- a/drivers/net/wireless/ath/ath10k/htc.c
++++ b/drivers/net/wireless/ath/ath10k/htc.c
+@@ -558,10 +558,17 @@ static void ath10k_htc_control_rx_complete(struct ath10k *ar,
+ 		complete(&htc->ctl_resp);
+ 		break;
+ 	case ATH10K_HTC_MSG_SEND_SUSPEND_COMPLETE:
+-		htc->htc_ops.target_send_suspend_complete(ar);
++		htc->htc_ops.target_send_suspend_complete(ar, true);
++		break;
++	case ATH10K_HTC_MSG_NACK_SUSPEND:
++		htc->htc_ops.target_send_suspend_complete(ar, false);
++		break;
++	case ATH10K_HTC_MSG_WAKEUP_FROM_SUSPEND_ID:
++		htc->htc_ops.target_wakeup_from_suspend(ar);
+ 		break;
+ 	default:
+-		ath10k_warn(ar, "ignoring unsolicited htc ep0 event\n");
++		ath10k_warn(ar, "ignoring unsolicited htc ep0 event %u\n",
++			    __le16_to_cpu(msg->hdr.message_id));
+ 		break;
+ 	}
+ 
+diff --git a/drivers/net/wireless/ath/ath10k/htc.h b/drivers/net/wireless/ath/ath10k/htc.h
+index 7ff6650..16bc88b 100644
+--- a/drivers/net/wireless/ath/ath10k/htc.h
++++ b/drivers/net/wireless/ath/ath10k/htc.h
+@@ -99,7 +99,9 @@ enum ath10k_ath10k_htc_msg_id {
+ 	ATH10K_HTC_MSG_CONNECT_SERVICE_RESP_ID = 3,
+ 	ATH10K_HTC_MSG_SETUP_COMPLETE_ID       = 4,
+ 	ATH10K_HTC_MSG_SETUP_COMPLETE_EX_ID    = 5,
+-	ATH10K_HTC_MSG_SEND_SUSPEND_COMPLETE   = 6
++	ATH10K_HTC_MSG_SEND_SUSPEND_COMPLETE   = 6,
++	ATH10K_HTC_MSG_NACK_SUSPEND            = 7,
++	ATH10K_HTC_MSG_WAKEUP_FROM_SUSPEND_ID  = 8,
+ };
+ 
+ enum ath10k_htc_version {
+@@ -311,7 +313,8 @@ enum ath10k_htc_ep_id {
+ };
+ 
+ struct ath10k_htc_ops {
+-	void (*target_send_suspend_complete)(struct ath10k *ar);
++	void (*target_send_suspend_complete)(struct ath10k *ar, bool ack);
++	void (*target_wakeup_from_suspend)(struct ath10k *ar);
+ };
+ 
+ struct ath10k_htc_ep_ops {
+diff --git a/drivers/net/wireless/ath/ath10k/wow.c b/drivers/net/wireless/ath/ath10k/wow.c
+index 78653f2..ad72cd3 100644
+--- a/drivers/net/wireless/ath/ath10k/wow.c
++++ b/drivers/net/wireless/ath/ath10k/wow.c
+@@ -455,6 +455,7 @@ static int ath10k_wow_enable(struct ath10k *ar)
+ 	lockdep_assert_held(&ar->conf_mutex);
+ 
+ 	reinit_completion(&ar->target_suspend);
++	ar->target_suspend_ack = false;
+ 
+ 	ret = ath10k_wmi_wow_enable(ar);
+ 	if (ret) {
+@@ -468,6 +469,11 @@ static int ath10k_wow_enable(struct ath10k *ar)
+ 		return -ETIMEDOUT;
+ 	}
+ 
++	if (!ar->target_suspend_ack) {
++		ath10k_warn(ar, "target refused wow suspend\n");
++		return -EBUSY;
++	}
++
+ 	return 0;
+ }
+ 

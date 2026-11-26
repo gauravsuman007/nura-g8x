@@ -1,0 +1,43 @@
+From a1434334fe2701678ad679d5baa188146a24de79 Mon Sep 17 00:00:00 2001
+From: Nura G8x <nura-g8x@users.noreply.github.com>
+Date: Thu, 26 Nov 2026 08:07:58 +0100
+Subject: [PATCH] rpmsg: glink: do not unregister the rpdev from destroy_ept
+
+When an rpmsg driver's probe fails, rpmsg_dev_probe() destroys the
+endpoint it created. For GLINK that endpoint is the channel's only one,
+and qcom_glink_destroy_ept() unregistered channel->rpdev, the device that
+is being probed. device_del() then waits for the device lock that the
+driver core holds around probe, and the probing task hangs forever. On
+the LG G8x a fastrpc probe failure left udev-worker stuck in
+rpmsg_dev_probe -> qcom_glink_destroy_ept -> device_del, and every later
+reboot hung in device_shutdown() -> wait_for_device_probe(). The same
+self-deadlock is reachable from rpmsg_dev_remove().
+
+The rpdev stands for the channel the remote opened and is unregistered
+in qcom_glink_rx_close() when the remote closes it. Only send the close
+request from destroy_ept.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+diff --git a/drivers/rpmsg/qcom_glink_native.c b/drivers/rpmsg/qcom_glink_native.c
+index 9ef17c2..fc03cb3 100644
+--- a/drivers/rpmsg/qcom_glink_native.c
++++ b/drivers/rpmsg/qcom_glink_native.c
+@@ -1418,9 +1418,14 @@ static void qcom_glink_destroy_ept(struct rpmsg_endpoint *ept)
+ 	channel->ept.cb = NULL;
+ 	spin_unlock_irqrestore(&channel->recv_lock, flags);
+ 
+-	/* Decouple the potential rpdev from the channel */
+-	qcom_glink_remove_rpmsg_device(glink, channel);
+-
++	/*
++	 * Do not unregister channel->rpdev here. The channel's only endpoint
++	 * is the rpdev's own one, so this runs from rpmsg_dev_probe()'s error
++	 * path or rpmsg_dev_remove() with the rpdev's device lock held, and
++	 * device_del() would wait for that lock forever. The rpdev stands for
++	 * the remote's channel and is unregistered when the remote closes it
++	 * (qcom_glink_rx_close()).
++	 */
+ 	qcom_glink_send_close_req(glink, channel);
+ }
+ 

@@ -1,0 +1,46 @@
+From 0b441f29e62d3a44dcc8ca0b39dfaf0eae90f1f7 Mon Sep 17 00:00:00 2001
+From: Nura G8x <nura-g8x@users.noreply.github.com>
+Date: Thu, 26 Nov 2026 11:23:45 +0100
+Subject: [PATCH] misc: fastrpc: do not restart remote calls interrupted by the
+ freezer
+
+A user invoke waits for the DSP's answer with
+wait_for_completion_interruptible(). System suspend freezes user space
+by sending every task a fake signal, so a thread blocked in an invoke
+returns -ERESTARTSYS and the syscall is restarted after thaw. The
+restarted call allocates a new context and sends the same request to the
+DSP again, while the DSP still owns the first one.
+
+hexagonrpcd keeps one listener invoke (adsp_listener next2) outstanding
+on the sensors DSP at all times, so every suspend sent it a duplicate.
+On SM8150 the SLPI's sensor_process faulted right as tasks were thawed,
+on every suspend ("PDM: service 'sensor_process' crash:
+EX:sensor_process:0x1:frpc_dsp:0x6c"), and the SLPI was restarted. The
+crash also woke the system at once, so it never stayed suspended.
+
+Wait with TASK_FREEZABLE so the freezer freezes the caller in place,
+without a signal, and the call carries on after resume. A real signal
+still interrupts the wait as before.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+diff --git a/drivers/misc/fastrpc.c b/drivers/misc/fastrpc.c
+index 2f3a058..7d950bc 100644
+--- a/drivers/misc/fastrpc.c
++++ b/drivers/misc/fastrpc.c
+@@ -1265,7 +1265,14 @@ static int fastrpc_internal_invoke(struct fastrpc_user *fl,  u32 kernel,
+ 		if (!wait_for_completion_timeout(&ctx->work, 10 * HZ))
+ 			err = -ETIMEDOUT;
+ 	} else {
+-		err = wait_for_completion_interruptible(&ctx->work);
++		/*
++		 * Freezable: system suspend freezes the caller in place instead
++		 * of interrupting it. An interrupted call returns -ERESTARTSYS
++		 * and is sent to the DSP again after thaw, while the DSP still
++		 * owns the first one.
++		 */
++		err = wait_for_completion_state(&ctx->work,
++						TASK_INTERRUPTIBLE | TASK_FREEZABLE);
+ 	}
+ 
+ 	if (err)

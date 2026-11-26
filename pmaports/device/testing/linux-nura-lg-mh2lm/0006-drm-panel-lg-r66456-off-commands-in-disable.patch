@@ -1,0 +1,42 @@
+diff --git a/drivers/gpu/drm/panel/panel-lg-r66456.c b/drivers/gpu/drm/panel/panel-lg-r66456.c
+index 920650a..6365753 100644
+--- a/drivers/gpu/drm/panel/panel-lg-r66456.c
++++ b/drivers/gpu/drm/panel/panel-lg-r66456.c
+@@ -105,7 +105,14 @@ static int r66456_prepare(struct drm_panel *panel)
+ 	return 0;
+ }
+ 
+-static int r66456_unprepare(struct drm_panel *panel)
++/*
++ * Display off and sleep in .disable: it runs while the DSI video stream is still
++ * on. With prepare_prev_first the bridge chain calls .unprepare after the encoder
++ * has stopped the interface but before the DSI host stops its video engine, so
++ * commands sent there sat behind a stalled video engine and the host reported
++ * TIMEOUT and FIFO errors (dsi_err_worker status=5) on every blank and suspend.
++ */
++static int r66456_disable(struct drm_panel *panel)
+ {
+ 	struct r66456 *ctx = container_of(panel, struct r66456, panel);
+ 	struct mipi_dsi_device *dsi = ctx->dsi;
+@@ -122,6 +129,13 @@ static int r66456_unprepare(struct drm_panel *panel)
+ 	mipi_dsi_dcs_set_display_off(dsi);
+ 	mipi_dsi_dcs_enter_sleep_mode(dsi);
+ 	msleep(150);
++	return 0;
++}
++
++static int r66456_unprepare(struct drm_panel *panel)
++{
++	struct r66456 *ctx = container_of(panel, struct r66456, panel);
++
+ 	regulator_bulk_disable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
+ 	return 0;
+ }
+@@ -156,6 +170,7 @@ static int r66456_get_modes(struct drm_panel *panel, struct drm_connector *c)
+ 
+ static const struct drm_panel_funcs r66456_funcs = {
+ 	.prepare = r66456_prepare,
++	.disable = r66456_disable,
+ 	.unprepare = r66456_unprepare,
+ 	.get_modes = r66456_get_modes,
+ };

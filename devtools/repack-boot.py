@@ -10,6 +10,7 @@ h=bytearray(d[:pg]); struct.pack_into('<I',h,8,len(nk))
 import os
 if os.environ.get('PHOTO'): c=h[64:576].rstrip(b'\0')+b' ignore_loglevel nura.testwd watchdog.handle_boot_enabled=1 watchdog.open_timeout=300 panic=0'
 else: c=h[64:576].rstrip(b'\0')+b' watchdog.handle_boot_enabled=1 watchdog.open_timeout=180 nura.testwd panic=10 softlockup_panic=1 hung_task_panic=1'+(sys.argv[3].encode() if len(sys.argv)>3 else b'')
+for w in os.environ.get('DROP','').split(): c=b' '.join(x for x in c.split(b' ') if x!=w.encode())  # DROP='clk_ignore_unused ...' removes words
 assert len(c)<512; h[64:576]=c.ljust(512,b'\0')
 i=hashlib.sha1()
 for b in (nk,rd,b''): i.update(b); i.update(struct.pack('<I',len(b)))
