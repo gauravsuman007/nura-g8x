@@ -139,8 +139,11 @@ jobs:
         run: $PMB -y build --arch aarch64 libcamera
 
       - name: Build patched libqmi and ModemManager
-        # before the tweaks package, which pins exactly these builds
-        run: $PMB -y build --arch aarch64 libqmi modemmanager
+        # before the tweaks package, which pins exactly these builds. One at a time: given both,
+        # pmbootstrap may build modemmanager first, and it needs the patched libqmi.
+        run: |
+          $PMB -y build --arch aarch64 libqmi
+          $PMB -y build --arch aarch64 modemmanager
 
       - name: Build device and tweaks packages
         run: $PMB -y build --arch aarch64 device-lg-mh2lm nura-g8x-tweaks

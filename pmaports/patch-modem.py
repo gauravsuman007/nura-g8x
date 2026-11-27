@@ -34,6 +34,9 @@ for pkg, patches in PATCHES.items():
 		# pmbootstrap tries to install the not yet built patched version and fails
 		a, n = re.subn(r'^(makedepends="\n)\t\$depends_dev\n', r"\1", a, flags=re.M)
 		assert n == 1, "modemmanager: no $depends_dev in makedepends"
+		# and compile against exactly the patched libqmi (libqmi is processed first)
+		a, n = re.subn(r"^\tlibqmi-dev$", "\tlibqmi-dev=" + pins["libqmi"], a, count=1, flags=re.M)
+		assert n == 1, "modemmanager: no libqmi-dev in makedepends"
 	for patch in patches:
 		shutil.copy(os.path.join(nura, "modem-patches", patch), dst)
 		# append the patch as the last source entry, its checksum as the last sum
