@@ -1,4 +1,4 @@
-From a6329717ee680d9db46965f04610d9635957619d Mon Sep 17 00:00:00 2001
+From f993ccdbffd5af46204fe89459671c7679a91c2e Mon Sep 17 00:00:00 2001
 From: Nura G8x <nura-g8x@users.noreply.github.com>
 Date: Fri, 27 Nov 2026 22:59:03 +0100
 Subject: [PATCH] wifi: ath10k: do not stop a WCN3990 STA vdev while another
@@ -42,7 +42,7 @@ index fd4eb0a..d058fdc 100644
  		struct {
  			/* 512 stations */
 diff --git a/drivers/net/wireless/ath/ath10k/mac.c b/drivers/net/wireless/ath/ath10k/mac.c
-index 3c45868..7931762 100644
+index 3c45868..cd9cf40 100644
 --- a/drivers/net/wireless/ath/ath10k/mac.c
 +++ b/drivers/net/wireless/ath/ath10k/mac.c
 @@ -5973,6 +5973,13 @@ static void ath10k_remove_interface(struct ieee80211_hw *hw,
@@ -89,7 +89,7 @@ index 3c45868..7931762 100644
 +	 * vdev while another vdev is started. Leave it started: the next
 +	 * assignment restarts it, interface removal deletes it.
 +	 */
-+	if (ar->hw_params.hw_rev == ATH10K_HW_WCN3990 &&
++	if (ar->hw_rev == ATH10K_HW_WCN3990 &&
 +	    arvif->vdev_type == WMI_VDEV_TYPE_STA &&
 +	    ath10k_mac_num_vifs_started(ar) > 1) {
 +		ath10k_dbg(ar, ATH10K_DBG_MAC,
