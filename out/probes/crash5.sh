@@ -1,0 +1,4 @@
+#!/bin/zsh
+cd /Users/hellonfire/Coding/nura
+K=(-o IdentitiesOnly=yes -o ConnectTimeout=8 -o ServerAliveInterval=3 -o ServerAliveCountMax=5 -i out/sshkey/g8x user@172.16.42.1)
+for n in 1 2 3 4 5; do ssh $K 'GW=$(ip route show default dev wlan0 | awk "{print \$3}" | head -1); (ping -i 0.02 -s 1200 -w 25 $GW >/tmp/ping.log 2>&1 &); sleep 4; echo 1 | sudo -n tee /sys/kernel/debug/remoteproc/remoteproc1/crash >/dev/null; sleep 30; echo crash'$n' uptime=$(cut -d. -f1 /proc/uptime) boot=$(cut -c1-8 /proc/sys/kernel/random/boot_id) modem=$(cat /sys/class/remoteproc/remoteproc1/state) ping=$(ping -c 2 -W 2 $(ip route show default dev wlan0 | awk "{print \$3}" | head -1) >/dev/null 2>&1 && echo ok || echo FAIL) recovered=$(sudo -n dmesg | grep -c "successfully recovered") msa_errors=$(sudo -n dmesg | grep -c "msa .*permissions")' || exit 1; done

@@ -23,3 +23,7 @@ __pycache__/
 *.pyc
 .DS_Store
 tests/results/
+
+# empty local leftovers
+/boot_current.img
+/test.bin

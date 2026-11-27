@@ -1,0 +1,33 @@
+#!/bin/sh
+# Development guard (not packaged): make /lib/modules match the running kernel
+# build before any module is loaded. RAM-booted test kernels and the flashed
+# kernel share the same release string (7.0.0-sm8150), so after a fallback to
+# the flashed kernel the test modules were loaded into it (oopses, fastrpc probe
+# failure, reboots hanging). Module sets are kept as
+# /var/lib/nura-mods/<build>.tar (tar of 7.0.0-sm8150/), <build> being the
+# number after '#' in `uname -v`.
+set -u
+R=$(uname -r)
+B=$(uname -v | sed -n 's/^#\([0-9]*\).*/\1/p')
+D=/lib/modules/$R
+S=/var/lib/nura-mods
+cur=$(cat "$D/.nura-build" 2>/dev/null)
+[ -n "$B" ] || exit 0
+if [ "$cur" = "$B" ]; then
+	echo "nura-modguard: modules match kernel #$B"
+	exit 0
+fi
+if [ ! -f "$S/$B.tar" ]; then
+	echo "nura-modguard: kernel #$B, modules #${cur:-unknown}, no $S/$B.tar: leaving as is"
+	exit 0
+fi
+echo "nura-modguard: kernel #$B but modules #${cur:-unknown}: installing $S/$B.tar"
+rm -rf "$D.new" && mkdir -p "$D.new" &&
+	tar -C "$D.new" -xf "$S/$B.tar" &&
+	[ -d "$D.new/$R" ] || { echo "nura-modguard: bad archive"; rm -rf "$D.new"; exit 1; }
+rm -rf "$D.old"; [ -d "$D" ] && mv "$D" "$D.old"
+mv "$D.new/$R" "$D" && rm -rf "$D.new" "$D.old"
+echo "$B" > "$D/.nura-build"
+depmod "$R"
+sync
+echo "nura-modguard: now $(find "$D" -name '*.ko*' | wc -l) modules for #$B"

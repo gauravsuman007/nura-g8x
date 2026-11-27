@@ -5,7 +5,7 @@
 cd "$(dirname "$0")/.."; img=$1
 strings -a "$img" | grep -q "nura.testwd" || { echo "REFUSED: $img has no nura.testwd cmdline; build it with devtools/repack-boot.py"; exit 2; }
 G=out/probes/g8x; PW=$(cat test-image-password.txt)
-scp -q -i out/sshkey/g8x -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR devtools/bootloader-reboot.py nura@172.16.42.1:/tmp/rb.py
+scp -q -o IdentitiesOnly=yes -i out/sshkey/g8x -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR devtools/bootloader-reboot.py ${G8X_USER:-nura}@172.16.42.1:/tmp/rb.py
 ($G "echo '$PW' | sudo -S -p '' python3 /tmp/rb.py" >/dev/null 2>&1 &)
 n=0; until fastboot devices | grep -q . || [ $n -ge 120 ]; do n=$((n+1)); sleep 1; done
 fastboot devices | grep -q . || { echo "no fastboot"; exit 1; }
