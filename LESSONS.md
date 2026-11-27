@@ -2014,3 +2014,78 @@ helps with profiles LG signed (the 25 NA/Korea ones, or EU ones from an LG firmw
   The cause of the two score levels is not known.
 - The r8 module set on the development phone had a hand-installed test fastrpc.ko; flashing a packaged kernel
   replaces it. devtools/modguard must be removed before relying on a packaged kernel (it has no module set for it).
+
+## Radio stays off while the USIM session is open (2026-11-27, flashed r13)
+- Correction to "SIM initialisation SOLVED": msg 0x602 to service 800 releases the simlock wait, but the primary GW
+  provisioning session must also be activated (qmicli --uim-change-provisioning-session). It had existed already in
+  the earlier runs (probably opened by an earlier step or ModemManager; not checked). 706 and msg 0x705 are not needed
+  for it (0x705, LG's set_instance_id, answers success and changes nothing).
+- The radio works: with the SIM still stuck the modem camps on German LTE in "limited" service (RSRP -84 dBm).
+- Repeatable: within seconds of the session opening, GSM/WCDMA/LTE go to "power-save"; closing the session brings
+  searching back. While open: USIM and personalisation "ready", PIN disabled, EF_IMSI reads fine, but NAS
+  get-home-network fails with NotProvisioned. LTE RRC logs "Deep sleep indicated by CM" at that moment.
+- Not it: manual network selection (QMI error Internal), force search, low-power/online cycling, switching the
+  carrier profile from ROW_NA to ROW_OPEN_CA (that one is now the persisted selection in modem storage; deactivating
+  did not work).
+- Unanswered modem indications on service 800 after 0x602 (0x67a, 0x706, 0x61d, 0x676): LG's qcril only forwards
+  indications to Android; 0x61d carries a carrier/country state ("OPEN,EU,NOT_READY,NOT_READY").
+- Next lead: why call management never gets the subscription (no CM F3 messages in captures so far). Many subscription
+  scoped DIAG messages are wrapped in command 0x98 (8 byte header); diagterse.py skips them.
+- Do not `systemctl restart rmtfs` to change its mode: the phone reset when a script did (silently; the restart as
+  trigger is inferred). The dev drop-in 50-nura-dev.conf picks writable storage at boot instead (RAM test + flag file).
+
+## Release v2026.11.26.1 flashed (2026-11-27)
+- CI failed twice on patch 0005 because sha512sums were not in source= order (every hash was right).
+- CI boot image RAM-tested, then flashed: suite 64 pass, 3 fail, all for lack of the home Wi-Fi (link, throughput,
+  Wi-Fi after resume). Suspend cycles on the flashed system are still to be run with Wi-Fi.
+- Previous boot_b saved on the Mac: out/rel-v2026.11.26.1/boot_b-before-r8.img.
+- Found after a reboot: airplane mode on (all radios soft-blocked, saved state); cause not found in the logs.
+
+## Cellular registration SOLVED: carrier configuration auto-selection (2026-11-27)
+
+- Cause of the power-save: MCFG auto-selection by ICCID. When the USIM session opens, MCFG looks
+  for a carrier configuration for the card and tears the subscription down for a refresh
+  (`cm_ph_cmd_deactivate_subs`, DIAG "Deep sleep indicated by CM", `MCFG_STACK_DEACT_STM`). On this
+  firmware the refresh never completes, so GSM/WCDMA/LTE stay in power-save and NAS reports the
+  home network as NotProvisioned. The PDC "Get Feature" (0x2D) indication showed selection mode 3
+  on both slots.
+- Fix: PDC "Set Feature" (0x2E) per slot: selection mode 0, carrier 0, flex mapping 0, refresh
+  mode 1 (what qcril's `qcril_qmi_pdc_disable_modem_update` sends). It is read when the modem
+  starts, so it needs writable modem EFS (`rmtfs` without `-r`) and one more boot. The first
+  attempt seemed to work only because `rmtfs -r` kept the RAM copy across a modem restart.
+- Result: registered home on simplytel, 262-02, GSM indoors at -98 dBm. A scan also sees 262-02 LTE.
+  Packet service stayed detached indoors. Data, SMS and calls are not tested yet (weak signal).
+- Not the cause, checked: NAS dual-standby preference (0x5C: single standby, primary subscription
+  active), LG simlock (indication 0x61d reads `OPEN,EU,OPEN,EU` after the handshake), missing
+  `mcfg_hw/mbn_hw.dig` (stock firmware has none either; the PDC platform list is empty on stock
+  too), the carrier policy XML in the profiles (allows GSM/WCDMA/LTE), PDC client refresh
+  indications (none arrive), and UIM refresh voting (only fires when the session is closed).
+- Modem restarts: the debugfs crash restart is safe on r13, but the modem then does not write
+  EFS, so a new setting is lost. A clean remoteproc `stop`/`start` saved it once by hand. On the
+  second try it reset the phone: the last console line was `qcom_smd_qrtr ... invalid ipcrouter
+  packet`. Never restart the modem from a service. The setting applies at the next boot instead.
+- DIAG on this modem throttles F3 messages heavily; the CM and MCFG lines did not show up. The
+  leaked MPSS `mcfg_refresh.c` (research_notes/modem-power-save-comparison.md) explained the
+  state machine.
+- Where the code lives: the kernel only carries QMI (QRTR, remoteproc, IPA). The SIM steps are QMI
+  client policy, so they belong in ModemManager. Patches: libqmi gets PDC Get/Set Feature;
+  ModemManager's qcom-soc plugin opens the primary GW session when none exists (MM never did, the
+  Android RIL does) and disables auto-selection when the net port has the udev property
+  `ID_MM_QCOM_SOC_DISABLE_CARRIER_AUTOSELECT` (QRTR ports have no udev device). The LG-only
+  service 800 handshake stays in `nura-lge-modem`. Recipes: `pmaports/patch-modem.py` rebases the
+  patches onto Alpine's current aports with pkgrel + 100 and pins nura-g8x-tweaks to those exact
+  builds, so an upstream ModemManager update cannot silently drop the patch.
+
+## Clock reads 1970 after a reboot (2026-11-27)
+
+The PM8150 RTC (rtc-pm8xxx) counts from its last PMIC reset and is read-only
+to Linux on Qualcomm phones; Android keeps the offset to real time itself. So
+every boot without network started in 1970 (or at a random date). Fix, as in
+mainline sm8150-xiaomi-raphael: an SDAM nvmem cell holds the offset
+(`&pm8150_rtc { nvmem-cells = <&rtc_offset>; }`, `pm8150_sdam_2` enabled with
+`rtc-offset@bc`, reg 0xbc 4). Once the time has been set (NTP, or by hand with
+`date` + `hwclock -w`), it survives reboots (tested with two RAM boots). Before
+the first write the cell holds leftover data and the first boot may show a
+date like 2054. The DT change lives in pmaports/sm8150-lg-mh2lm.dts and the
+device package DTB (device r10). Cellular network time (NITZ) is not used yet:
+ModemManager reports no time capability for the qcom-soc modem.

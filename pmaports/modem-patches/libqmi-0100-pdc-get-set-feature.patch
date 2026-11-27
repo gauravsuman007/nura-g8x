@@ -1,0 +1,147 @@
+From 2f31f6e989b8c0db8fd4672334f4844817d6207d Mon Sep 17 00:00:00 2001
+From: Nura G8x <nura-g8x@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 19:09:16 +0100
+Subject: [PATCH] libqmi-glib,pdc: new 'Get Feature' and 'Set Feature' messages
+
+The PDC service lets the AP read and change the carrier configuration
+auto-selection settings of a slot (selection mode, carrier, flex
+mapping, refresh mode). Android's RIL disables MCFG auto-selection by
+ICCID this way when the AP manages carrier configurations.
+---
+ data/qmi-collection-basic.json |   4 ++
+ data/qmi-service-pdc.json      | 104 +++++++++++++++++++++++++++++++++
+ 2 files changed, 108 insertions(+)
+
+diff --git a/data/qmi-collection-basic.json b/data/qmi-collection-basic.json
+index d682a681..43234063 100644
+--- a/data/qmi-collection-basic.json
++++ b/data/qmi-collection-basic.json
+@@ -117,6 +117,10 @@
+     "QMI_MESSAGE_WDA_SET_DATA_FORMAT",
+ 
+     "QMI_MESSAGE_PDC_ACTIVATE_CONFIG",
++    "QMI_MESSAGE_PDC_GET_FEATURE",
++    "QMI_INDICATION_PDC_GET_FEATURE",
++    "QMI_MESSAGE_PDC_SET_FEATURE",
++    "QMI_INDICATION_PDC_SET_FEATURE",
+     "QMI_INDICATION_PDC_ACTIVATE_CONFIG",
+     "QMI_MESSAGE_PDC_SET_SELECTED_CONFIG",
+     "QMI_INDICATION_PDC_SET_SELECTED_CONFIG",
+diff --git a/data/qmi-service-pdc.json b/data/qmi-service-pdc.json
+index 796a5349..437805a3 100644
+--- a/data/qmi-service-pdc.json
++++ b/data/qmi-service-pdc.json
+@@ -412,6 +412,110 @@
+                    { "common-ref" : "Token",
+                      "since"      : "1.18" }] },
+ 
++  // *********************************************************************************
++  // Carrier configuration auto-selection settings of a slot. Selection mode 0
++  // disables MCFG auto-selection by ICCID (what Android's qcril sets when the
++  // AP manages carrier configs); it is read when the modem starts.
++  {  "name"    : "Get Feature",
++     "type"    : "Message",
++     "service" : "PDC",
++     "id"      : "0x2D",
++     "since"   : "1.40",
++     "input"   : [
++                   { "name"          : "Slot Id",
++                     "id"            : "0x01",
++                     "type"          : "TLV",
++                     "since"         : "1.40",
++                     "mandatory"     : "yes",
++                     "format"        : "guint32" },
++                   { "common-ref"    : "Token",
++                     "since"         : "1.40" } ],
++     "output"  : [
++                   { "common-ref"    : "Operation Result" },
++                   { "common-ref"    : "Token",
++                     "since"         : "1.40" } ] },
++
++  {  "name"    : "Get Feature",
++     "type"    : "Indication",
++     "service" : "PDC",
++     "id"      : "0x2D",
++     "since"   : "1.40",
++     "output"  : [
++                   { "common-ref"    : "Indication Result",
++                     "since"         : "1.40" },
++                   { "common-ref"    : "Token",
++                     "since"         : "1.40" },
++                   { "name"          : "Selection Mode",
++                     "id"            : "0x11",
++                     "type"          : "TLV",
++                     "since"         : "1.40",
++                     "format"        : "guint32" },
++                   { "name"          : "Carrier",
++                     "id"            : "0x12",
++                     "type"          : "TLV",
++                     "since"         : "1.40",
++                     "format"        : "guint32" },
++                   { "name"          : "Flex Mapping",
++                     "id"            : "0x13",
++                     "type"          : "TLV",
++                     "since"         : "1.40",
++                     "format"        : "guint8" },
++                   { "name"          : "Refresh Mode",
++                     "id"            : "0x14",
++                     "type"          : "TLV",
++                     "since"         : "1.40",
++                     "format"        : "guint32" } ] },
++
++  {  "name"    : "Set Feature",
++     "type"    : "Message",
++     "service" : "PDC",
++     "id"      : "0x2E",
++     "since"   : "1.40",
++     "input"   : [
++                   { "name"          : "Slot Id",
++                     "id"            : "0x01",
++                     "type"          : "TLV",
++                     "since"         : "1.40",
++                     "mandatory"     : "yes",
++                     "format"        : "guint32" },
++                   { "common-ref"    : "Token",
++                     "since"         : "1.40" },
++                   { "name"          : "Selection Mode",
++                     "id"            : "0x11",
++                     "type"          : "TLV",
++                     "since"         : "1.40",
++                     "format"        : "guint32" },
++                   { "name"          : "Carrier",
++                     "id"            : "0x12",
++                     "type"          : "TLV",
++                     "since"         : "1.40",
++                     "format"        : "guint32" },
++                   { "name"          : "Flex Mapping",
++                     "id"            : "0x13",
++                     "type"          : "TLV",
++                     "since"         : "1.40",
++                     "format"        : "guint8" },
++                   { "name"          : "Refresh Mode",
++                     "id"            : "0x14",
++                     "type"          : "TLV",
++                     "since"         : "1.40",
++                     "format"        : "guint32" } ],
++     "output"  : [
++                   { "common-ref"    : "Operation Result" },
++                   { "common-ref"    : "Token",
++                     "since"         : "1.40" } ] },
++
++  {  "name"    : "Set Feature",
++     "type"    : "Indication",
++     "service" : "PDC",
++     "id"      : "0x2E",
++     "since"   : "1.40",
++     "output"  : [
++                   { "common-ref"    : "Indication Result",
++                     "since"         : "1.40" },
++                   { "common-ref"    : "Token",
++                     "since"         : "1.40" } ] },
++
+   // *********************************************************************************
+   {  "name"    : "Refresh",
+      "type"    : "Indication",
+-- 
+2.50.1 (Apple Git-155)
+

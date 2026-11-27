@@ -1,0 +1,8 @@
+# LG G8x: ask ModemManager's qcom-soc plugin (nura patch) to disable the
+# modem's carrier configuration auto-selection. With it enabled, opening the
+# USIM session deactivates the subscription for an MCFG refresh that never
+# completes and every RAT stays in power-save. The plugin reads the property
+# from the modem's net port (the QRTR control port has no udev device).
+ACTION!="add|change|move|bind", GOTO="nura_mm_qcom_soc_end"
+SUBSYSTEM=="net", DRIVERS=="ipa", ENV{ID_MM_QCOM_SOC_DISABLE_CARRIER_AUTOSELECT}="1"
+LABEL="nura_mm_qcom_soc_end"

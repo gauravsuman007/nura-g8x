@@ -1,0 +1,75 @@
+#!/usr/bin/python3
+# LG G8x modem helper (nura-lge-modem.service).
+# LG's modem firmware waits for LG's Android RIL before the SIM works: until
+# a client sends the LG "VSS common" (QMI service 800) "server connect"
+# request, msg 0x602 value 0 (libril-qc-hal-qmi.so), LG's simlock code loops
+# on "waiting vss init" and the USIM never leaves "detected".
+# Sends it whenever the service appears (boot and modem restarts) and stays
+# connected, like the RIL. The rest of the SIM preparation (USIM provisioning
+# session, carrier profile auto-selection off) is done by ModemManager's
+# qcom-soc plugin (patched, see 78-nura-mm-qcom-soc.rules).
+# Payloads are never logged: they can carry device identifiers.
+import os, select, socket, struct
+
+AF_QIPCRTR = 42
+CTRL_PORT = 0xfffffffe
+NEW_SERVER, DEL_SERVER, NEW_LOOKUP = 4, 5, 10
+LG_VSS = 800
+
+def log(*a):
+	print(*a, flush=True)
+
+def notify(state):
+	addr = os.environ.get("NOTIFY_SOCKET")
+	if addr:
+		s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+		s.sendto(state.encode(), "\0" + addr[1:] if addr[0] == "@" else addr)
+		s.close()
+
+def connect(addr):
+	s = socket.socket(AF_QIPCRTR, socket.SOCK_DGRAM)
+	body = struct.pack("<BHI", 0x01, 4, 0)
+	s.sendto(struct.pack("<BHHH", 0, 1, 0x602, len(body)) + body, addr)
+	log("LG VSS server connect sent")
+	return s
+
+def main():
+	ns = socket.socket(AF_QIPCRTR, socket.SOCK_DGRAM)
+	# node 1 is the application processor's own name service
+	ns.sendto(struct.pack("<5I", NEW_LOOKUP, LG_VSS, 0, 0, 0), (1, CTRL_PORT))
+	client, server, ready = None, None, False
+	while True:
+		# do not hold ModemManager back for more than 30 s at boot
+		r = select.select([ns] + ([client] if client else []), [], [], None if ready else 30)[0]
+		if not r and not ready:
+			log("LG VSS service not found yet")
+			notify("READY=1")
+			ready = True
+		for s in r:
+			if s is client:
+				try:
+					s.recv(65536)  # responses and indications: not logged
+				except OSError:
+					client.close()
+					client = None
+				continue
+			d = s.recv(64)
+			if len(d) < 20:
+				continue
+			cmd, svc, _, node, port = struct.unpack_from("<5I", d)
+			if svc != LG_VSS:
+				continue
+			if cmd == NEW_SERVER and server != (node, port):
+				if client:
+					client.close()
+				server = (node, port)
+				client = connect(server)
+				if not ready:
+					notify("READY=1")
+					ready = True
+			elif cmd == DEL_SERVER and server == (node, port):
+				log("LG VSS service gone (modem stopped)")
+				server = None
+
+if __name__ == "__main__":
+	main()

@@ -4,7 +4,7 @@
 # tweaks/stage.sh packs unit/ and tweaks/ into nura-g8x-tweaks-files.tar.gz.
 pkgname=nura-g8x-tweaks
 pkgver=2026.11.12
-pkgrel=34
+pkgrel=35
 _hexver=0.5.0
 _sscver=0.4.4
 _fpver=1.94.9
@@ -25,6 +25,9 @@ depends="
 	libssc
 	qrtr-libs
 	libqmi
+	qmi-utils
+	modemmanager>=1.25.95_git20261005-r100
+	rmtfs
 	protobuf-c
 	libgudev
 	libcamera>=99990.8.0-r100
@@ -181,6 +184,12 @@ package() {
 	install -Dm755 $f/unit/ota/nura-update -t "$pkgdir"/usr/bin/
 	install -Dm755 $f/unit/ota/nura-boot-update -t "$pkgdir"/usr/libexec/
 	install -Dm644 $f/unit/ota/nura-boot-update.path $f/unit/ota/nura-boot-update.service -t "$pkgdir"/usr/lib/systemd/system/
+	# cellular: LG SIM handshake, MM qcom-soc property (carrier auto-selection off), writable modem EFS
+	install -Dm755 $f/unit/modem/nura-lge-modem -t "$pkgdir"/usr/libexec/
+	install -Dm644 $f/unit/modem/nura-lge-modem.service -t "$pkgdir"/usr/lib/systemd/system/
+	install -Dm644 $f/unit/modem/rmtfs-writable.conf \
+		"$pkgdir"/usr/lib/systemd/system/rmtfs.service.d/50-nura-writable.conf
+	install -Dm644 $f/unit/modem/78-nura-mm-qcom-soc.rules -t "$pkgdir"/usr/lib/udev/rules.d/
 	# fingerprint (ET713): egistad owns the trustlet, fprintd uses the private libfprint, lock-screen unlock
 	install -Dm644 $f/unit/fingerprint/egistad/*.py -t "$pkgdir"/usr/lib/egistad/
 	install -Dm644 $f/unit/fingerprint/egistad.service -t "$pkgdir"/usr/lib/systemd/system/
@@ -200,7 +209,7 @@ package() {
 	install -Dm644 $f/unit/fingerprint/gdm.d-90-g8x-fingerprint "$pkgdir"/etc/dconf/db/gdm.d/90-g8x-fingerprint
 }
 sha512sums="
-211544540b2b99443d47bc8ed59053d03b2df50e56bdc1bb018efb5ff786b9dcd3474718bf64c8ed76a9c5ea412ebcad3d850669b26bf13268a3d54d6463cc6f  nura-g8x-tweaks-files.tar.gz
+8dded6918426d1f4c53084ae9bff526ae28b8b07c483ca9f6d980109adf161b582e767454f482b7cc2bba00cbe9934240737e7aa783ed3902687922f8eb091fd  nura-g8x-tweaks-files.tar.gz
 919146c9018e4b0cc271237c7200af0b7abcd4500227e0140e1e44fd2b412d29c1519ffe29ed06a5119b3a0218a3ef016af21a5be3c5898b0f0d35b44ac78b1b  hexagonrpc-0.5.0.tar.gz
 9240970f6a70f4900ef2d8fad337dac815ea2602b3b395943326fb086f59d24dcf59b76bdbc6014ebd3c450eaad5393465ca038c165845ffe99bf8e282a5c170  libssc-0.4.4.tar.gz
 385817bc2b8f4bfd2a06d67b63f420bb610092758f43391887eb8335c01d68aa1590301f8e060902c95ed20cd9075d6ef38ee71edac30f20008b44eddc3f51ce  hexagonrpc-0001-close-aliased-descriptor.diff

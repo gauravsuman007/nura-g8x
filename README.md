@@ -29,15 +29,18 @@ and back up the phone first.
 | Remote desktop (GNOME Settings, System, Remote Desktop) | works while unlocked |
 | Optional Assistant-key helpers (power button replacement, 8 s forced restart) | works, off by default |
 | 30 s hardware watchdog (a hung phone resets itself) | works |
+| Clock keeps the time across reboots (once set by NTP) | works from device r10 |
 
 All of these are configurable under **Settings > LG G8x Tweaks**.
 
 ## What does not work, or is untested
 
-- **SIM, calls, SMS and mobile data** do not work yet. The cause of the SIM
-  start-up hang is found (LESSONS.md, "SIM initialisation SOLVED"; the helper
-  is not packaged yet) and the radio still does not register. Do not force the
-  modem on without a SIM: it crashes the modem firmware.
+- **SIM and network registration** work from tweaks r35 with the patched
+  ModemManager (LESSONS.md, "Cellular registration SOLVED"); on a fresh install
+  the phone registers from the second boot. **Mobile data and SMS** are
+  untested. **Call audio** does not work yet (needs the out-of-tree q6voice
+  kernel driver). Do not force the modem on without a SIM: it crashes the
+  modem firmware.
 - **GPS**: the engine runs and NMEA arrives, no fix has been tested.
 - **Headphone jack and headset microphone**: set up, untested.
 - **Camera autofocus**: libcamera's simple pipeline has none; focus is a

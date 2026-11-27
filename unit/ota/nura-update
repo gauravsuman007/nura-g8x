@@ -6,7 +6,7 @@
 # G8x packages and leave the rest held back, and say so. Everything is logged to /var/log/nura-update.log.
 [ "$(id -u)" = 0 ] || exec sudo "$0" "$@"
 LOG=/var/log/nura-update.log
-OWN="linux-nura-lg-mh2lm device-lg-mh2lm nura-g8x-tweaks"
+OWN="linux-nura-lg-mh2lm device-lg-mh2lm nura-g8x-tweaks libqmi qmi-utils modemmanager libmm-glib"
 echo "== package lists"; apk update || { echo "Cannot reach the package repositories. Check the network and try again."; exit 1; }
 if [ "${1:-}" = --check ]; then
 	apk version -l '<' || true

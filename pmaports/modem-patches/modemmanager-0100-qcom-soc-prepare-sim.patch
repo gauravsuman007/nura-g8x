@@ -1,0 +1,398 @@
+From 583df1a189590052e4c53899ddfe29fe1a43a054 Mon Sep 17 00:00:00 2001
+From: Nura G8x <nura-g8x@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 19:11:17 +0100
+Subject: [PATCH] qcom-soc: prepare the SIM like the Android RIL does
+
+Android's RIL activates the primary GW provisioning session itself; on
+SoC modems where nothing else does, the USIM stays in 'detected' state
+and MM reports the SIM as missing. Activate the session on the first
+USIM application when none exists, before loading the lock state.
+
+Some modems (seen on the LG G8x, SM8150 MPSS) deactivate the
+subscription for an MCFG refresh when the USIM session opens with
+carrier configuration auto-selection enabled, and never reactivate it:
+every RAT stays in power-save. Devices can request disabling the
+auto-selection with the ID_MM_QCOM_SOC_DISABLE_CARRIER_AUTOSELECT udev
+property on their net port; the modem keeps the setting in its EFS and
+applies it from the next modem start.
+---
+ .../mm-broadband-modem-qmi-qcom-soc.c         | 347 +++++++++++++++++-
+ 1 file changed, 346 insertions(+), 1 deletion(-)
+
+diff --git a/src/plugins/qcom-soc/mm-broadband-modem-qmi-qcom-soc.c b/src/plugins/qcom-soc/mm-broadband-modem-qmi-qcom-soc.c
+index fa19bd4d..e7aa645c 100644
+--- a/src/plugins/qcom-soc/mm-broadband-modem-qmi-qcom-soc.c
++++ b/src/plugins/qcom-soc/mm-broadband-modem-qmi-qcom-soc.c
+@@ -24,9 +24,17 @@
+ #include "ModemManager.h"
+ #include "mm-log.h"
+ #include "mm-iface-modem.h"
++#include "mm-shared-qmi.h"
++#include "mm-kernel-device.h"
++#include "mm-port.h"
+ #include "mm-broadband-modem-qmi-qcom-soc.h"
+ 
+-G_DEFINE_TYPE (MMBroadbandModemQmiQcomSoc, mm_broadband_modem_qmi_qcom_soc, MM_TYPE_BROADBAND_MODEM_QMI)
++static void iface_modem_init (MMIfaceModemInterface *iface);
++
++static MMIfaceModemInterface *iface_modem_parent;
++
++G_DEFINE_TYPE_EXTENDED (MMBroadbandModemQmiQcomSoc, mm_broadband_modem_qmi_qcom_soc, MM_TYPE_BROADBAND_MODEM_QMI, 0,
++                        G_IMPLEMENT_INTERFACE (MM_TYPE_IFACE_MODEM, iface_modem_init))
+ 
+ /*****************************************************************************/
+ 
+@@ -140,6 +148,334 @@ peek_port_qmi_for_data (MMBroadbandModemQmi  *self,
+     return NULL;
+ }
+ 
++/*****************************************************************************/
++/* Load unlock required (Modem interface)
++ *
++ * On SoC modems the Android RIL prepares the SIM before anything else:
++ *
++ *  - If the device udev rules set ID_MM_QCOM_SOC_DISABLE_CARRIER_AUTOSELECT,
++ *    MCFG carrier configuration auto-selection is disabled through PDC "Set
++ *    Feature". With auto-selection enabled, some modems (e.g. the LG G8x
++ *    SM8150 MPSS) deactivate the subscription for a configuration refresh
++ *    when the USIM session opens, and never reactivate it: every RAT stays in
++ *    power-save. The setting is read when the modem boots, so it takes effect
++ *    from the next modem start; the modem stores it in its EFS.
++ *
++ *  - If no primary GW provisioning session exists yet, the session is
++ *    activated on the first USIM application. Without it the USIM stays in
++ *    "detected" state and MM reports the SIM as missing.
++ */
++
++#define CARRIER_AUTOSELECT_DONE_TAG "qcom-soc-carrier-autoselect-done"
++
++typedef enum {
++    UNLOCK_STEP_FIRST,
++    UNLOCK_STEP_PDC_AUTOSELECT,
++    UNLOCK_STEP_CARD_STATUS,
++    UNLOCK_STEP_PARENT,
++} UnlockStep;
++
++typedef struct {
++    UnlockStep step;
++    guint      pdc_slot;
++    gboolean   last_attempt;
++    guint      timeout_id;
++} UnlockContext;
++
++static void unlock_context_step (GTask *task);
++
++/* The QMI port is a QRTR node without udev properties: look at the net ports */
++static gboolean
++carrier_autoselect_disable_requested (MMBroadbandModemQmiQcomSoc *self)
++{
++    GList *l;
++
++    for (l = mm_base_modem_peek_data_ports (MM_BASE_MODEM (self)); l; l = g_list_next (l)) {
++        MMKernelDevice *kernel_device;
++
++        kernel_device = mm_port_peek_kernel_device (MM_PORT (l->data));
++        if (kernel_device &&
++            mm_kernel_device_get_property_as_boolean (kernel_device, "ID_MM_QCOM_SOC_DISABLE_CARRIER_AUTOSELECT"))
++            return TRUE;
++    }
++    return FALSE;
++}
++
++static void
++unlock_context_free (UnlockContext *ctx)
++{
++    if (ctx->timeout_id)
++        g_source_remove (ctx->timeout_id);
++    g_slice_free (UnlockContext, ctx);
++}
++
++static MMModemLock
++modem_load_unlock_required_finish (MMIfaceModem  *self,
++                                   GAsyncResult  *res,
++                                   GError       **error)
++{
++    GError *inner_error = NULL;
++    gssize  value;
++
++    value = g_task_propagate_int (G_TASK (res), &inner_error);
++    if (inner_error) {
++        g_propagate_error (error, inner_error);
++        return MM_MODEM_LOCK_UNKNOWN;
++    }
++    return (MMModemLock) value;
++}
++
++static void
++parent_load_unlock_required_ready (MMIfaceModem *self,
++                                   GAsyncResult *res,
++                                   GTask        *task)
++{
++    GError      *error = NULL;
++    MMModemLock  lock;
++
++    lock = iface_modem_parent->load_unlock_required_finish (self, res, &error);
++    if (error)
++        g_task_return_error (task, error);
++    else
++        g_task_return_int (task, lock);
++    g_object_unref (task);
++}
++
++static gboolean
++session_settle_timeout (GTask *task)
++{
++    UnlockContext *ctx;
++
++    ctx = g_task_get_task_data (task);
++    ctx->timeout_id = 0;
++    unlock_context_step (task);
++    return G_SOURCE_REMOVE;
++}
++
++static void
++change_provisioning_session_ready (QmiClientUim *client,
++                                   GAsyncResult *res,
++                                   GTask        *task)
++{
++    MMBroadbandModemQmiQcomSoc                    *self;
++    UnlockContext                                 *ctx;
++    g_autoptr(QmiMessageUimChangeProvisioningSessionOutput) output = NULL;
++    g_autoptr(GError)                              error = NULL;
++
++    self = g_task_get_source_object (task);
++    ctx = g_task_get_task_data (task);
++
++    output = qmi_client_uim_change_provisioning_session_finish (client, res, &error);
++    if (!output || !qmi_message_uim_change_provisioning_session_output_get_result (output, &error)) {
++        mm_obj_warn (self, "couldn't activate the primary GW provisioning session: %s", error->message);
++        unlock_context_step (task);
++        return;
++    }
++
++    /* let the card application reach its next state before checking the lock */
++    mm_obj_msg (self, "primary GW provisioning session activated");
++    ctx->timeout_id = g_timeout_add_seconds (2, (GSourceFunc) session_settle_timeout, task);
++}
++
++static gboolean
++activate_provisioning_session (MMBroadbandModemQmiQcomSoc       *self,
++                               QmiClientUim                     *client,
++                               QmiMessageUimGetCardStatusOutput *output,
++                               GTask                            *task)
++{
++    GArray  *cards = NULL;
++    guint16  index_gw_primary = 0xFFFF;
++    guint    i;
++    guint    j;
++
++    if (!qmi_message_uim_get_card_status_output_get_card_status (output,
++                                                                 &index_gw_primary,
++                                                                 NULL, NULL, NULL,
++                                                                 &cards,
++                                                                 NULL))
++        return FALSE;
++
++    /* a primary GW session already exists */
++    if (((index_gw_primary & 0xFF00) >> 8) != 0xFF)
++        return FALSE;
++
++    for (i = 0; i < cards->len; i++) {
++        QmiMessageUimGetCardStatusOutputCardStatusCardsElement *card;
++
++        card = &g_array_index (cards, QmiMessageUimGetCardStatusOutputCardStatusCardsElement, i);
++        if (card->card_state != QMI_UIM_CARD_STATE_PRESENT)
++            continue;
++
++        for (j = 0; j < card->applications->len; j++) {
++            QmiMessageUimGetCardStatusOutputCardStatusCardsElementApplicationsElementV2 *app;
++            g_autoptr(QmiMessageUimChangeProvisioningSessionInput)                      input = NULL;
++
++            app = &g_array_index (card->applications,
++                                  QmiMessageUimGetCardStatusOutputCardStatusCardsElementApplicationsElementV2, j);
++            if (app->type != QMI_UIM_CARD_APPLICATION_TYPE_USIM ||
++                app->state == QMI_UIM_CARD_APPLICATION_STATE_UNKNOWN)
++                continue;
++
++            mm_obj_msg (self, "no primary GW provisioning session: activating it on slot %u", i + 1);
++            input = qmi_message_uim_change_provisioning_session_input_new ();
++            qmi_message_uim_change_provisioning_session_input_set_session_change (
++                input, QMI_UIM_SESSION_TYPE_PRIMARY_GW_PROVISIONING, TRUE, NULL);
++            qmi_message_uim_change_provisioning_session_input_set_application_information (
++                input, (guint8) (i + 1), app->application_identifier_value, NULL);
++            qmi_client_uim_change_provisioning_session (client,
++                                                        input,
++                                                        10,
++                                                        g_task_get_cancellable (task),
++                                                        (GAsyncReadyCallback) change_provisioning_session_ready,
++                                                        task);
++            return TRUE;
++        }
++    }
++    return FALSE;
++}
++
++static void
++get_card_status_ready (QmiClientUim *client,
++                       GAsyncResult *res,
++                       GTask        *task)
++{
++    MMBroadbandModemQmiQcomSoc                    *self;
++    UnlockContext                                 *ctx;
++    g_autoptr(QmiMessageUimGetCardStatusOutput)    output = NULL;
++    g_autoptr(GError)                              error = NULL;
++
++    self = g_task_get_source_object (task);
++    ctx = g_task_get_task_data (task);
++
++    output = qmi_client_uim_get_card_status_finish (client, res, &error);
++    if (output && qmi_message_uim_get_card_status_output_get_result (output, &error)) {
++        ctx->step++;
++        if (activate_provisioning_session (self, client, output, task))
++            return;
++    } else {
++        mm_obj_dbg (self, "couldn't get card status: %s", error->message);
++        ctx->step++;
++    }
++    unlock_context_step (task);
++}
++
++static void
++pdc_set_feature_ready (QmiClientPdc *client,
++                       GAsyncResult *res,
++                       GTask        *task)
++{
++    MMBroadbandModemQmiQcomSoc          *self;
++    UnlockContext                       *ctx;
++    g_autoptr(QmiMessagePdcSetFeatureOutput) output = NULL;
++    g_autoptr(GError)                    error = NULL;
++
++    self = g_task_get_source_object (task);
++    ctx = g_task_get_task_data (task);
++
++    output = qmi_client_pdc_set_feature_finish (client, res, &error);
++    if (!output || !qmi_message_pdc_set_feature_output_get_result (output, &error))
++        mm_obj_warn (self, "couldn't disable carrier configuration auto-selection on slot %u: %s",
++                     ctx->pdc_slot + 1, error->message);
++    else
++        mm_obj_dbg (self, "carrier configuration auto-selection disabled on slot %u", ctx->pdc_slot + 1);
++
++    ctx->pdc_slot++;
++    unlock_context_step (task);
++}
++
++static void
++unlock_context_step (GTask *task)
++{
++    MMBroadbandModemQmiQcomSoc *self;
++    UnlockContext              *ctx;
++    QmiClient                  *client;
++
++    self = g_task_get_source_object (task);
++    ctx = g_task_get_task_data (task);
++
++    if (g_task_return_error_if_cancelled (task)) {
++        g_object_unref (task);
++        return;
++    }
++
++    switch (ctx->step) {
++    case UNLOCK_STEP_FIRST:
++        ctx->step++;
++        /* fall through */
++
++    case UNLOCK_STEP_PDC_AUTOSELECT:
++        client = mm_shared_qmi_peek_client (MM_SHARED_QMI (self), QMI_SERVICE_PDC, MM_PORT_QMI_FLAG_DEFAULT, NULL);
++        if (client && ctx->pdc_slot < 2 &&
++            !g_object_get_data (G_OBJECT (self), CARRIER_AUTOSELECT_DONE_TAG) &&
++            carrier_autoselect_disable_requested (self)) {
++            g_autoptr(QmiMessagePdcSetFeatureInput) input = NULL;
++
++            input = qmi_message_pdc_set_feature_input_new ();
++            qmi_message_pdc_set_feature_input_set_slot_id (input, ctx->pdc_slot, NULL);
++            qmi_message_pdc_set_feature_input_set_token (input, ctx->pdc_slot, NULL);
++            qmi_message_pdc_set_feature_input_set_selection_mode (input, 0, NULL);
++            qmi_message_pdc_set_feature_input_set_carrier (input, 0, NULL);
++            qmi_message_pdc_set_feature_input_set_flex_mapping (input, 0, NULL);
++            qmi_message_pdc_set_feature_input_set_refresh_mode (input, 1, NULL);
++            qmi_client_pdc_set_feature (QMI_CLIENT_PDC (client),
++                                        input,
++                                        5,
++                                        g_task_get_cancellable (task),
++                                        (GAsyncReadyCallback) pdc_set_feature_ready,
++                                        task);
++            return;
++        }
++        if (ctx->pdc_slot > 0)
++            g_object_set_data (G_OBJECT (self), CARRIER_AUTOSELECT_DONE_TAG, GUINT_TO_POINTER (TRUE));
++        ctx->step++;
++        /* fall through */
++
++    case UNLOCK_STEP_CARD_STATUS:
++        client = mm_shared_qmi_peek_client (MM_SHARED_QMI (self), QMI_SERVICE_UIM, MM_PORT_QMI_FLAG_DEFAULT, NULL);
++        if (client) {
++            qmi_client_uim_get_card_status (QMI_CLIENT_UIM (client),
++                                            NULL,
++                                            5,
++                                            g_task_get_cancellable (task),
++                                            (GAsyncReadyCallback) get_card_status_ready,
++                                            task);
++            return;
++        }
++        ctx->step++;
++        /* fall through */
++
++    case UNLOCK_STEP_PARENT:
++        iface_modem_parent->load_unlock_required (MM_IFACE_MODEM (self),
++                                                  ctx->last_attempt,
++                                                  g_task_get_cancellable (task),
++                                                  (GAsyncReadyCallback) parent_load_unlock_required_ready,
++                                                  task);
++        return;
++
++    default:
++        g_assert_not_reached ();
++    }
++}
++
++static void
++modem_load_unlock_required (MMIfaceModem        *self,
++                            gboolean             last_attempt,
++                            GCancellable        *cancellable,
++                            GAsyncReadyCallback  callback,
++                            gpointer             user_data)
++{
++    UnlockContext *ctx;
++    GTask         *task;
++
++    ctx = g_slice_new0 (UnlockContext);
++    ctx->step = UNLOCK_STEP_FIRST;
++    ctx->last_attempt = last_attempt;
++
++    task = g_task_new (self, cancellable, callback, user_data);
++    g_task_set_task_data (task, ctx, (GDestroyNotify) unlock_context_free);
++    unlock_context_step (task);
++}
++
+ /*****************************************************************************/
+ 
+ MMBroadbandModemQmiQcomSoc *
+@@ -169,6 +505,15 @@ mm_broadband_modem_qmi_qcom_soc_init (MMBroadbandModemQmiQcomSoc *self)
+ {
+ }
+ 
++static void
++iface_modem_init (MMIfaceModemInterface *iface)
++{
++    iface_modem_parent = g_type_interface_peek_parent (iface);
++
++    iface->load_unlock_required = modem_load_unlock_required;
++    iface->load_unlock_required_finish = modem_load_unlock_required_finish;
++}
++
+ static void
+ mm_broadband_modem_qmi_qcom_soc_class_init (MMBroadbandModemQmiQcomSocClass *klass)
+ {
+-- 
+2.50.1 (Apple Git-155)
+

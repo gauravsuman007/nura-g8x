@@ -1,0 +1,17 @@
+[Unit]
+Description=LG modem SIM handshake
+Before=ModemManager.service
+After=rmtfs.service tqftpserv.service
+ConditionPathExists=/usr/libexec/nura-lge-modem
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/libexec/nura-lge-modem
+# ModemManager waits at most this long at boot (no modem, no SIM)
+TimeoutStartSec=60
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

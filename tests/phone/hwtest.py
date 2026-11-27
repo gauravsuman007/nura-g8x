@@ -854,9 +854,33 @@ def modem_and_gps():
     state = re.search(r"state: '?([\w-]+)", info)
     loc = sh(f"mmcli -m {m.group(1)} --location-status 2>&1")
     gps = "gps-nmea" in loc and "enabled" in loc
-    msg = f"modem {m.group(1)} state {state.group(1) if state else '?'} (no SIM expected), GPS NMEA {'on' if gps else 'off'}"
+    msg = f"modem {m.group(1)} state {state.group(1) if state else '?'}, GPS NMEA {'on' if gps else 'off'}"
     if not gps:
         raise Warn(msg)
+    return msg
+
+
+@test("modem")
+def cellular_registration():
+    """With a SIM: LG handshake done, USIM ready, registered (searching counts as a warning:
+    the signal may be too weak where the test runs). No SIM: skip."""
+    out = sh("mmcli -L 2>&1")
+    m = re.search(r"/Modem/(\d+)", out)
+    assert_(m, "ModemManager sees no modem")
+    info = sh(f"mmcli -m {m.group(1)} 2>&1")
+    if re.search(r"state: '?failed", info) and "sim-missing" in info:
+        raise Skip("no SIM inserted")
+    assert_(svc_active("nura-lge-modem"), "nura-lge-modem.service not active")
+    state = re.search(r"\n\s*\|?\s*state: '?([\w-]+)", info)
+    state = state.group(1) if state else "?"
+    reg = re.search(r"registration: '?([\w-]+)", info)
+    reg = reg.group(1) if reg else "?"
+    tech = re.search(r"access tech: '?([\w, -]+)", info)
+    tech = tech.group(1).strip() if tech else "?"
+    assert_(state not in ("failed", "locked", "?"), f"modem state {state}")
+    msg = f"state {state}, registration {reg}, access tech {tech}"
+    if reg not in ("home", "roaming"):
+        raise Warn(msg + " (weak signal here?)")
     return msg
 
 
