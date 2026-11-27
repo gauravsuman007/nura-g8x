@@ -1,0 +1,66 @@
+From 51e6ec3398eb2b799f4b7ba7da86f3a24fae7dd6 Mon Sep 17 00:00:00 2001
+From: Nura G8x <nura-g8x@users.noreply.github.com>
+Date: Sat, 28 Nov 2026 00:26:31 +0100
+Subject: [PATCH] wifi: ath10k: reject a WCN3990 peer another vdev already has
+
+The firmware keeps one peer per MAC address. A second station vdev
+joining the same AP gets no reply at all to WMI peer create (no HTT peer
+map, no WMI response), so the driver waited 3 s and failed with -110.
+Fail at once with -EOPNOTSUPP instead.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ drivers/net/wireless/ath/ath10k/mac.c | 30 +++++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/drivers/net/wireless/ath/ath10k/mac.c b/drivers/net/wireless/ath/ath10k/mac.c
+index cd9cf40..81518d3 100644
+--- a/drivers/net/wireless/ath/ath10k/mac.c
++++ b/drivers/net/wireless/ath/ath10k/mac.c
+@@ -732,6 +732,29 @@ static void ath10k_wait_for_peer_delete_done(struct ath10k *ar, u32 vdev_id,
+ 	}
+ }
+ 
++/* WCN3990 firmware keeps one peer per MAC address: a second WMI peer create
++ * for an address another vdev already has (two stations on one AP) is
++ * silently ignored, no HTT peer map follows.
++ */
++static bool ath10k_peer_used_by_other_vdev(struct ath10k *ar, u32 vdev_id,
++					   const u8 *addr)
++{
++	struct ath10k_peer *peer;
++	bool used = false;
++
++	spin_lock_bh(&ar->data_lock);
++	list_for_each_entry(peer, &ar->peers, list) {
++		if (peer->vdev_id != vdev_id &&
++		    ether_addr_equal(peer->addr, addr)) {
++			used = true;
++			break;
++		}
++	}
++	spin_unlock_bh(&ar->data_lock);
++
++	return used;
++}
++
+ static int ath10k_peer_create(struct ath10k *ar,
+ 			      struct ieee80211_vif *vif,
+ 			      struct ieee80211_sta *sta,
+@@ -748,6 +771,13 @@ static int ath10k_peer_create(struct ath10k *ar,
+ 	if (ar->num_peers + list_count_nodes(&ar->arvifs) >= ar->max_num_peers)
+ 		return -ENOBUFS;
+ 
++	if (ar->hw_rev == ATH10K_HW_WCN3990 &&
++	    ath10k_peer_used_by_other_vdev(ar, vdev_id, addr)) {
++		ath10k_warn(ar, "peer %pM is on another vdev: the firmware allows one per MAC\n",
++			    addr);
++		return -EOPNOTSUPP;
++	}
++
+ 	ret = ath10k_wmi_peer_create(ar, vdev_id, addr, peer_type);
+ 	if (ret) {
+ 		ath10k_warn(ar, "failed to create wmi peer %pM on vdev %i: %i\n",
+-- 
+2.50.1 (Apple Git-155)
+

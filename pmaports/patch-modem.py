@@ -29,6 +29,11 @@ for pkg, patches in PATCHES.items():
 	rel = int(re.search(r"^pkgrel=(\d+)$", a, re.M).group(1)) + 100 + PATCHLEVEL
 	a, n1 = re.subn(r"^pkgrel=\d+$", "pkgrel=%d" % rel, a, flags=re.M)
 	assert n1 == 1, (pkg, n1)
+	if pkg == "modemmanager":
+		# the aport build-depends on its own libmm-glib ($depends_dev); abuild skips that,
+		# pmbootstrap tries to install the not yet built patched version and fails
+		a, n = re.subn(r'^(makedepends="\n)\t\$depends_dev\n', r"\1", a, flags=re.M)
+		assert n == 1, "modemmanager: no $depends_dev in makedepends"
 	for patch in patches:
 		shutil.copy(os.path.join(nura, "modem-patches", patch), dst)
 		# append the patch as the last source entry, its checksum as the last sum

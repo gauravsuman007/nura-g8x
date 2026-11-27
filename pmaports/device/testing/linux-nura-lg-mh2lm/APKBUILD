@@ -51,6 +51,7 @@ source="
 	0013-misc-fastrpc-do-not-restart-calls-interrupted-by-freezer.patch
 	0014-wifi-ath10k-keep-msa-assigned-across-modem-crash.patch
 	0015-wifi-ath10k-no-sta-vdev-stop-while-another-started.patch
+	0016-wifi-ath10k-reject-peer-on-two-vdevs.patch
 	config-$_flavor.$arch
 "
 builddir="$srcdir/linux-$_tag"
@@ -97,5 +98,6 @@ ce677d15351850004881b8d2285a2b16f22cf61863f0882be3408928e1f94a761abb4afdebc66dba
 f008fc98b67379953b3ea9614875e33a4ed7da72cfb597c1ef5389bc1b74d1c63dce36304ae8c7669ef190f1e9b369059411fa3e182eae0552bebbd3501981b2  0013-misc-fastrpc-do-not-restart-calls-interrupted-by-freezer.patch
 6f25a7038316fe812e35a60973fdb25c920c0f6dd48fe2e64233fba1b701f9d00ab8d543be58733f08daab7d17dab0effd11827e5f32d125bbc8b89735de3c01  0014-wifi-ath10k-keep-msa-assigned-across-modem-crash.patch
 fabf0762b949ba11ad5a638aca5e43ef33bdc11821701f9c2aecfba50d6e0e72cfe744910b387a81521f305111c741e901bb52745108f2f207211b1500c2300a  0015-wifi-ath10k-no-sta-vdev-stop-while-another-started.patch
+77b61fbfd298b8e5ba183d5ce955db3f93fff5b494bb07088527bd168e68271b768daa09c78718c61415f9facfa56d55ca0648b28f67a273d20694dcc6e7c4c1  0016-wifi-ath10k-reject-peer-on-two-vdevs.patch
 4cb8e878b4a2a7804756537b975c97443be831849132dc2ed49b6f35a248f769e71e0f3aac798dc283ec7254276b00267aa3eab4a3d97f91f3c42e9b4e038c19  config-nura-lg-mh2lm.aarch64
 "

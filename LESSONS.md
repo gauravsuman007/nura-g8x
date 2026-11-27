@@ -2115,3 +2115,16 @@ support" for good. ModemManager patch 0101 treats it as supported, and
 nura-cell-time.timer (tweaks r36) sets the clock from `mmcli --time` every
 15 min while NTP has not synchronized it. busybox date cannot parse ISO 8601:
 the helper uses Python.
+
+## Two stations on the same access point: not possible (2026-11-28)
+
+The WCN3990 firmware keeps one peer per MAC address. When a second vdev joins
+the BSSID the first is on, WMI peer create gets no HTT peer map and no WMI
+response (devtools/wifi/sameap-trace.sh, debug_mask WMI|HTT|MAC; normal peer
+creation maps in milliseconds). The driver is keyed by vdev + MAC, so this is
+the firmware. Frames from the AP carry the same sender address for both, so
+there is nothing to work around. Kernel patch 0016 refuses at once (-95)
+instead of -110 after 3 s. Use two access points on one channel.
+Reboot (do not rmmod) to load new ath10k modules. A modprobe.d option written
+right before a crash can be left empty (0 bytes): `sync`, or better build the
+fix in.
