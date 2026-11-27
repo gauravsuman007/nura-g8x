@@ -1,0 +1,110 @@
+From a6329717ee680d9db46965f04610d9635957619d Mon Sep 17 00:00:00 2001
+From: Nura G8x <nura-g8x@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 22:59:03 +0100
+Subject: [PATCH] wifi: ath10k: do not stop a WCN3990 STA vdev while another
+ vdev is started
+
+WCN3990 firmware WLAN.HL.3.0 (LG G8X, SM8150) asserts in wlan_process
+(always PC 0x8622f8b0) when a station vdev gets WMI_VDEV_STOP while a
+second station vdev is started. The crash takes the whole modem down
+with it (the WLAN firmware runs on the modem). Deauth, peer delete and
+vdev down all complete; the assert follows the vdev stop. It happened
+on every disconnect of one of two concurrent stations (11 of 11 plus
+several traced).
+
+Leave such a vdev started in firmware instead: the next channel context
+assignment restarts it (WMI_VDEV_RESTART), and interface removal deletes
+it without the stop. A vdev that is alone is stopped as before.
+
+Tested with two stations on one radio renewing their MAC every 4 min
+for 30 min (19 kept/restarted vdevs, interface deletes included):
+no firmware crash.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/net/wireless/ath/ath10k/core.h |  4 +++
+ drivers/net/wireless/ath/ath10k/mac.c  | 39 ++++++++++++++++++++++----
+ 2 files changed, 38 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/net/wireless/ath/ath10k/core.h b/drivers/net/wireless/ath/ath10k/core.h
+index fd4eb0a..d058fdc 100644
+--- a/drivers/net/wireless/ath/ath10k/core.h
++++ b/drivers/net/wireless/ath/ath10k/core.h
+@@ -607,6 +607,10 @@ struct ath10k_vif {
+ 			u32 uapsd;
+ 			/* vdev was brought up since it was last started */
+ 			bool was_up;
++			/* left started in firmware when unassigned while another
++			 * vdev was started (WCN3990 asserts on that vdev stop)
++			 */
++			bool fw_started_kept;
+ 		} sta;
+ 		struct {
+ 			/* 512 stations */
+diff --git a/drivers/net/wireless/ath/ath10k/mac.c b/drivers/net/wireless/ath/ath10k/mac.c
+index 3c45868..7931762 100644
+--- a/drivers/net/wireless/ath/ath10k/mac.c
++++ b/drivers/net/wireless/ath/ath10k/mac.c
+@@ -5973,6 +5973,13 @@ static void ath10k_remove_interface(struct ieee80211_hw *hw,
+ 		kfree(arvif->u.ap.noa_data);
+ 	}
+ 
++	if (arvif->vdev_type == WMI_VDEV_TYPE_STA && arvif->u.sta.fw_started_kept) {
++		/* deleted while started (a stop would crash the firmware) */
++		arvif->u.sta.fw_started_kept = false;
++		if (ar->num_started_vdevs)
++			ar->num_started_vdevs--;
++	}
++
+ 	ath10k_dbg(ar, ATH10K_DBG_MAC, "mac vdev %i delete (remove interface)\n",
+ 		   arvif->vdev_id);
+ 
+@@ -9011,7 +9018,16 @@ ath10k_mac_op_assign_vif_chanctx(struct ieee80211_hw *hw,
+ 		return -EBUSY;
+ 	}
+ 
+-	ret = ath10k_vdev_start(arvif, &ctx->def);
++	if (arvif->vdev_type == WMI_VDEV_TYPE_STA && arvif->u.sta.fw_started_kept) {
++		ath10k_dbg(ar, ATH10K_DBG_MAC, "mac vdev %i restart (kept started)\n",
++			   arvif->vdev_id);
++		arvif->u.sta.fw_started_kept = false;
++		/* still counted as started; restart counts it again */
++		ar->num_started_vdevs--;
++		ret = ath10k_vdev_restart(arvif, &ctx->def);
++	} else {
++		ret = ath10k_vdev_start(arvif, &ctx->def);
++	}
+ 	if (ret) {
+ 		ath10k_warn(ar, "failed to start vdev %i addr %pM on freq %d: %d\n",
+ 			    arvif->vdev_id, vif->addr,
+@@ -9102,10 +9118,23 @@ ath10k_mac_op_unassign_vif_chanctx(struct ieee80211_hw *hw,
+ 		arvif->is_up = false;
+ 	}
+ 
+-	ret = ath10k_vdev_stop(arvif);
+-	if (ret)
+-		ath10k_warn(ar, "failed to stop vdev %i: %d\n",
+-			    arvif->vdev_id, ret);
++	/* WCN3990 firmware (WLAN.HL.3.0) asserts on WMI vdev stop of a STA
++	 * vdev while another vdev is started. Leave it started: the next
++	 * assignment restarts it, interface removal deletes it.
++	 */
++	if (ar->hw_params.hw_rev == ATH10K_HW_WCN3990 &&
++	    arvif->vdev_type == WMI_VDEV_TYPE_STA &&
++	    ath10k_mac_num_vifs_started(ar) > 1) {
++		ath10k_dbg(ar, ATH10K_DBG_MAC,
++			   "mac vdev %i kept started: another vdev is started\n",
++			   arvif->vdev_id);
++		arvif->u.sta.fw_started_kept = true;
++	} else {
++		ret = ath10k_vdev_stop(arvif);
++		if (ret)
++			ath10k_warn(ar, "failed to stop vdev %i: %d\n",
++				    arvif->vdev_id, ret);
++	}
+ 
+ 	/* a failed attempt never reaches ath10k_bss_disassoc(); without a down
+ 	 * after the stop, WCN3990 firmware holds the next Auth frames ~20 s */
+-- 
+2.50.1 (Apple Git-155)
+

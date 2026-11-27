@@ -6,7 +6,7 @@
 _flavor="nura-lg-mh2lm"
 pkgname=linux-$_flavor
 pkgver=7.0.0
-pkgrel=13
+pkgrel=14
 pkgdesc="Mainline kernel for the LG G8x ThinQ (SM8150) with Nura G8x drivers"
 arch="aarch64"
 _carch="arm64"
@@ -50,6 +50,7 @@ source="
 	0012-rpmsg-glink-do-not-unregister-rpdev-from-destroy-ept.patch
 	0013-misc-fastrpc-do-not-restart-calls-interrupted-by-freezer.patch
 	0014-wifi-ath10k-keep-msa-assigned-across-modem-crash.patch
+	0015-wifi-ath10k-no-sta-vdev-stop-while-another-started.patch
 	config-$_flavor.$arch
 "
 builddir="$srcdir/linux-$_tag"
@@ -95,5 +96,6 @@ ce677d15351850004881b8d2285a2b16f22cf61863f0882be3408928e1f94a761abb4afdebc66dba
 63bc13e42d1d0f40f9cd1434f205b11855f054e9588fd5f30a5d8497153bba71cd349e806b589f8fa956a45be9f5afd6bc7a49a88ea95845890704a9354f58f5  0012-rpmsg-glink-do-not-unregister-rpdev-from-destroy-ept.patch
 f008fc98b67379953b3ea9614875e33a4ed7da72cfb597c1ef5389bc1b74d1c63dce36304ae8c7669ef190f1e9b369059411fa3e182eae0552bebbd3501981b2  0013-misc-fastrpc-do-not-restart-calls-interrupted-by-freezer.patch
 6f25a7038316fe812e35a60973fdb25c920c0f6dd48fe2e64233fba1b701f9d00ab8d543be58733f08daab7d17dab0effd11827e5f32d125bbc8b89735de3c01  0014-wifi-ath10k-keep-msa-assigned-across-modem-crash.patch
+d24151fbbd59c19ee5c1af96bfd6cef165924ee6a95f654e26c23df54c71894ad114a801742d7470d7e92cce3d90a522171651b0cdf79e62854ce2bea00a8805  0015-wifi-ath10k-no-sta-vdev-stop-while-another-started.patch
 4cb8e878b4a2a7804756537b975c97443be831849132dc2ed49b6f35a248f769e71e0f3aac798dc283ec7254276b00267aa3eab4a3d97f91f3c42e9b4e038c19  config-nura-lg-mh2lm.aarch64
 "
