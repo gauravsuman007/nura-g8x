@@ -201,7 +201,7 @@ jobs:
 
       - name: Show pmbootstrap log on failure
         if: failure()
-        run: tail -n 300 "$WORK/log.txt" || true
+        run: tail -n 800 "$WORK/log.txt" || true
 
       - uses: actions/upload-artifact@v4
         with:
