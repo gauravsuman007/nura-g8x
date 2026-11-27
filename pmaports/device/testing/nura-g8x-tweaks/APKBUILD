@@ -4,7 +4,7 @@
 # tweaks/stage.sh packs unit/ and tweaks/ into nura-g8x-tweaks-files.tar.gz.
 pkgname=nura-g8x-tweaks
 pkgver=2026.11.12
-pkgrel=35
+pkgrel=36
 _hexver=0.5.0
 _sscver=0.4.4
 _fpver=1.94.9
@@ -190,6 +190,9 @@ package() {
 	install -Dm644 $f/unit/modem/rmtfs-writable.conf \
 		"$pkgdir"/usr/lib/systemd/system/rmtfs.service.d/50-nura-writable.conf
 	install -Dm644 $f/unit/modem/78-nura-mm-qcom-soc.rules -t "$pkgdir"/usr/lib/udev/rules.d/
+	install -Dm755 $f/unit/modem/nura-cell-time -t "$pkgdir"/usr/libexec/
+	install -Dm644 $f/unit/modem/nura-cell-time.service $f/unit/modem/nura-cell-time.timer \
+		-t "$pkgdir"/usr/lib/systemd/system/
 	# fingerprint (ET713): egistad owns the trustlet, fprintd uses the private libfprint, lock-screen unlock
 	install -Dm644 $f/unit/fingerprint/egistad/*.py -t "$pkgdir"/usr/lib/egistad/
 	install -Dm644 $f/unit/fingerprint/egistad.service -t "$pkgdir"/usr/lib/systemd/system/

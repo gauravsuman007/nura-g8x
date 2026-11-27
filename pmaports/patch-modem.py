@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # Add the G8x cellular patches to Alpine's current libqmi and modemmanager aports and put them in
-# pmaports' temp/, with pkgrel + 100 so they win over Alpine's build of the same version.
+# pmaports' temp/, with pkgrel + 100 (+ patch level) so they win over Alpine's build of the same version.
 # Then pin nura-g8x-tweaks to exactly these builds: a newer upstream ModemManager without the
 # patch then conflicts (nura-update holds it back) instead of silently replacing ours.
 # usage: patch-modem.py <pmaports checkout> <alpine aports checkout> <nura pmaports dir>
@@ -11,31 +11,37 @@ import hashlib, os, re, shutil, sys
 
 pmaports, aports, nura = sys.argv[1:4]
 PATCHES = {
-	"libqmi": "libqmi-0100-pdc-get-set-feature.patch",
-	"modemmanager": "modemmanager-0100-qcom-soc-prepare-sim.patch",
+	"libqmi": ["libqmi-0100-pdc-get-set-feature.patch"],
+	"modemmanager": ["modemmanager-0100-qcom-soc-prepare-sim.patch",
+			"modemmanager-0101-qmi-time-supported-without-network-time.patch"],
 }
+# pkgrel = Alpine's + 100 + PATCHLEVEL: bump PATCHLEVEL whenever the patches change, so phones
+# that have an older patched build of the same upstream version still upgrade
+PATCHLEVEL = 1
 pins = {}
-for pkg, patch in PATCHES.items():
+for pkg, patches in PATCHES.items():
 	src = os.path.join(aports, "community", pkg)
 	dst = os.path.join(pmaports, "temp", pkg)
 	if os.path.exists(dst):
 		shutil.rmtree(dst)
 	shutil.copytree(src, dst)
-	shutil.copy(os.path.join(nura, "modem-patches", patch), dst)
 	a = open(os.path.join(dst, "APKBUILD")).read()
-	rel = int(re.search(r"^pkgrel=(\d+)$", a, re.M).group(1)) + 100
+	rel = int(re.search(r"^pkgrel=(\d+)$", a, re.M).group(1)) + 100 + PATCHLEVEL
 	a, n1 = re.subn(r"^pkgrel=\d+$", "pkgrel=%d" % rel, a, flags=re.M)
-	# append the patch as the last source entry
-	a, n2 = re.subn(r'^(source="[^"]*?)\s*"', lambda m: m.group(1) + "\n\t" + patch + '\n\t"', a,
-			count=1, flags=re.M | re.S)
-	h = hashlib.sha512(open(os.path.join(dst, patch), "rb").read()).hexdigest()
-	a, n3 = re.subn(r'^(sha512sums=".*?)\n"', lambda m: m.group(1) + "\n" + h + "  " + patch + '\n"', a,
-			count=1, flags=re.M | re.S)
-	assert (n1, n2, n3) == (1, 1, 1), (pkg, n1, n2, n3)
+	assert n1 == 1, (pkg, n1)
+	for patch in patches:
+		shutil.copy(os.path.join(nura, "modem-patches", patch), dst)
+		# append the patch as the last source entry, its checksum as the last sum
+		a, n2 = re.subn(r'^(source="[^"]*?)\s*"', lambda m: m.group(1) + "\n\t" + patch + '\n\t"', a,
+				count=1, flags=re.M | re.S)
+		h = hashlib.sha512(open(os.path.join(dst, patch), "rb").read()).hexdigest()
+		a, n3 = re.subn(r'^(sha512sums=".*?)\n"', lambda m: m.group(1) + "\n" + h + "  " + patch + '\n"', a,
+				count=1, flags=re.M | re.S)
+		assert (n2, n3) == (1, 1), (pkg, patch, n2, n3)
 	open(os.path.join(dst, "APKBUILD"), "w").write(a)
 	ver = re.search(r"^pkgver=(\S+)$", a, re.M).group(1)
 	pins[pkg] = "%s-r%d" % (ver, rel)
-	print("%s %s with %s" % (pkg, pins[pkg], patch))
+	print("%s %s with %s" % (pkg, pins[pkg], " ".join(patches)))
 
 t = os.path.join(pmaports, "device", "testing", "nura-g8x-tweaks", "APKBUILD")
 a = open(t).read()

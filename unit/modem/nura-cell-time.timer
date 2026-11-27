@@ -1,0 +1,9 @@
+[Unit]
+Description=Check the cellular network time while the clock is not synchronized
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=15min
+
+[Install]
+WantedBy=timers.target

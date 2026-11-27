@@ -27,7 +27,7 @@ jobs:
       - name: Cellular patches still apply to Alpine's libqmi and modemmanager
         run: |
           set -e
-          git clone -q --depth 1 --filter=blob:none --sparse https://gitlab.alpinelinux.org/alpine/aports.git ../aports
+          git clone -q --depth 1 --filter=blob:none --sparse https://github.com/alpinelinux/aports.git ../aports
           git -C ../aports sparse-checkout set community/libqmi community/modemmanager
           python3 pmaports/patch-modem.py ../pmaports ../aports pmaports
           for p in libqmi modemmanager; do
@@ -35,8 +35,10 @@ jobs:
             [ -n "$c" ] || { echo "::error::$p aport has no _commit: update patch-modem.py"; exit 1; }
             n=$( [ $p = libqmi ] && echo libqmi || echo ModemManager )
             curl -sfL "https://gitlab.freedesktop.org/mobile-broadband/$n/-/archive/$c/$n-$c.tar.gz" | tar -xz -C /tmp
-            patch -d /tmp/$n-$c -p1 --dry-run < pmaports/modem-patches/$p-0100-*.patch \
-              || { echo "::error::the G8x $p patch no longer applies to $c: rebase pmaports/modem-patches"; exit 1; }
+            for f in pmaports/modem-patches/$p-0*.patch; do
+              patch -d /tmp/$n-$c -p1 < $f \
+                || { echo "::error::$f no longer applies to $p $c: rebase pmaports/modem-patches"; exit 1; }
+            done
           done
       - name: libfprint version
         run: |

@@ -2089,3 +2089,29 @@ the first write the cell holds leftover data and the first boot may show a
 date like 2054. The DT change lives in pmaports/sm8150-lg-mh2lm.dts and the
 device package DTB (device r10). Cellular network time (NITZ) is not used yet:
 ModemManager reports no time capability for the qcom-soc modem.
+
+## Two Wi-Fi stations at once: firmware crash on disconnect (2026-11-27)
+
+MacSpoof's dual mode runs two station interfaces (wlan0, wlan0_ms) on the
+WCN3990. Every disconnect of one of them while the other was associated
+crashed the WLAN firmware, and with it the whole modem (the WLAN firmware runs
+on the modem DSP): 11 of 11, always PC 0x8622f8b0. The `-110` "failed to
+stop vdev" messages only follow the crash. A WMI trace (debug_mask
+WMI|MAC|STA, devtools/wifi/dualsta-repro.sh) shows deauth, peer delete and
+vdev down complete; the assert follows WMI_VDEV_STOP. The firmware is signed
+(PIL), so the fix is in ath10k (kernel patch 0015): a WCN3990 station vdev
+that is unassigned while another vdev is started stays started; the next
+assignment uses vdev restart, interface removal deletes it without the stop.
+30 min of MacSpoof dual mode with a new MAC every 4 min: 0 crashes.
+Notes: reloading ath10k_snoc by hand skips the MSA hand-back (QMI state set
+to deinit first), and the next crash then cannot recover ("failed to assign
+msa map permissions"): reboot instead of reloading the module.
+
+## Clock from the cellular network (2026-11-27)
+
+NAS Get Network Time answers InformationUnavailable until the network sends a
+time (often never on GSM indoors); ModemManager took that as "no time
+support" for good. ModemManager patch 0101 treats it as supported, and
+nura-cell-time.timer (tweaks r36) sets the clock from `mmcli --time` every
+15 min while NTP has not synchronized it. busybox date cannot parse ISO 8601:
+the helper uses Python.

@@ -1,0 +1,10 @@
+#!/bin/sh
+# Set the clock from the cellular network time (NITZ, through ModemManager) while
+# NTP has not synchronized it, e.g. after a reboot without Wi-Fi or mobile data.
+# The RTC keeps it across reboots (PM8150 SDAM offset, device tree).
+[ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" = yes ] && exit 0
+t=$(mmcli -m any --time 2>/dev/null | sed -n 's/.*current: *//p' | head -1)
+[ -n "$t" ] || { echo "no network time from the modem"; exit 0; }
+now=$(date +%s); new=$(python3 -c "import sys,datetime; print(int(datetime.datetime.fromisoformat(sys.argv[1]).timestamp()))" "$t" 2>/dev/null) || { echo "unreadable network time: $t"; exit 0; }
+d=$((new - now)); [ ${d#-} -lt 30 ] && exit 0
+date -s "@$new" >/dev/null && hwclock -w -u && echo "clock set from the network time ($d s)"

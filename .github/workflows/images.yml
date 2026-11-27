@@ -62,7 +62,7 @@ jobs:
           python3 pmaports/patch-libcamera.py "$APORTS" pmaports
           grep -n "nura\|^pkgrel" "$APORTS/temp/libcamera/APKBUILD"
           # cellular: Alpine's current libqmi and modemmanager aports plus the G8x patches
-          git clone -q --depth 1 --filter=blob:none --sparse https://gitlab.alpinelinux.org/alpine/aports.git ../aports
+          git clone -q --depth 1 --filter=blob:none --sparse https://github.com/alpinelinux/aports.git ../aports
           git -C ../aports sparse-checkout set community/libqmi community/modemmanager
           python3 pmaports/patch-modem.py "$APORTS" ../aports pmaports
           git -C "$APORTS" -c user.email=ci@local -c user.name=ci add -A

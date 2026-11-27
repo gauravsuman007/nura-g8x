@@ -1,0 +1,8 @@
+[Unit]
+Description=Set the clock from the cellular network time when NTP has not
+After=ModemManager.service
+ConditionPathExists=/usr/libexec/nura-cell-time
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/nura-cell-time

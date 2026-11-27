@@ -1,0 +1,45 @@
+From 4c92a2e04a42fe5102647e4374eed38e57b29f62 Mon Sep 17 00:00:00 2001
+From: Gaurav Suman <gauravsuman007@gmail.com>
+Date: Fri, 27 Nov 2026 23:02:53 +0100
+Subject: [PATCH] broadband-modem-qmi: network time is supported while none was
+ received yet
+
+NAS "Get Network Time" answers InformationUnavailable while the modem
+has no network time yet (before registration, or on networks that do
+not send NITZ, common on GSM). The time interface was then disabled for
+the life of the modem, so a network time received later was never
+available. Treat that answer as supported.
+
+Seen with the SM8150 (LG G8X) modem on qrtr.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/mm-broadband-modem-qmi.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/mm-broadband-modem-qmi.c b/src/mm-broadband-modem-qmi.c
+index 9620504f..18d3b2a2 100644
+--- a/src/mm-broadband-modem-qmi.c
++++ b/src/mm-broadband-modem-qmi.c
+@@ -9656,11 +9656,17 @@ check_time_support_ready (QmiClientNas *client,
+ {
+     MMBroadbandModemQmi                          *self;
+     g_autoptr(QmiMessageNasGetNetworkTimeOutput)  output = NULL;
++    g_autoptr(GError)                             error = NULL;
+ 
+     self = g_task_get_source_object (task);
+ 
+     output = qmi_client_nas_get_network_time_finish (client, res, NULL);
+-    if (!output || !qmi_message_nas_get_network_time_output_get_result (output, NULL)) {
++    if (output && !qmi_message_nas_get_network_time_output_get_result (output, &error) &&
++        g_error_matches (error, QMI_PROTOCOL_ERROR, QMI_PROTOCOL_ERROR_INFORMATION_UNAVAILABLE)) {
++        /* The modem supports the request but has no network time yet (the
++         * network sends none, or not before registration): still supported */
++        g_task_return_boolean (task, TRUE);
++    } else if (!output || error) {
+         /* Try parent implementation */
+         if (iface_modem_time_parent->check_support &&
+             iface_modem_time_parent->load_network_time &&
+-- 
+2.50.1 (Apple Git-155)
+

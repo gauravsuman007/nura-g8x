@@ -18,6 +18,7 @@ and back up the phone first.
 | Display (OLED panel driver), touch, GPU (tiled rendering, no faults) | works |
 | Battery, charging, charge limit with hold, GNOME Preserve Battery Health | works |
 | Wi-Fi 2.4 and 5 GHz, Bluetooth | works |
+| Two Wi-Fi client interfaces at once (e.g. MacSpoof dual mode) | works from kernel r14 |
 | Deep sleep in suspend (whole SoC, with Wi-Fi, audio and sensors loaded) | works |
 | Speakers (two CS35L41), built-in microphone | works |
 | Cameras: rear main, rear wide, front (30 fps through libcamera, GNOME Snapshot); manual focus | works, no autofocus |
@@ -29,7 +30,7 @@ and back up the phone first.
 | Remote desktop (GNOME Settings, System, Remote Desktop) | works while unlocked |
 | Optional Assistant-key helpers (power button replacement, 8 s forced restart) | works, off by default |
 | 30 s hardware watchdog (a hung phone resets itself) | works |
-| Clock keeps the time across reboots (once set by NTP) | works from device r10 |
+| Clock keeps the time across reboots (set by NTP, or by the cell network when it sends the time) | works from device r10, tweaks r36 |
 
 All of these are configurable under **Settings > LG G8x Tweaks**.
 
