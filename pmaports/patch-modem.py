@@ -37,10 +37,13 @@ for pkg, patches in PATCHES.items():
 		# and compile against exactly the patched libqmi (libqmi is processed first)
 		a, n = re.subn(r"^\tlibqmi-dev$", "\tlibqmi-dev=" + pins["libqmi"], a, count=1, flags=re.M)
 		assert n == 1, "modemmanager: no libqmi-dev in makedepends"
-	if pkg == "modemmanager":
 		# print a failing test's output in the build log (a summary alone does not say why)
 		a, n = re.subn(r"^\tmeson test -C output$", "\tmeson test -C output --print-errorlogs", a, flags=re.M)
 		assert n == 1, "modemmanager: check() changed"
+		# the tests start a private bus with dbus-daemon; Alpine's buildroot has it through
+		# other dependencies, pmbootstrap's (systemd) one does not
+		a, n = re.subn(r'^checkdepends="', 'checkdepends="dbus ', a, flags=re.M)
+		assert n == 1, "modemmanager: no checkdepends"
 	for patch in patches:
 		shutil.copy(os.path.join(nura, "modem-patches", patch), dst)
 		# append the patch as the last source entry, its checksum as the last sum
