@@ -2171,6 +2171,19 @@ DTIM 1):
 - modem coredump (remoteproc1/coredump=enabled): 2 of 2 attempts reset the
   phone with no dump saved (recovery stalled before "stopped remote
   processor", then a second modem crash or a CPU hard lockup). Do not retry.
+- firmware log (QMI enablefwlog=1 + WMI dbglog, as Android's gEnablefwlog=1
+  and hdd_set_fw_log_params do): no crash in 10+10+17 cycles, BUT every
+  suspend then ends ~0.2 s after WoW enable (wake reason unspecified, log
+  events arriving) with no aosd/cxsd sleep, so it only avoids the bug by not
+  sleeping, like power save off. Log mode 1 without dbglog config: crash on
+  the 1st cycle. Errors-only log during WoW: still 0.2 s sleeps. Candidate
+  diff: out/suspend/fwlog-candidate.diff. Not a fix.
+- MacSpoof dual mode (two station vdevs): the firmware has no multi-vif power
+  save, ath10k turns PS off ("refusing to enable ps ... not supported by fw"),
+  so the crash cannot happen, and deep sleep is not reached either.
+- a ring buffer allocated (vzalloc) from the WMI event path, with the firmware
+  log on from boot, boot-looped the phone (fixed by allocating at attach);
+  allocate only in process context.
 - not tried: newer qcacld WoW flags (SYSTEM_SUSPEND, MOD_DTIM; not in the
   android-10.0.0_r0.74 headers), ARP/NS offload, a modem coredump, 5 GHz
 
