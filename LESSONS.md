@@ -2128,3 +2128,16 @@ instead of -110 after 3 s. Use two access points on one channel.
 Reboot (do not rmmod) to load new ath10k modules. A modprobe.d option written
 right before a crash can be left empty (0 bytes): `sync`, or better build the
 fix in.
+
+## OPEN: suspend resets the phone with r14 userspace/kernel (2026-11-28)
+
+Both full test runs on r14 reset the phone at the suspend test (the first, a
+RAM boot, went unnoticed: the phone came back on r13 from flash, so reruns
+after it ran on r13). Log ends at "PM: suspend entry (s2idle)"; pstore shows
+"watchdog received: SFR Init" -> "crash detected in modem: type watchdog" ->
+modem recovery, then ~28 s later "watchdog pretimeout event" panic (hard
+lockup). Not yet known whether the cause is new in this release: kernel
+patches 0015/0016 (a WCN3990 vdev left started), writable rmtfs, or the now
+active SIM/registration. r13 passed 150 suspend cycles, with no active SIM.
+Check the test results for all expected tests and the boot list, not only the
+summary: a run cut short by a reset still prints a summary without them.

@@ -4,7 +4,7 @@
 # tweaks/stage.sh packs unit/ and tweaks/ into nura-g8x-tweaks-files.tar.gz.
 pkgname=nura-g8x-tweaks
 pkgver=2026.11.12
-pkgrel=36
+pkgrel=37
 _hexver=0.5.0
 _sscver=0.4.4
 _fpver=1.94.9
@@ -212,7 +212,7 @@ package() {
 	install -Dm644 $f/unit/fingerprint/gdm.d-90-g8x-fingerprint "$pkgdir"/etc/dconf/db/gdm.d/90-g8x-fingerprint
 }
 sha512sums="
-96656f76abff2fc46b77b0d57e65c5dcd23d5699c1c62d12e477b02f2095c5615f4b2b38ec1590b6c0d21b05ba01d960a5b488dd46e0c226391a25fba10ae403  nura-g8x-tweaks-files.tar.gz
+bc524e20186fd17a3159bdb95b4624c047cd58f99ee3ec8093120a0c12a2d04232d960b3f761194269d814e8dbbff8d0605840c35ac20f10d4ee326750be37a0  nura-g8x-tweaks-files.tar.gz
 919146c9018e4b0cc271237c7200af0b7abcd4500227e0140e1e44fd2b412d29c1519ffe29ed06a5119b3a0218a3ef016af21a5be3c5898b0f0d35b44ac78b1b  hexagonrpc-0.5.0.tar.gz
 9240970f6a70f4900ef2d8fad337dac815ea2602b3b395943326fb086f59d24dcf59b76bdbc6014ebd3c450eaad5393465ca038c165845ffe99bf8e282a5c170  libssc-0.4.4.tar.gz
 385817bc2b8f4bfd2a06d67b63f420bb610092758f43391887eb8335c01d68aa1590301f8e060902c95ed20cd9075d6ef38ee71edac30f20008b44eddc3f51ce  hexagonrpc-0001-close-aliased-descriptor.diff

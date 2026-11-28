@@ -9,7 +9,7 @@
 N=${0:A:h:h}
 P=$N/out/probes
 KEY=$N/out/sshkey/g8x
-SSHO=(-i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=6 -o BatchMode=yes)
+SSHO=(-o IdentitiesOnly=yes -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=6 -o BatchMode=yes)
 save=0; args=()
 for a in "$@"; do [[ $a == --save-baseline ]] && save=1 || args+=$a; done
 stamp=$(date +%Y%m%d-%H%M%S)

@@ -9,3 +9,6 @@ enable nura-usb-mac.service
 enable nura-charge-limit.service
 enable egistad.service
 enable nura-boot-update.path
+# cellular: LG SIM handshake, clock from the network time
+enable nura-lge-modem.service
+enable nura-cell-time.timer
