@@ -1535,7 +1535,7 @@ def wifi_standby():
     # nura-wifi-sleep) and keeps passing traffic afterwards. Regression:
     # the packet that wakes the SoC used to leave ath10k's rx path dead
     # ("failed to extract amsdu", link up but nothing received).
-    mode = int(conf_val("WIFI_STANDBY", "1"))
+    mode = int(conf_val("WIFI_STANDBY", "0"))
     if mode == 0:
         raise Skip("WIFI_STANDBY=0 (Wi-Fi is switched off in suspend)")
     if "Connected" not in sh("iw dev wlan0 link"):

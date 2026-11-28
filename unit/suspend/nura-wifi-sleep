@@ -68,7 +68,7 @@ arm_wowlan() {
 
 case "$1" in
 pre)
-	mode=$(conf WIFI_STANDBY 1)
+	mode=$(conf WIFI_STANDBY 0)
 	if [ "$mode" != 0 ] && iw dev $IF link 2>/dev/null | grep -q Connected && arm_wowlan "$mode"; then
 		:	# link stays up, the firmware watches for packets
 	else
@@ -84,7 +84,7 @@ post)
 	# Keep the baseline NetworkManager sets ("disconnect"): NM only leaves a
 	# device up over suspend while WoWLAN is enabled on it, so disabling it
 	# here made every second suspend tear the link down.
-	if [ "$(conf WIFI_STANDBY 1)" != 0 ]; then
+	if [ "$(conf WIFI_STANDBY 0)" != 0 ]; then
 		iw phy $PHY wowlan enable disconnect >/dev/null 2>&1
 	else
 		iw phy $PHY wowlan disable >/dev/null 2>&1

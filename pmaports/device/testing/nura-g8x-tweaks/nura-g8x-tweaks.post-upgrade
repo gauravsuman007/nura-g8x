@@ -1,5 +1,10 @@
 #!/bin/sh
 # enable services, apply settings, patch GNOME's SensorDaemon
+# r38: Wi-Fi standby (WIFI_STANDBY 1-3) can crash the modem on wake-up (WCN3990 firmware hang); turn it off once
+if [ -f /etc/nura/tweaks.conf ] && ! grep -q "^# nura-r38-wifi-standby-off" /etc/nura/tweaks.conf; then
+	sed -i "s/^WIFI_STANDBY=[1-3]/WIFI_STANDBY=0/" /etc/nura/tweaks.conf
+	echo "# nura-r38-wifi-standby-off" >> /etc/nura/tweaks.conf
+fi
 systemctl daemon-reload 2>/dev/null
 systemctl enable nura-tweaks-apply.service nura-firmware-loader.service nura-standby.service nura-gyro.service nura-touch-guard.service \
 	nura-sensor-check.service nura-lge-modem.service nura-cell-time.timer 2>/dev/null

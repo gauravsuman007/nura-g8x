@@ -52,6 +52,13 @@ All of these are configurable under **Settings > LG G8x Tweaks**.
   reset). A rare modem firmware watchdog at suspend entry is not explained;
   r13 recovers a modem crash instead of resetting the phone (tested with
   injected crashes).
+- **Wi-Fi standby is off by default** (tweaks r38; the upgrade switches it off
+  once). With Wi-Fi kept up during suspend, the WCN3990 firmware can hang on
+  wake-up and crash the modem; a second suspend during the recovery can
+  reset the phone. So Wi-Fi is off while the phone sleeps, and nothing wakes
+  it over Wi-Fi. LG G8x Tweaks > Standby can still turn it on (experimental).
+  MacSpoof dual mode also keeps the Wi-Fi chip from deep sleep (the firmware
+  has no power save with two connections).
 - **Bluetooth after heavy suspend use**: once in 150 cycles the chip stopped
   responding until a reboot.
 - **Camera hang**: now and then a camera delivers no frames when reopened.

@@ -2131,6 +2131,11 @@ fix in.
 
 ## OPEN: suspend resets with Wi-Fi standby: WCN3990 hangs leaving WoW (2026-11-28)
 
+Release decision (tweaks r38): WIFI_STANDBY defaults to 0, and the r38
+post-upgrade switches an existing 1-3 to 0 once (marker line in
+/etc/nura/tweaks.conf). The power-save-off kernel commit is kept on branch
+nura-7.0-psoff-wip (not in nura-7.0, not released).
+
 Symptom: modem watchdog ("watchdog received: SFR Init") 0.8 s after the Wi-Fi
 wake-up. One crash recovers; a second suspend or crash during the recovery hung
 the phone until the watchdog pretimeout panic (both r14 full test runs).

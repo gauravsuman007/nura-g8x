@@ -89,7 +89,8 @@ PAGES = [
         ('WIFI_STANDBY', 'spin', 'Wi-Fi in standby',
          '0 = Wi-Fi off while suspended (offline), 1 = wake on pushed TCP data '
          '(messages, push), 2 = also on new incoming connections (SSH, a '
-         'server), 3 = also on UDP and ping', 0, 3, 1),
+         'server), 3 = also on UDP and ping. Experimental: 1-3 can crash '
+         'the modem on wake-up (Wi-Fi firmware bug)', 0, 3, 1),
         ('AUTO_SUSPEND_MIN', 'spin', 'Also suspend on battery after',
          'Idle minutes with the screen on, 0 = never. With "Hold at the limit" '
          'GNOME may count a plugged-in phone as on battery', 0, 240, 5),
