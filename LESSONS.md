@@ -2141,3 +2141,18 @@ patches 0015/0016 (a WCN3990 vdev left started), writable rmtfs, or the now
 active SIM/registration. r13 passed 150 suspend cycles, with no active SIM.
 Check the test results for all expected tests and the boot list, not only the
 summary: a run cut short by a reset still prints a summary without them.
+
+### Suspend reset: isolation results (2026-11-28, public 2.4 GHz hotspot)
+
+devtools/wifi/suspend-probe.sh, one 20 s cycle each; "crash" = modem watchdog
+~0.8 s after resume. Wi-Fi standby on (WoWLAN): crash in 5 of 9 cycles from a
+usable state (also with the modem radio off, with rmtfs read-only, and with
+ModemManager and the LG helper masked, SIM never initialised). Wi-Fi off: 0 of
+3. WIFI_STANDBY=0: 0 of 11. So the trigger is Wi-Fi standby, not the cellular
+changes, rmtfs, or (by code path: one station only) patches 0015/0016. Not
+re-run on the r13 modules. One crash recovers by itself; the full resets came
+with another suspend or a second modem crash during recovery (test suite runs
+two suspends back to back): hang, then watchdog pretimeout panic. After such a
+double crash the modem can stay broken until reboot (probes on it are void).
+Open: why the WLAN firmware trips the modem watchdog on resume from WoWLAN,
+and why a suspend during modem recovery hangs.
