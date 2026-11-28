@@ -2129,30 +2129,52 @@ Reboot (do not rmmod) to load new ath10k modules. A modprobe.d option written
 right before a crash can be left empty (0 bytes): `sync`, or better build the
 fix in.
 
-## OPEN: suspend resets the phone with r14 userspace/kernel (2026-11-28)
+## OPEN: suspend resets with Wi-Fi standby: WCN3990 hangs leaving WoW (2026-11-28)
 
-Both full test runs on r14 reset the phone at the suspend test (the first, a
-RAM boot, went unnoticed: the phone came back on r13 from flash, so reruns
-after it ran on r13). Log ends at "PM: suspend entry (s2idle)"; pstore shows
-"watchdog received: SFR Init" -> "crash detected in modem: type watchdog" ->
-modem recovery, then ~28 s later "watchdog pretimeout event" panic (hard
-lockup). Not yet known whether the cause is new in this release: kernel
-patches 0015/0016 (a WCN3990 vdev left started), writable rmtfs, or the now
-active SIM/registration. r13 passed 150 suspend cycles, with no active SIM.
-Check the test results for all expected tests and the boot list, not only the
+Symptom: modem watchdog ("watchdog received: SFR Init") 0.8 s after the Wi-Fi
+wake-up. One crash recovers; a second suspend or crash during the recovery hung
+the phone until the watchdog pretimeout panic (both r14 full test runs).
+
+Trigger: the WCN3990 firmware (on the modem) hangs while leaving WoW when
+station power save was on during WoW. Not fixed. The only crash-free driver
+change found keeps power save off during WoW (kernel branch commit 68b1a00,
+pmaports patch 0017, NOT to be released): it stops all crashes (6 + 10 cycles)
+but the SoC then never reaches aosd/cxsd/ddr sleep (suite deep_sleep fails).
+With WIFI_STANDBY=0 deep sleep works and no crash was seen. Test driver knobs:
+out/suspend/wow-test-knobs.diff; loop: out/suspend/loop-tune.sh.
+
+How it was isolated (devtools/wifi/suspend-probe.sh, public 2.4 GHz hotspot,
+DTIM 1):
+- not our r14 Wi-Fi patches: the r13 ath10k modules crashed on the 1st cycle
+  (r13 passed 150 cycles earlier on the home network, so the network matters;
+  not re-tested at home)
+- not SIM/modem radio, ModemManager, writable rmtfs, packet patterns, the P2P
+  device vdev, or CX/DDR power collapse (deep cpuidle states disabled)
+- `wowlan` debug logging (debug_mask 0x100036) hid it (6 of 6 passed)
+- a temporary 3 s delay before the host wakeup indication moved the crash with
+  it (0.79 s after sending), so the trigger is the wakeup, not device resume
+- `iw wlan0 set power_save off`: 10 of 10 passed
+- power save off *after* the wakeup: crashed on the 1st cycle (already stuck)
+- off before WoW, on after: 6 of 6; same as a clean driver: 10 of 10
+- power save off just before the host wakeup indication: phone reset
+- Android settings, one at a time, each crashed on the 1st cycle: PS inactivity
+  time 200 ms; listen interval 3; both
+- WMI_WOW_FLAG_DO_HTC_WAKEUP (0x8): modem crash, then CPU hard lockup (reset)
+- 1 s pause before WoW enable: crashed on the 1st cycle
+- Bluetooth rfkilled (2.4 GHz coexistence): reset on the 2nd cycle
+- QPower (STA PS param 6, which Android sets and ath10k never does) =1 at WoW
+  enter: reset on the 1st cycle; =0: crash on the 2nd cycle
+- traced crash cycles: the firmware answers the host wakeup indication (wake
+  reason, credit back), the first data frame after it gets no completion, and
+  the modem watchdog fires 0.78 s after the indication. NetworkManager's
+  resume scan is a victim, not the cause (one crash came before any scan).
+- not tried: newer qcacld WoW flags (SYSTEM_SUSPEND, MOD_DTIM; not in the
+  android-10.0.0_r0.74 headers), ARP/NS offload, a modem coredump, 5 GHz
+
+Lesson: when a crash follows resume by a fixed time, delay one step by seconds
+and see whether the crash moves with it.
+
+Still open: a suspend (or second modem crash) while the modem is recovering can
+hang the SoC. The fix removes the known first crash, not that weakness.
+Check test results for all expected tests and the boot list, not only the
 summary: a run cut short by a reset still prints a summary without them.
-
-### Suspend reset: isolation results (2026-11-28, public 2.4 GHz hotspot)
-
-devtools/wifi/suspend-probe.sh, one 20 s cycle each; "crash" = modem watchdog
-~0.8 s after resume. Wi-Fi standby on (WoWLAN): crash in 5 of 9 cycles from a
-usable state (also with the modem radio off, with rmtfs read-only, and with
-ModemManager and the LG helper masked, SIM never initialised). Wi-Fi off: 0 of
-3. WIFI_STANDBY=0: 0 of 11. So the trigger is Wi-Fi standby, not the cellular
-changes, rmtfs, or (by code path: one station only) patches 0015/0016. Not
-re-run on the r13 modules. One crash recovers by itself; the full resets came
-with another suspend or a second modem crash during recovery (test suite runs
-two suspends back to back): hang, then watchdog pretimeout panic. After such a
-double crash the modem can stay broken until reboot (probes on it are void).
-Open: why the WLAN firmware trips the modem watchdog on resume from WoWLAN,
-and why a suspend during modem recovery hangs.
