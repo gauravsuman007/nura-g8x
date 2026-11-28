@@ -2168,6 +2168,9 @@ DTIM 1):
   reason, credit back), the first data frame after it gets no completion, and
   the modem watchdog fires 0.78 s after the indication. NetworkManager's
   resume scan is a victim, not the cause (one crash came before any scan).
+- modem coredump (remoteproc1/coredump=enabled): 2 of 2 attempts reset the
+  phone with no dump saved (recovery stalled before "stopped remote
+  processor", then a second modem crash or a CPU hard lockup). Do not retry.
 - not tried: newer qcacld WoW flags (SYSTEM_SUSPEND, MOD_DTIM; not in the
   android-10.0.0_r0.74 headers), ARP/NS offload, a modem coredump, 5 GHz
 
